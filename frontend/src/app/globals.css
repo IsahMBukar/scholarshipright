@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+
+@layer base {
+  :root {
+    --color-primary: #f5b942;
+    --color-primary-light: #f5d9a2;
+    --color-bg: #ffffff;
+    --color-bg-soft: #e0c48b;
+    --color-text-primary: #1a1a1a;
+    --color-text-secondary: #4a4a4a;
+    --color-text-inverse: #ffffff;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #f6f6f6;
+    color: var(--color-text-primary);
+  }
+
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+}
+
+@layer utilities {
+  .match-gradient {
+    background: linear-gradient(180deg, #05151b, #0a2932);
+  }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+}
