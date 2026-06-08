@@ -94,35 +94,37 @@ export default function ScholarshipDetailPage() {
 
   return (
     <AppLayout>
-      <div className="w-full min-h-screen bg-white p-6 md:p-8 space-y-8 overflow-y-auto">
+      <div className="w-full min-h-screen bg-white">
 
-        {/* 1. TOP ACTION & META-BAR */}
-        <div className="flex justify-between items-center border-b border-gray-100 pb-4">
-          <Link href="/scholarships" className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition">
-            <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-            Back to Scholarships
-          </Link>
-          <div className="flex items-center space-x-3">
-            <button className="p-2 rounded-full border border-gray-200 hover:bg-gray-50 text-text-secondary transition">
-              <span className="material-symbols-outlined text-[18px]">share</span>
-            </button>
-            <button
-              onClick={handleSave}
-              className={`px-4 py-2 text-sm font-semibold rounded-lg flex items-center gap-1 transition ${isSaved ? 'bg-primary-light/30 text-text-primary border border-primary' : 'bg-white border border-gray-200 text-text-secondary hover:border-primary'}`}
-            >
-              <span className="material-symbols-outlined text-[16px]">{isSaved ? 'bookmark' : 'bookmark_border'}</span>
-              {isSaved ? 'Saved' : 'Save'}
-            </button>
-            <a
-              href={scholarship.official_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-5 py-2 bg-primary hover:brightness-110 text-white font-semibold rounded-lg text-sm flex items-center gap-1 shadow-sm transition"
-            >
-              APPLY NOW <span className="material-symbols-outlined text-[16px]">open_in_new</span>
-            </a>
+        {/* 1. STICKY TOP ACTION & META-BAR */}
+        <div className="sticky top-0 z-40 bg-white border-b border-gray-100">
+          <div className="flex justify-between items-center px-4 md:px-8 py-3">
+            <Link href="/scholarships" className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-100 transition">
+              <span className="material-symbols-outlined text-[22px] text-text-secondary">arrow_back</span>
+            </Link>
+            <div className="flex items-center gap-2">
+              <button className="w-10 h-10 flex items-center justify-center rounded-full border border-gray-200 hover:bg-gray-50 text-text-secondary transition">
+                <span className="material-symbols-outlined text-[18px]">share</span>
+              </button>
+              <button
+                onClick={handleSave}
+                className={`w-10 h-10 flex items-center justify-center rounded-full border transition ${isSaved ? 'bg-primary-light/30 border-primary text-primary' : 'border-gray-200 text-text-secondary hover:border-primary'}`}
+              >
+                <span className="material-symbols-outlined text-[18px]">{isSaved ? 'bookmark' : 'bookmark_border'}</span>
+              </button>
+              <a
+                href={scholarship.official_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 bg-primary hover:brightness-110 text-white font-semibold rounded-lg text-[13px] md:text-sm flex items-center gap-1 shadow-sm transition"
+              >
+                APPLY <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+              </a>
+            </div>
           </div>
         </div>
+
+        <div className="p-4 md:p-8 space-y-6 md:space-y-8">
 
         {/* 2. SUBSECTION NAVIGATION TABS */}
         <div className="flex justify-between items-center border-b border-gray-100">
@@ -356,6 +358,43 @@ export default function ScholarshipDetailPage() {
                 <p className="text-sm text-text-secondary leading-relaxed whitespace-pre-line">{scholarship.how_to_apply}</p>
               </div>
             )}
+
+            {/* 10. PROVIDER */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
+                <div className="w-2 h-6 bg-primary rounded-full" />
+                <h2 className="text-lg font-bold text-text-primary">Provider / Institution</h2>
+              </div>
+              <div className="flex items-center gap-4 p-5 bg-gray-50 rounded-xl border border-gray-200">
+                <div className="w-16 h-16 bg-gray-100 rounded-xl flex items-center justify-center border border-gray-200">
+                  {scholarship.logo_url ? (
+                    <img src={scholarship.logo_url} alt="" className="w-14 h-14 object-contain" />
+                  ) : (
+                    <span className="text-2xl font-bold text-primary">{(scholarship.provider || 'S').charAt(0)}</span>
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-text-primary">{scholarship.provider || scholarship.host_institution}</h3>
+                  <p className="text-sm text-text-secondary">{scholarship.host_country}</p>
+                </div>
+              </div>
+              <p className="text-sm text-text-secondary leading-relaxed">
+                {scholarship.provider
+                  ? `${scholarship.provider} is the organization behind ${scholarship.name}. Visit their official website for the most up-to-date information about application procedures and requirements.`
+                  : 'Visit the official website for more information about the scholarship provider.'}
+              </p>
+              <a
+                href={scholarship.official_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-white font-semibold rounded-lg text-sm hover:brightness-110 transition"
+              >
+                Visit Official Website <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+              </a>
+              {scholarship.source && (
+                <p className="text-xs text-text-secondary">Source: {scholarship.source}</p>
+              )}
+            </div>
           </>
         ) : (
           /* PROVIDER TAB */
@@ -401,6 +440,7 @@ export default function ScholarshipDetailPage() {
             )}
           </div>
         )}
+        </div>
       </div>
     </AppLayout>
   );

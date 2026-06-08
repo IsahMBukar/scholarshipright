@@ -33,11 +33,11 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved }: Schola
   const isUrgent = daysUntilDeadline <= 30;
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-[1fr_140px] rounded-card bg-white shadow-[0_2px_10px_rgba(0,0,0,0.04)] overflow-hidden">
+    <div className="grid grid-cols-1 md:grid-cols-[1fr_140px] rounded-card bg-white shadow-[0_2px_10px_rgba(0,0,0,0.04)] overflow-hidden">
       {/* Main content */}
       <div className="p-6 flex gap-4">
         {/* Logo */}
-        <div className="hidden sm:flex w-14 h-14 xl:w-16 xl:h-16 rounded-chip bg-gray-100 items-center justify-center flex-shrink-0">
+        <div className="hidden sm:flex w-14 h-14 md:w-16 md:h-16 rounded-chip bg-gray-100 items-center justify-center flex-shrink-0">
           {scholarship.logo_url ? (
             <img src={scholarship.logo_url} alt="" className="w-10 h-10 object-contain" />
           ) : (
@@ -63,7 +63,7 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved }: Schola
 
           {/* Title */}
           <Link href={`/scholarships/${scholarship.slug}`}>
-            <h3 className="text-[18px] xl:text-[22px] font-bold leading-tight text-text-primary hover:text-primary transition-colors line-clamp-2">
+            <h3 className="text-[18px] md:text-[22px] font-bold leading-tight text-text-primary hover:text-primary transition-colors line-clamp-2">
               {scholarship.name}
             </h3>
           </Link>
@@ -103,7 +103,7 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved }: Schola
       </div>
 
       {/* Desktop score block — right side */}
-      <div className="hidden xl:flex flex-col items-center justify-center match-gradient rounded-r-card rounded-l-none p-4 gap-2">
+      <div className="hidden md:flex flex-col items-center justify-center match-gradient rounded-r-card rounded-l-none p-4 gap-2">
         <span className="text-[40px] font-extrabold text-white leading-none">
           {score}<span className="text-[18px] font-bold text-gray-400">%</span>
         </span>
@@ -130,7 +130,7 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved }: Schola
       </div>
 
       {/* Mobile score + actions */}
-      <div className="xl:hidden flex items-center justify-between px-6 pb-4 border-t border-gray-200 pt-3">
+      <div className="md:hidden flex items-center justify-between px-6 pb-4 border-t border-gray-200 pt-3">
         <div className="flex items-center gap-3">
           <span className="text-[24px] font-extrabold text-text-primary">{score}%</span>
           <span className="text-[12px] font-bold tracking-wider text-primary uppercase">{getMatchLabel(score)}</span>
