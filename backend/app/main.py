@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
-from app.api import scholarships, users, matches, saved, chat, reminders, auth
+from app.api import scholarships, users, matches, saved, chat, reminders, auth, resumes
 
 settings = get_settings()
 
@@ -27,6 +27,7 @@ app.include_router(saved.router, prefix="/api/saved", tags=["saved"])
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(reminders.router, prefix="/api/reminders", tags=["reminders"])
+app.include_router(resumes.router)
 
 
 @app.get("/healthz")

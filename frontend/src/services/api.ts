@@ -164,3 +164,92 @@ export async function sendMessage(sessionId: string, message: string): Promise<{
   const { data } = await api.post(`/api/chat/sessions/${sessionId}/message`, { message });
   return data;
 }
+
+// Resume API
+export interface Resume {
+  id: string;
+  user_id: string;
+  title: string;
+  target_fields: string[];
+  target_degree: string | null;
+  is_primary: boolean;
+  status: string;
+  original_filename: string | null;
+  original_mime_type: string | null;
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  location: string | null;
+  linkedin_url: string | null;
+  portfolio_url: string | null;
+  summary: string | null;
+  education: any[];
+  experience: any[];
+  skills: string[];
+  certifications: any[];
+  publications: any[];
+  languages: any[];
+  projects: any[];
+  awards: any[];
+  ref_list: any[];
+  analysis: Record<string, any>;
+  issues: any[];
+  ai_suggestions: string | null;
+  overall_score: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResumeIssue {
+  field: string;
+  severity: 'urgent' | 'severe' | 'likely';
+  message: string;
+  suggestion?: string;
+}
+
+export async function fetchResumes(): Promise<Resume[]> {
+  const { data } = await api.get('/api/resumes');
+  return data;
+}
+
+export async function fetchResume(id: string): Promise<Resume> {
+  const { data } = await api.get(`/api/resumes/${id}`);
+  return data;
+}
+
+export async function uploadResume(file: File, title: string, targetFields: string[], targetDegree: string): Promise<Resume> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('title', title);
+  formData.append('target_fields', JSON.stringify(targetFields));
+  formData.append('target_degree', targetDegree);
+  const { data } = await api.post('/api/resumes', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000,
+  });
+  return data;
+}
+
+export async function updateResume(id: string, update: Partial<Resume>): Promise<Resume> {
+  const { data } = await api.put(`/api/resumes/${id}`, update);
+  return data;
+}
+
+export async function deleteResume(id: string): Promise<void> {
+  await api.delete(`/api/resumes/${id}`);
+}
+
+export async function setPrimaryResume(id: string): Promise<Resume> {
+  const { data } = await api.post(`/api/resumes/${id}/set-primary`);
+  return data;
+}
+
+export async function rewriteField(id: string, field: string, value: string, context?: string): Promise<{ field: string; improved_value: string }> {
+  const { data } = await api.post(`/api/resumes/${id}/rewrite`, { field, value, context });
+  return data;
+}
+
+export async function reanalyzeResume(id: string): Promise<Resume> {
+  const { data } = await api.post(`/api/resumes/${id}/reanalyze`);
+  return data;
+}

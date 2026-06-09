@@ -4,21 +4,13 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     # Database
-    database_url: str = "postgresql://user:***@localhost:5432/scholarshipright"
+    database_url: str = "postgresql://system@localhost:5432/scholarshipright"
     redis_url: str = "redis://localhost:6379"
 
-    # Auth (Supabase)
-    supabase_url: str = ""
-    supabase_anon_key: str = ""
-    supabase_service_role_key: str = ""
-
-    # AI
-    anthropic_api_key: str = ""
-    claude_model: str = "claude-sonnet-4-20250514"
-
-    # Email
-    resend_api_key: str = ""
-    from_email: str = "noreply@scholarshipright.com"
+    # LLM (OpenAI-compatible)
+    openai_api_key: str = ""
+    openai_base_url: str = "https://api.xiaomimimo.com/v1"
+    openai_model: str = "MiMo-V2.5"
 
     # App
     frontend_url: str = "http://localhost:3000"

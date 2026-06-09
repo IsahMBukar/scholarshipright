@@ -44,7 +44,7 @@ export default function LandingPage() {
     <div className="min-h-screen bg-white">
       {/* Nav */}
       <nav className="flex items-center justify-between px-6 md:px-12 h-16 border-b border-gray-200">
-        <span className="text-[22px] font-extrabold text-primary">ScholarshipRight</span>
+        <img src="/images/logo-light.jpg" alt="ScholarshipRight" className="h-10 w-10 rounded-lg object-contain" />
         <div className="flex items-center gap-3">
           <Link href="/login" className="text-[14px] font-semibold text-text-secondary hover:text-text-primary transition-colors px-4 py-2">
             Sign In
@@ -172,7 +172,7 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="px-6 md:px-12 py-8 border-t border-gray-200">
         <div className="max-w-[1200px] mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <span className="text-[16px] font-bold text-primary">ScholarshipRight</span>
+          <img src="/images/logo-light.jpg" alt="ScholarshipRight" className="h-8 w-8 rounded-lg object-contain" />
           <p className="text-[13px] text-text-secondary">© 2026 ScholarshipRight. AI-powered scholarship discovery.</p>
         </div>
       </footer>

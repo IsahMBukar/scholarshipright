@@ -18,8 +18,8 @@ export default function Sidebar() {
   return (
     <aside className="hidden md:flex flex-col items-center w-[80px] h-full bg-white border-r border-gray-200 py-4 gap-1 overflow-y-auto">
       {/* Logo */}
-      <Link href="/scholarships" className="w-10 h-10 rounded-full bg-primary flex items-center justify-center mb-4">
-        <span className="material-symbols-outlined text-white text-xl">school</span>
+      <Link href="/scholarships" className="w-10 h-10 rounded-lg overflow-hidden mb-4">
+        <img src="/images/logo-dark.jpg" alt="ScholarshipRight" className="w-10 h-10 object-contain" />
       </Link>
 
       {/* Nav Items */}

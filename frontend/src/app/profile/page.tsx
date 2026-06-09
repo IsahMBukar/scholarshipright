@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
+import { ProfileSkeleton } from '@/components/Skeletons';
 import { fetchProfile, createOrUpdateProfile } from '@/services/api';
 import type { Profile } from '@/services/api';
 
@@ -67,7 +68,7 @@ export default function ProfilePage() {
   if (loading) {
     return (
       <AppLayout showRightPanel={false}>
-        <div className="p-6"><div className="animate-pulse space-y-6"><div className="h-8 bg-gray-200 rounded w-1/2" /><div className="h-64 bg-gray-200 rounded-card" /></div></div>
+        <ProfileSkeleton />
       </AppLayout>
     );
   }

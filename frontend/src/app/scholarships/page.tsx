@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
 import ScholarshipCard from '@/components/ScholarshipCard';
 import FilterBar from '@/components/FilterBar';
+import { ScholarshipListSkeleton } from '@/components/Skeletons';
 import { fetchScholarships, saveScholarship, removeSavedScholarship, fetchSavedScholarships } from '@/services/api';
 import type { Scholarship, ScholarshipListResponse } from '@/services/api';
 
@@ -110,7 +111,7 @@ export default function ScholarshipsPage() {
           <div className="absolute inset-0 bg-black/50 animate-fade-in" onClick={() => setMenuOpen(false)} />
           <div className="absolute top-0 left-0 w-[280px] h-full bg-white shadow-xl animate-slide-in-left">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <span className="text-[18px] font-extrabold text-primary">ScholarshipRight</span>
+              <img src="/images/logo-light.jpg" alt="ScholarshipRight" className="h-8 w-8 rounded-lg object-contain" />
               <button onClick={() => setMenuOpen(false)} className="w-10 h-10 flex items-center justify-center">
                 <span className="material-symbols-outlined text-[24px]">close</span>
               </button>
@@ -147,11 +148,7 @@ export default function ScholarshipsPage() {
       <div className="px-4 md:px-6 py-4">
         {/* Scholarship feed */}
         {loading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-[160px] bg-white rounded-card animate-pulse" />
-            ))}
-          </div>
+          <ScholarshipListSkeleton count={4} />
         ) : (
           <div className="flex flex-col gap-4">
             {scholarships

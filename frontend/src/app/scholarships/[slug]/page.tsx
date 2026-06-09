@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import AppLayout from '@/components/AppLayout';
+import { ScholarshipDetailSkeleton } from '@/components/Skeletons';
 import { fetchScholarship, saveScholarship, removeSavedScholarship, fetchSavedScholarships } from '@/services/api';
 import type { Scholarship } from '@/services/api';
 
@@ -50,7 +51,7 @@ export default function ScholarshipDetailPage() {
   if (loading) {
     return (
       <AppLayout>
-        <div className="p-6"><div className="animate-pulse space-y-6"><div className="h-8 bg-gray-200 rounded w-3/4" /><div className="h-64 bg-gray-200 rounded-card" /></div></div>
+        <ScholarshipDetailSkeleton />
       </AppLayout>
     );
   }

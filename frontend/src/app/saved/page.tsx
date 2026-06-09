@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import AppLayout from '@/components/AppLayout';
 import ScholarshipCard from '@/components/ScholarshipCard';
+import { ScholarshipListSkeleton } from '@/components/Skeletons';
 import { fetchSavedScholarships, removeSavedScholarship } from '@/services/api';
 import type { Scholarship } from '@/services/api';
 
@@ -31,9 +32,7 @@ export default function SavedPage() {
         <p className="text-[15px] text-text-secondary mb-6">{saved.length} saved</p>
 
         {loading ? (
-          <div className="space-y-4">
-            {[1, 2].map((i) => <div key={i} className="h-[160px] bg-white rounded-card animate-pulse" />)}
-          </div>
+          <ScholarshipListSkeleton count={3} />
         ) : saved.length > 0 ? (
           <div className="flex flex-col gap-4">
             {saved.map((sch) => (
