@@ -55,7 +55,7 @@ async def _vision_extract(b64_image: str, mime_type: str) -> str:
                         {
                             "role": "user",
                             "content": [
-                                {"type": "text", "text": "Extract ALL text from this CV/resume image. Return the complete text content preserving the original structure and formatting as much as possible."},
+                                {"type": "text", "text": "Extract ALL text from this CV/resume image. CRITICAL: Preserve section headers EXACTLY as they appear (e.g., 'RESEARCH & PROJECTS', 'WORK EXPERIENCE', 'EDUCATION', 'SKILLS', 'CERTIFICATIONS'). Keep each entry under its correct section header. Return the complete text content preserving the original structure."},
                                 {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64_image}"}}
                             ]
                         }
@@ -97,11 +97,13 @@ def _extract_pdf_text(content: bytes) -> str:
 
 async def _pdf_vision_fallback(content: bytes) -> str:
     """Convert PDF pages to images and extract text via vision model.
-    Used for flattened/scanned/image-based PDFs where pdfplumber returns no text."""
+    Used for flattened/scanned/image-based PDFs where pdfplumber returns no text.
+    Pages are processed concurrently for speed."""
     try:
         import fitz  # pymupdf
         import tempfile
         import os
+        import asyncio
         
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
             f.write(content)
@@ -109,28 +111,39 @@ async def _pdf_vision_fallback(content: bytes) -> str:
             tmp_path = f.name
         
         doc = fitz.open(tmp_path)
-        all_text = []
         max_pages = min(len(doc), 15)  # Limit to 15 pages for vision
         
-        print(f"PDF vision fallback: converting {max_pages} pages to images...")
+        print(f"PDF vision fallback: converting {max_pages} pages to images concurrently...")
         
+        # Convert all pages to base64 images first
+        page_images = []
         for page_num in range(max_pages):
             page = doc[page_num]
-            # Render page to image (2x zoom for better OCR quality)
             pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
             img_bytes = pix.tobytes("png")
             b64 = base64.b64encode(img_bytes).decode()
-            
-            page_text = await _vision_extract(b64, "image/png")
-            if page_text.strip():
-                all_text.append(f"--- Page {page_num + 1} ---\n{page_text}")
-                print(f"  Page {page_num + 1}: extracted {len(page_text)} chars")
+            page_images.append((page_num, b64))
         
         doc.close()
         os.unlink(tmp_path)
         
+        # Extract text from all pages concurrently
+        async def extract_page(page_num: int, b64: str) -> tuple:
+            text = await _vision_extract(b64, "image/png")
+            return (page_num, text)
+        
+        tasks = [extract_page(pn, b64) for pn, b64 in page_images]
+        results = await asyncio.gather(*tasks)
+        
+        # Collect results in order
+        all_text = []
+        for page_num, text in sorted(results, key=lambda x: x[0]):
+            if text.strip():
+                all_text.append(f"--- Page {page_num + 1} ---\n{text}")
+                print(f"  Page {page_num + 1}: extracted {len(text)} chars")
+        
         combined = "\n\n".join(all_text)
-        print(f"PDF vision fallback complete: {len(combined)} total chars from {max_pages} pages")
+        print(f"PDF vision fallback complete: {len(combined)} total chars from {max_pages} pages (concurrent)")
         return combined
     except Exception as e:
         print(f"PDF vision fallback error: {e}")

@@ -135,7 +135,7 @@ async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename
                 resume.certifications = analysis.get("certifications", [])
                 resume.publications = analysis.get("publications", [])
                 resume.languages = analysis.get("languages", [])
-                resume.projects = analysis.get("projects", [])
+                resume.research_projects = analysis.get("research_projects", [])
                 resume.awards = analysis.get("awards", [])
                 resume.ref_list = analysis.get("ref_list", [])
                 resume.overall_score = analysis.get("overall_score", 0)

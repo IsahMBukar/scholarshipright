@@ -10,3 +10,5 @@ dist/
 .venv/
 venv/
 backend/uploads/
+backend/debug_output/
+backend/debug_resume.py
