@@ -38,6 +38,7 @@ class Resume(Base):
     publications = Column(JSONB, default=[])
     languages = Column(JSONB, default=[])
     projects = Column(JSONB, default=[])
+    research_projects = Column(JSONB, default=[])
     awards = Column(JSONB, default=[])
     ref_list = Column(JSONB, default=[])
 

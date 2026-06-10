@@ -10,14 +10,20 @@ from app.schemas.profile import ProfileCreate, ProfileUpdate, ProfileResponse
 
 router = APIRouter()
 
-DEV_COOKIE_NAME = "sr_dev_user"
+COOKIE_NAME = "sr_token"
 
 
 async def get_current_user(request: Request, db: AsyncSession = Depends(get_db)) -> User:
-    """Get current user from dev cookie."""
-    user_id = request.cookies.get(DEV_COOKIE_NAME)
+    """Get current user from JWT cookie."""
+    token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        raise HTTPException(status_code=401, detail="Not logged in")
+
+    # Decode JWT
+    from app.api.auth import decode_token
+    user_id = decode_token(token)
     if not user_id:
-        raise HTTPException(status_code=401, detail="Not logged in. Call POST /api/auth/dev-login first.")
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     try:
         uid = UUID(user_id)

@@ -7,15 +7,19 @@ settings = get_settings()
 
 
 async def extract_text_from_file(file_content: bytes, mime_type: str, filename: str) -> str:
-    """Extract text from uploaded file. For images, use vision API. For PDFs/Docs, use raw text."""
+    """Extract text from uploaded file. For images, use vision API. For PDFs/Docs, use raw text with vision fallback."""
     
     if mime_type.startswith("image/"):
         # Use vision API to extract text from image
         b64 = base64.b64encode(file_content).decode()
         return await _vision_extract(b64, mime_type)
     elif mime_type == "application/pdf":
-        # Try to extract text from PDF
-        return _extract_pdf_text(file_content)
+        # Try text extraction first, fallback to vision for flattened/image PDFs
+        text = _extract_pdf_text(file_content)
+        if len(text.strip()) < 50:
+            print(f"PDF text extraction yielded only {len(text.strip())} chars — trying vision fallback...")
+            text = await _pdf_vision_fallback(file_content)
+        return text
     elif mime_type in [
         "application/msword",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -91,6 +95,48 @@ def _extract_pdf_text(content: bytes) -> str:
         return ""
 
 
+async def _pdf_vision_fallback(content: bytes) -> str:
+    """Convert PDF pages to images and extract text via vision model.
+    Used for flattened/scanned/image-based PDFs where pdfplumber returns no text."""
+    try:
+        import fitz  # pymupdf
+        import tempfile
+        import os
+        
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+            f.write(content)
+            f.flush()
+            tmp_path = f.name
+        
+        doc = fitz.open(tmp_path)
+        all_text = []
+        max_pages = min(len(doc), 15)  # Limit to 15 pages for vision
+        
+        print(f"PDF vision fallback: converting {max_pages} pages to images...")
+        
+        for page_num in range(max_pages):
+            page = doc[page_num]
+            # Render page to image (2x zoom for better OCR quality)
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+            img_bytes = pix.tobytes("png")
+            b64 = base64.b64encode(img_bytes).decode()
+            
+            page_text = await _vision_extract(b64, "image/png")
+            if page_text.strip():
+                all_text.append(f"--- Page {page_num + 1} ---\n{page_text}")
+                print(f"  Page {page_num + 1}: extracted {len(page_text)} chars")
+        
+        doc.close()
+        os.unlink(tmp_path)
+        
+        combined = "\n\n".join(all_text)
+        print(f"PDF vision fallback complete: {len(combined)} total chars from {max_pages} pages")
+        return combined
+    except Exception as e:
+        print(f"PDF vision fallback error: {e}")
+        return ""
+
+
 def _extract_docx_text(content: bytes) -> str:
     """Extract text from DOCX bytes."""
     try:
@@ -145,16 +191,12 @@ Analyze this CV/resume text and return a JSON object with the following structur
   ],
   "experience": [
     {{
-      "type": "work or project",
-      "company": "string (for work) or empty",
-      "position": "string (for work) or empty",
-      "title": "string (for projects) or empty",
-      "organization": "string (for projects) or empty",
+      "company": "string - MUST be an employer/company name only (NOT a project title)",
+      "position": "string - job title at the company",
       "start_date": "string",
       "end_date": "string",
       "location": "string",
       "description": "string",
-      "technologies": "string (for projects, comma-separated tools/tech) or empty",
       "achievements": ["string"]
     }}
   ],
@@ -180,10 +222,18 @@ Analyze this CV/resume text and return a JSON object with the following structur
       "proficiency": "string"
     }}
   ],
-  "projects": [
+  "research_projects": [
     {{
-      "name": "string",
+      "type": "research or project",
+      "title": "string - the project/research name",
+      "organization": "string (institution, lab, company, or personal)",
+      "role": "string (e.g. Lead Researcher, Developer, Research Assistant)",
+      "start_date": "string",
+      "end_date": "string",
+      "location": "string",
+      "technologies": "string (methods, tools, tech used)",
       "description": "string",
+      "outcomes": "string (publications, results, patents, etc.)",
       "url": "string"
     }}
   ],
@@ -216,6 +266,12 @@ Analyze this CV/resume text and return a JSON object with the following structur
 TARGET FIELDS: {', '.join(target_fields) if target_fields else 'General'}
 TARGET DEGREE: {target_degree or 'Not specified'}
 
+CRITICAL RULES:
+- research_projects: Final-year projects, capstone projects, research work, personal software projects, hackathon projects, thesis work, lab research. Look for keywords: "project", "research", "thesis", "capstone", "final-year", "developed a system", "built an application".
+- experience: ONLY paid employment, internships, volunteer work at organizations. Must have a real company/organization name.
+- If the CV mentions "Key Project" or "Final-Year Project" or personal projects, put them in research_projects, NOT experience.
+- ref_list: Extract any references mentioned (name, position, contact info). If none found, use empty array [].
+
 SEVERITY LEVELS:
 - urgent: Missing critical info (no email, no education, etc.) — must fix
 - severe: Weak areas that significantly hurt chances (vague descriptions, no achievements, etc.)
@@ -232,13 +288,14 @@ Return ONLY valid JSON. No markdown, no code blocks."""
                 f"{settings.openai_base_url}/v1/chat/completions",
                 headers={"api-key": settings.openai_api_key},
                 json={
-                    "model": settings.openai_model or "mimo-v2.5-pro",
+                    "model": settings.openai_model or "mimo-v2.5",
                     "messages": [
                         {"role": "system", "content": "You are a resume analysis expert. Always return valid JSON only."},
                         {"role": "user", "content": prompt}
                     ],
                     "temperature": 0.3,
-                    "max_tokens": 8000
+                    "max_tokens": 8000,
+                    "enable_thinking": False
                 }
             )
             data = resp.json()

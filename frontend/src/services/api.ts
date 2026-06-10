@@ -185,6 +185,7 @@ export interface Resume {
   summary: string | null;
   education: any[];
   experience: any[];
+  research_projects: any[];
   skills: string[];
   certifications: any[];
   publications: any[];
@@ -252,4 +253,18 @@ export async function rewriteField(id: string, field: string, value: string, con
 export async function reanalyzeResume(id: string): Promise<Resume> {
   const { data } = await api.post(`/api/resumes/${id}/reanalyze`);
   return data;
+}
+
+export async function exportResumePdf(id: string, mode: 'resume' | 'cv' = 'cv'): Promise<void> {
+  const response = await api.get(`/api/resumes/${id}/export-pdf?mode=${mode}`, { responseType: 'blob' });
+  const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+  const link = document.createElement('a');
+  link.href = url;
+  const disposition = response.headers['content-disposition'];
+  const filename = disposition ? disposition.split('filename=')[1]?.replace(/"/g, '') : `${mode}.pdf`;
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
 }

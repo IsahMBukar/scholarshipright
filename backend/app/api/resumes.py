@@ -1,6 +1,7 @@
 import os
 import uuid as uuid_lib
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from typing import Optional, List
@@ -9,30 +10,29 @@ import asyncio
 
 from app.db.session import get_db, AsyncSessionLocal
 from app.models.resume import Resume
+from app.models.user import User
 from app.schemas.resume import ResumeOut, ResumeUpdate
 from app.services.resume_analyzer import extract_text_from_file, analyze_resume, rewrite_field
+from app.api.users import get_current_user
 
 router = APIRouter(prefix="/api/resumes", tags=["resumes"])
 
 UPLOAD_DIR = "/home/alaiisah/Desktop/Scholarshipright/backend/uploads/resumes"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# In-memory flag for demo auth (replace with real auth later)
-DEMO_USER_ID = "00000000-0000-0000-0000-000000000001"
-
 
 @router.get("", response_model=List[ResumeOut])
-async def list_resumes(db: AsyncSession = Depends(get_db)):
+async def list_resumes(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(Resume).where(Resume.user_id == DEMO_USER_ID).order_by(Resume.is_primary.desc(), Resume.updated_at.desc())
+        select(Resume).where(Resume.user_id == user.id).order_by(Resume.is_primary.desc(), Resume.updated_at.desc())
     )
     return result.scalars().all()
 
 
 @router.get("/{resume_id}", response_model=ResumeOut)
-async def get_resume(resume_id: str, db: AsyncSession = Depends(get_db)):
+async def get_resume(resume_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(Resume).where(Resume.id == resume_id, Resume.user_id == DEMO_USER_ID)
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
     )
     resume = result.scalar_one_or_none()
     if not resume:
@@ -47,6 +47,7 @@ async def create_resume(
     title: str = Form("My Resume"),
     target_fields: str = Form("[]"),
     target_degree: str = Form(""),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Upload a CV file, create resume, and trigger AI analysis in background."""
@@ -71,7 +72,7 @@ async def create_resume(
     
     # Create resume record
     resume = Resume(
-        user_id=DEMO_USER_ID,
+        user_id=user.id,
         title=title,
         target_fields=fields_list,
         target_degree=target_degree or None,
@@ -82,7 +83,7 @@ async def create_resume(
     )
     
     # If first resume, make it primary
-    existing = await db.execute(select(Resume).where(Resume.user_id == DEMO_USER_ID))
+    existing = await db.execute(select(Resume).where(Resume.user_id == user.id))
     if not existing.scalars().first():
         resume.is_primary = True
     
@@ -163,9 +164,9 @@ async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename
 
 
 @router.put("/{resume_id}", response_model=ResumeOut)
-async def update_resume(resume_id: str, data: ResumeUpdate, db: AsyncSession = Depends(get_db)):
+async def update_resume(resume_id: str, data: ResumeUpdate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(Resume).where(Resume.id == resume_id, Resume.user_id == DEMO_USER_ID)
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
     )
     resume = result.scalar_one_or_none()
     if not resume:
@@ -177,7 +178,7 @@ async def update_resume(resume_id: str, data: ResumeUpdate, db: AsyncSession = D
     if update_data.get("is_primary") is True:
         # Clear other primaries
         await db.execute(
-            update(Resume).where(Resume.user_id == DEMO_USER_ID, Resume.id != resume_id).values(is_primary=False)
+            update(Resume).where(Resume.user_id == user.id, Resume.id != resume_id).values(is_primary=False)
         )
     
     for key, value in update_data.items():
@@ -189,9 +190,9 @@ async def update_resume(resume_id: str, data: ResumeUpdate, db: AsyncSession = D
 
 
 @router.delete("/{resume_id}")
-async def delete_resume(resume_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_resume(resume_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(Resume).where(Resume.id == resume_id, Resume.user_id == DEMO_USER_ID)
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
     )
     resume = result.scalar_one_or_none()
     if not resume:
@@ -203,9 +204,9 @@ async def delete_resume(resume_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{resume_id}/set-primary", response_model=ResumeOut)
-async def set_primary(resume_id: str, db: AsyncSession = Depends(get_db)):
+async def set_primary(resume_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(Resume).where(Resume.id == resume_id, Resume.user_id == DEMO_USER_ID)
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
     )
     resume = result.scalar_one_or_none()
     if not resume:
@@ -213,7 +214,7 @@ async def set_primary(resume_id: str, db: AsyncSession = Depends(get_db)):
     
     # Clear all primaries
     await db.execute(
-        update(Resume).where(Resume.user_id == DEMO_USER_ID).values(is_primary=False)
+        update(Resume).where(Resume.user_id == user.id).values(is_primary=False)
     )
     resume.is_primary = True
     await db.commit()
@@ -222,10 +223,10 @@ async def set_primary(resume_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{resume_id}/rewrite")
-async def rewrite_resume_field(resume_id: str, body: dict, db: AsyncSession = Depends(get_db)):
+async def rewrite_resume_field(resume_id: str, body: dict, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """AI rewrite a specific field."""
     result = await db.execute(
-        select(Resume).where(Resume.id == resume_id, Resume.user_id == DEMO_USER_ID)
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
     )
     resume = result.scalar_one_or_none()
     if not resume:
@@ -240,10 +241,10 @@ async def rewrite_resume_field(resume_id: str, body: dict, db: AsyncSession = De
 
 
 @router.post("/{resume_id}/reanalyze", response_model=ResumeOut)
-async def reanalyze_resume(resume_id: str, db: AsyncSession = Depends(get_db)):
+async def reanalyze_resume(resume_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Re-run AI analysis on the resume."""
     result = await db.execute(
-        select(Resume).where(Resume.id == resume_id, Resume.user_id == DEMO_USER_ID)
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
     )
     resume = result.scalar_one_or_none()
     if not resume:
@@ -273,7 +274,51 @@ async def reanalyze_resume(resume_id: str, db: AsyncSession = Depends(get_db)):
         resume.status = "completed"
     except Exception as e:
         resume.status = "error"
-    
+
     await db.commit()
     await db.refresh(resume)
     return resume
+
+
+@router.get("/{resume_id}/export-pdf")
+async def export_resume_pdf(resume_id: str, mode: str = "cv", user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Generate and download a professional PDF of the resume.
+    mode: "resume" (single page) or "cv" (full, 1-2 pages)
+    """
+    from app.services.pdf_generator import generate_resume_pdf
+
+    result = await db.execute(
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
+    )
+    resume = result.scalar_one_or_none()
+    if not resume:
+        raise HTTPException(404, "Resume not found")
+
+    resume_data = {
+        "full_name": resume.full_name or "",
+        "email": resume.email or "",
+        "phone": resume.phone or "",
+        "location": resume.location or "",
+        "linkedin_url": resume.linkedin_url or "",
+        "portfolio_url": resume.portfolio_url or "",
+        "summary": resume.summary or "",
+        "education": resume.education or [],
+        "experience": resume.experience or [],
+        "skills": resume.skills or [],
+        "certifications": resume.certifications or [],
+        "publications": resume.publications or [],
+        "languages": resume.languages or [],
+        "research_projects": resume.research_projects or [],
+        "awards": resume.awards or [],
+        "ref_list": resume.ref_list or [],
+    }
+
+    pdf_bytes = generate_resume_pdf(resume_data, mode=mode)
+    filename_prefix = "Resume" if mode == "resume" else "CV"
+    filename = f"{(resume.full_name or 'resume').replace(' ', '_')}_{filename_prefix}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )

@@ -25,7 +25,7 @@ app.include_router(users.router, prefix="/api/profile", tags=["profile"])
 app.include_router(matches.router, prefix="/api/matches", tags=["matches"])
 app.include_router(saved.router, prefix="/api/saved", tags=["saved"])
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
-app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(auth.router)
 app.include_router(reminders.router, prefix="/api/reminders", tags=["reminders"])
 app.include_router(resumes.router)
 

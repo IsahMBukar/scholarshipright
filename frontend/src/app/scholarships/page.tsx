@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
 import ScholarshipCard from '@/components/ScholarshipCard';
 import FilterBar from '@/components/FilterBar';
@@ -9,6 +9,34 @@ import { fetchScholarships, saveScholarship, removeSavedScholarship, fetchSavedS
 import type { Scholarship, ScholarshipListResponse } from '@/services/api';
 
 const TABS = ['Recommended', 'Saved', 'Applied', 'External'];
+
+// Map filter labels to API query params
+function buildFilterParams(filters: string[], search: string): Record<string, string> {
+  const params: Record<string, string> = { limit: '50' };
+  const degrees: string[] = [];
+
+  for (const f of filters) {
+    switch (f) {
+      case 'Master': degrees.push('master'); break;
+      case 'PhD': degrees.push('phd'); break;
+      case 'Fully Funded': params.funding = 'fully_funded'; break;
+      case 'No IELTS': params.no_ielts = 'true'; break;
+      case 'Deadline Soon': {
+        const d = new Date();
+        d.setDate(d.getDate() + 30);
+        params.deadline_before = d.toISOString().split('T')[0];
+        break;
+      }
+      case 'Country': params.country = 'UK,USA,Germany,Japan,Australia,Canada'; break;
+      case 'Field': break; // Too many to pre-filter; skip
+    }
+  }
+
+  if (degrees.length > 0) params.degree = degrees.join(',');
+  if (search) params.search = search;
+
+  return params;
+}
 
 export default function ScholarshipsPage() {
   const [activeTab, setActiveTab] = useState('Recommended');
@@ -21,25 +49,40 @@ export default function ScholarshipsPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  async function loadData() {
+  // Fetch scholarships whenever filters or search changes
+  const loadScholarships = useCallback(async (filters: string[], search: string) => {
+    setLoading(true);
     try {
-      const [schData, saved] = await Promise.all([
-        fetchScholarships({ page: '1', limit: '20' }),
-        fetchSavedScholarships().catch(() => []),
-      ]);
+      const params = buildFilterParams(filters, search);
+      const schData = await fetchScholarships(params);
       setScholarships(schData.items || []);
       setTotal(schData.total || 0);
-      setSavedIds(new Set(saved.map((s: any) => s.id)));
     } catch (err) {
-      console.error('Failed to load:', err);
+      console.error('Failed to load scholarships:', err);
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  // Initial load: scholarships + saved IDs
+  useEffect(() => {
+    async function init() {
+      try {
+        const saved = await fetchSavedScholarships().catch(() => []);
+        setSavedIds(new Set(saved.map((s: any) => s.id)));
+      } catch {}
+      await loadScholarships([], '');
+    }
+    init();
+  }, [loadScholarships]);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadScholarships(activeFilters, searchQuery);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery, activeFilters, loadScholarships]);
 
   async function handleSave(id: string) {
     if (savedIds.has(id)) {
@@ -56,6 +99,11 @@ export default function ScholarshipsPage() {
       prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter]
     );
   }
+
+  // Filter scholarships for Saved/Applied tabs (client-side from savedIds)
+  const displayScholarships = activeTab === 'Saved'
+    ? scholarships.filter(s => savedIds.has(s.id))
+    : scholarships;
 
   return (
     <AppLayout>
@@ -146,46 +194,41 @@ export default function ScholarshipsPage() {
       )}
 
       <div className="px-4 md:px-6 py-4">
+        {/* Result count */}
+        {!loading && (
+          <p className="text-[12px] text-text-secondary mb-3">
+            {total} scholarship{total !== 1 ? 's' : ''} found
+            {activeFilters.length > 0 && ` with ${activeFilters.length} filter${activeFilters.length > 1 ? 's' : ''}`}
+          </p>
+        )}
+
         {/* Scholarship feed */}
         {loading ? (
           <ScholarshipListSkeleton count={4} />
         ) : (
           <div className="flex flex-col gap-4">
-            {scholarships
-              .filter((sch) => {
-                if (!searchQuery) return true;
-                const q = searchQuery.toLowerCase();
-                return (
-                  sch.name?.toLowerCase().includes(q) ||
-                  sch.provider?.toLowerCase().includes(q) ||
-                  sch.host_institution?.toLowerCase().includes(q) ||
-                  sch.host_country?.toLowerCase().includes(q) ||
-                  sch.fields_of_study?.some(f => f.toLowerCase().includes(q))
-                );
-              })
-              .map((sch) => (
-                <ScholarshipCard
-                  key={sch.id}
-                  scholarship={sch}
-                  onSave={handleSave}
-                  isSaved={savedIds.has(sch.id)}
-                />
-              ))
-            }
-            {scholarships.filter((sch) => {
-              if (!searchQuery) return true;
-              const q = searchQuery.toLowerCase();
-              return (
-                sch.name?.toLowerCase().includes(q) ||
-                sch.provider?.toLowerCase().includes(q) ||
-                sch.host_institution?.toLowerCase().includes(q) ||
-                sch.host_country?.toLowerCase().includes(q) ||
-                sch.fields_of_study?.some(f => f.toLowerCase().includes(q))
-              );
-            }).length === 0 && (
+            {displayScholarships.map((sch) => (
+              <ScholarshipCard
+                key={sch.id}
+                scholarship={sch}
+                onSave={handleSave}
+                isSaved={savedIds.has(sch.id)}
+              />
+            ))}
+            {displayScholarships.length === 0 && (
               <div className="text-center py-16">
                 <span className="material-symbols-outlined text-5xl text-text-secondary mb-4 block">search_off</span>
-                <p className="text-[16px] text-text-secondary">No scholarships found</p>
+                <p className="text-[16px] text-text-secondary">
+                  {activeTab === 'Saved' ? 'No saved scholarships yet' : 'No scholarships match your filters'}
+                </p>
+                {activeFilters.length > 0 && (
+                  <button
+                    onClick={() => setActiveFilters([])}
+                    className="mt-3 text-[13px] text-primary font-medium hover:underline"
+                  >
+                    Clear all filters
+                  </button>
+                )}
               </div>
             )}
           </div>

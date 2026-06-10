@@ -24,6 +24,7 @@ class ResumeUpdate(BaseModel):
     summary: Optional[str] = None
     education: Optional[List[Any]] = None
     experience: Optional[List[Any]] = None
+    research_projects: Optional[List[Any]] = None
     skills: Optional[List[str]] = None
     certifications: Optional[List[Any]] = None
     publications: Optional[List[Any]] = None
@@ -59,6 +60,7 @@ class ResumeOut(BaseModel):
     summary: Optional[str]
     education: List[Any]
     experience: List[Any]
+    research_projects: List[Any]
     skills: List[str]
     certifications: List[Any]
     publications: List[Any]

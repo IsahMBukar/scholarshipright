@@ -1,43 +1,35 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-export default function LoginPage() {
+export default function SignupPage() {
   const router = useRouter();
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [checking, setChecking] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    fetch(`${API_URL}/api/auth/me`, { credentials: 'include' })
-      .then((r) => {
-        if (r.ok) router.push('/scholarships');
-      })
-      .finally(() => setChecking(false));
-  }, [router]);
-
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API_URL}/api/auth/login`, {
+      const res = await fetch(`${API_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, full_name: fullName }),
       });
       if (res.ok) {
-        router.push('/scholarships');
+        router.push('/onboarding');
       } else {
         const data = await res.json().catch(() => ({}));
-        setError(data.detail || 'Invalid email or password');
+        setError(data.detail || 'Registration failed');
       }
     } catch (err) {
       setError('Connection failed. Please try again.');
@@ -46,37 +38,13 @@ export default function LoginPage() {
     }
   };
 
-  const handleDevLogin = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const res = await fetch(`${API_URL}/api/auth/dev-login`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (res.ok) router.push('/scholarships');
-    } catch (err) {
-      setError('Connection failed.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (checking) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="animate-pulse text-text-secondary">Loading...</div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <span className="text-[28px] font-extrabold text-primary">ScholarshipRight</span>
-          <h1 className="text-[32px] font-bold text-text-primary mt-4">Welcome back</h1>
-          <p className="text-[16px] text-text-secondary mt-2">Sign in to your account</p>
+          <h1 className="text-[32px] font-bold text-text-primary mt-4">Create Account</h1>
+          <p className="text-[16px] text-text-secondary mt-2">Start finding your perfect scholarship</p>
         </div>
 
         <div className="bg-white p-8 rounded-card border border-gray-200 shadow-sm">
@@ -86,7 +54,16 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={handleLogin}>
+          <form onSubmit={handleSignup}>
+            <label className="text-[14px] font-semibold text-text-primary block mb-2">Full Name</label>
+            <input
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="John Doe"
+              className="w-full p-3.5 bg-gray-100 border border-gray-200 rounded-card text-text-primary placeholder:text-text-secondary focus:ring-2 focus:ring-primary focus:border-transparent mb-4"
+            />
+
             <label className="text-[14px] font-semibold text-text-primary block mb-2">Email</label>
             <input
               type="email"
@@ -113,31 +90,16 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full bg-primary text-text-inverse font-bold py-3.5 rounded-btn hover:brightness-110 transition-all disabled:opacity-50"
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? 'Creating account...' : 'Create Account'}
             </button>
           </form>
 
           <p className="text-center text-[14px] text-text-secondary mt-6">
-            Don't have an account?{' '}
-            <Link href="/signup" className="text-primary font-semibold hover:underline">
-              Sign up
+            Already have an account?{' '}
+            <Link href="/login" className="text-primary font-semibold hover:underline">
+              Sign in
             </Link>
           </p>
-
-          <div className="flex items-center gap-4 my-6">
-            <div className="flex-1 h-px bg-gray-200" />
-            <span className="text-[13px] text-text-secondary">or</span>
-            <div className="flex-1 h-px bg-gray-200" />
-          </div>
-
-          <button
-            onClick={handleDevLogin}
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-2 bg-gray-100 text-text-secondary font-medium py-3 rounded-btn hover:bg-gray-200 transition-all text-[13px] disabled:opacity-50"
-          >
-            <span className="material-symbols-outlined text-[18px]">bolt</span>
-            Quick Dev Login (test@scholarshipright.com)
-          </button>
         </div>
       </div>
     </div>

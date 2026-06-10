@@ -5,7 +5,7 @@ import AppLayout from '@/components/AppLayout';
 import { ScholarshipListSkeleton } from '@/components/Skeletons';
 import {
   fetchResumes, fetchResume, uploadResume, updateResume, deleteResume,
-  setPrimaryResume, rewriteField, reanalyzeResume,
+  setPrimaryResume, rewriteField, reanalyzeResume, exportResumePdf,
 } from '@/services/api';
 import type { Resume, ResumeIssue } from '@/services/api';
 
@@ -37,7 +37,7 @@ export default function ResumePage() {
   const [editData, setEditData] = useState<Partial<Resume>>({});
   const [saving, setSaving] = useState(false);
   const [rewritingField, setRewritingField] = useState<string | null>(null);
-  const [activeEditorTab, setActiveEditorTab] = useState<'overview' | 'issues' | 'education' | 'experience' | 'skills' | 'certifications' | 'publications'>('overview');
+  const [activeEditorTab, setActiveEditorTab] = useState<'overview' | 'issues' | 'education' | 'experience' | 'research' | 'skills' | 'certifications' | 'publications' | 'references'>('overview');
 
   useEffect(() => {
     loadResumes();
@@ -130,6 +130,20 @@ export default function ResumePage() {
       console.error('Save failed:', err);
     } finally {
       setSaving(false);
+    }
+  }
+
+  const [exporting, setExporting] = useState(false);
+  async function handleExportPdf(mode: 'resume' | 'cv') {
+    if (!selectedResume) return;
+    setExporting(true);
+    try {
+      await exportResumePdf(selectedResume.id, mode);
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      alert('Failed to export PDF. Please try again.');
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -415,6 +429,23 @@ export default function ResumePage() {
                 )}
               </div>
               <div className="flex gap-2">
+                <div className="relative group">
+                  <button disabled={exporting} className="px-3 py-2 border border-gray-200 text-text-secondary text-[12px] font-medium rounded-btn hover:border-primary hover:text-primary transition-colors disabled:opacity-50 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[16px]">download</span>
+                    {exporting ? 'Exporting...' : 'Download'}
+                    <span className="material-symbols-outlined text-[14px]">arrow_drop_down</span>
+                  </button>
+                  <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 min-w-[160px]">
+                    <button onClick={() => handleExportPdf('resume')} className="w-full text-left px-4 py-2.5 text-[13px] text-text-primary hover:bg-gray-50 rounded-t-lg flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[16px] text-text-secondary">description</span>
+                      Resume (1 page)
+                    </button>
+                    <button onClick={() => handleExportPdf('cv')} className="w-full text-left px-4 py-2.5 text-[13px] text-text-primary hover:bg-gray-50 rounded-b-lg flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[16px] text-text-secondary">folder_open</span>
+                      CV (Full detail)
+                    </button>
+                  </div>
+                </div>
                 <button onClick={handleReanalyze} disabled={analyzing} className="px-3 py-2 border border-gray-200 text-text-secondary text-[12px] font-medium rounded-btn hover:border-primary hover:text-primary transition-colors disabled:opacity-50">
                   {analyzing ? 'Analyzing...' : 'Re-analyze'}
                 </button>
@@ -459,10 +490,12 @@ export default function ResumePage() {
                 { key: 'overview', label: 'Overview', icon: 'person' },
                 { key: 'issues', label: `Issues (${(selectedResume.issues || []).length})`, icon: 'report_problem' },
                 { key: 'education', label: 'Education', icon: 'school' },
-                { key: 'experience', label: 'Work & Projects', icon: 'work' },
+                { key: 'experience', label: 'Work', icon: 'work' },
+                { key: 'research', label: 'Research/Projects', icon: 'science' },
                 { key: 'skills', label: 'Skills', icon: 'psychology' },
                 { key: 'certifications', label: 'Certs', icon: 'verified' },
                 { key: 'publications', label: 'Pubs', icon: 'article' },
+                { key: 'references', label: 'Refs', icon: 'contacts' },
               ].map(tab => (
                 <button
                   key={tab.key}
@@ -623,37 +656,19 @@ export default function ResumePage() {
               </div>
             )}
 
-            {/* WORK & PROJECTS TAB */}
+            {/* WORK EXPERIENCE TAB */}
             {activeEditorTab === 'experience' && (
               <div className="space-y-3">
                 {(editData.experience || []).map((exp: any, idx: number) => (
                   <div key={idx} className="bg-white rounded-card border border-gray-200 p-4">
                     <div className="flex items-center justify-between mb-3">
-                      <div className="flex gap-2">
-                        {['work', 'project'].map(type => (
-                          <button
-                            key={type}
-                            onClick={() => {
-                              const updated = [...(editData.experience || [])];
-                              updated[idx] = { ...updated[idx], type };
-                              updateField('experience', updated);
-                            }}
-                            className={`px-3 py-1 rounded-chip text-[12px] font-semibold transition-colors ${
-                              (exp.type || 'work') === type
-                                ? 'bg-primary text-white'
-                                : 'bg-gray-100 text-text-secondary hover:bg-gray-200'
-                            }`}
-                          >
-                            {type === 'work' ? '💼 Work' : '🚀 Project'}
-                          </button>
-                        ))}
-                      </div>
+                      <span className="text-[13px] font-semibold text-primary">💼 Work Experience</span>
                       <button onClick={() => updateField('experience', (editData.experience || []).filter((_: any, i: number) => i !== idx))} className="text-[12px] text-red-500 font-medium hover:underline">
                         Remove
                       </button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {(exp.type === 'project' ? ['title', 'organization', 'location', 'start_date', 'end_date'] : ['company', 'position', 'location', 'start_date', 'end_date']).map(key => (
+                      {['company', 'position', 'location', 'start_date', 'end_date'].map(key => (
                         <div key={key}>
                           <label className="text-[12px] font-semibold text-text-secondary block mb-1">{key.replace('_', ' ')}</label>
                           <input
@@ -670,7 +685,7 @@ export default function ResumePage() {
                       ))}
                     </div>
                     <div className="mt-3">
-                      <label className="text-[12px] font-semibold text-text-secondary block mb-1">{exp.type === 'project' ? 'Project Description' : 'Job Description'}</label>
+                      <label className="text-[12px] font-semibold text-text-secondary block mb-1">Job Description</label>
                       <div className="flex gap-1">
                         <textarea
                           value={exp.description || ''}
@@ -702,29 +717,118 @@ export default function ResumePage() {
                         </button>
                       </div>
                     </div>
-                    {exp.type === 'project' && (
-                      <div className="mt-3">
-                        <label className="text-[12px] font-semibold text-text-secondary block mb-1">Technologies / Tools</label>
-                        <input
-                          type="text"
-                          value={exp.technologies || ''}
-                          onChange={(e) => {
-                            const updated = [...(editData.experience || [])];
-                            updated[idx] = { ...updated[idx], technologies: e.target.value };
-                            updateField('experience', updated);
-                          }}
-                          placeholder="e.g. Python, React, TensorFlow"
-                          className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none"
-                        />
-                      </div>
-                    )}
                   </div>
                 ))}
                 <button
-                  onClick={() => updateField('experience', [...(editData.experience || []), { type: 'work', company: '', position: '', location: '', start_date: '', end_date: '', description: '' }])}
+                  onClick={() => updateField('experience', [...(editData.experience || []), { company: '', position: '', location: '', start_date: '', end_date: '', description: '' }])}
                   className="w-full py-3 border-2 border-dashed border-gray-300 rounded-card text-[14px] font-medium text-text-secondary hover:border-primary hover:text-primary transition-colors"
                 >
-                  + Add Work / Project
+                  + Add Work Experience
+                </button>
+              </div>
+            )}
+
+            {/* RESEARCH / PROJECTS TAB */}
+            {activeEditorTab === 'research' && (
+              <div className="space-y-3">
+                {(editData.research_projects || []).map((rp: any, idx: number) => (
+                  <div key={idx} className="bg-white rounded-card border border-gray-200 p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex gap-2">
+                        {['research', 'project'].map(type => (
+                          <button
+                            key={type}
+                            onClick={() => {
+                              const updated = [...(editData.research_projects || [])];
+                              updated[idx] = { ...updated[idx], type };
+                              updateField('research_projects', updated);
+                            }}
+                            className={`px-3 py-1 rounded-chip text-[12px] font-semibold transition-colors ${
+                              (rp.type || 'research') === type
+                                ? 'bg-primary text-white'
+                                : 'bg-gray-100 text-text-secondary hover:bg-gray-200'
+                            }`}
+                          >
+                            {type === 'research' ? '🔬 Research' : '🚀 Project'}
+                          </button>
+                        ))}
+                      </div>
+                      <button onClick={() => updateField('research_projects', (editData.research_projects || []).filter((_: any, i: number) => i !== idx))} className="text-[12px] text-red-500 font-medium hover:underline">
+                        Remove
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[12px] font-semibold text-text-secondary block mb-1">Title</label>
+                        <input type="text" value={rp.title || ''} onChange={(e) => { const u = [...(editData.research_projects || [])]; u[idx] = { ...u[idx], title: e.target.value }; updateField('research_projects', u); }} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none" placeholder={rp.type === 'project' ? 'Project title' : 'Research title'} />
+                      </div>
+                      <div>
+                        <label className="text-[12px] font-semibold text-text-secondary block mb-1">{rp.type === 'project' ? 'Organization / Sponsor' : 'Institution / Lab'}</label>
+                        <input type="text" value={rp.organization || ''} onChange={(e) => { const u = [...(editData.research_projects || [])]; u[idx] = { ...u[idx], organization: e.target.value }; updateField('research_projects', u); }} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none" placeholder={rp.type === 'project' ? 'e.g. Google, UNDP' : 'e.g. MIT CSAIL, Personal'} />
+                      </div>
+                      <div>
+                        <label className="text-[12px] font-semibold text-text-secondary block mb-1">Role</label>
+                        <input type="text" value={rp.role || ''} onChange={(e) => { const u = [...(editData.research_projects || [])]; u[idx] = { ...u[idx], role: e.target.value }; updateField('research_projects', u); }} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none" placeholder="e.g. Lead Researcher, Developer" />
+                      </div>
+                      <div>
+                        <label className="text-[12px] font-semibold text-text-secondary block mb-1">Location</label>
+                        <input type="text" value={rp.location || ''} onChange={(e) => { const u = [...(editData.research_projects || [])]; u[idx] = { ...u[idx], location: e.target.value }; updateField('research_projects', u); }} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none" />
+                      </div>
+                      <div>
+                        <label className="text-[12px] font-semibold text-text-secondary block mb-1">Start Date</label>
+                        <input type="text" value={rp.start_date || ''} onChange={(e) => { const u = [...(editData.research_projects || [])]; u[idx] = { ...u[idx], start_date: e.target.value }; updateField('research_projects', u); }} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none" placeholder="e.g. Jan 2024" />
+                      </div>
+                      <div>
+                        <label className="text-[12px] font-semibold text-text-secondary block mb-1">End Date</label>
+                        <input type="text" value={rp.end_date || ''} onChange={(e) => { const u = [...(editData.research_projects || [])]; u[idx] = { ...u[idx], end_date: e.target.value }; updateField('research_projects', u); }} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none" placeholder="e.g. Present" />
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <label className="text-[12px] font-semibold text-text-secondary block mb-1">Technologies / Methods</label>
+                      <input type="text" value={rp.technologies || ''} onChange={(e) => { const u = [...(editData.research_projects || [])]; u[idx] = { ...u[idx], technologies: e.target.value }; updateField('research_projects', u); }} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none" placeholder="e.g. Python, NLP, Qualitative Analysis, FEA" />
+                    </div>
+                    <div className="mt-3">
+                      <label className="text-[12px] font-semibold text-text-secondary block mb-1">{rp.type === 'project' ? 'Project Description' : 'Research Description'}</label>
+                      <div className="flex gap-1">
+                        <textarea
+                          value={rp.description || ''}
+                          onChange={(e) => { const u = [...(editData.research_projects || [])]; u[idx] = { ...u[idx], description: e.target.value }; updateField('research_projects', u); }}
+                          rows={3}
+                          className="flex-1 p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none resize-y"
+                        />
+                        <button
+                          onClick={async () => {
+                            setRewritingField(`rp-${idx}`);
+                            try {
+                              const result = await rewriteField(selectedResume.id, 'research_description', rp.description || '');
+                              const u = [...(editData.research_projects || [])];
+                              u[idx] = { ...u[idx], description: result.improved_value };
+                              updateField('research_projects', u);
+                            } finally { setRewritingField(null); }
+                          }}
+                          disabled={rewritingField === `rp-${idx}`}
+                          className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-lg border border-gray-200 hover:border-primary hover:text-primary transition-colors self-end disabled:opacity-50"
+                          title="AI Improve"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">{rewritingField === `rp-${idx}` ? 'refresh' : 'auto_awesome'}</span>
+                        </button>
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <label className="text-[12px] font-semibold text-text-secondary block mb-1">Key Outcomes / Results</label>
+                      <input type="text" value={rp.outcomes || ''} onChange={(e) => { const u = [...(editData.research_projects || [])]; u[idx] = { ...u[idx], outcomes: e.target.value }; updateField('research_projects', u); }} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none" placeholder="e.g. Published in IEEE, 95% accuracy, Patent filed" />
+                    </div>
+                    <div className="mt-3">
+                      <label className="text-[12px] font-semibold text-text-secondary block mb-1">URL / Link</label>
+                      <input type="text" value={rp.url || ''} onChange={(e) => { const u = [...(editData.research_projects || [])]; u[idx] = { ...u[idx], url: e.target.value }; updateField('research_projects', u); }} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none" placeholder="e.g. https://github.com/... or DOI link" />
+                    </div>
+                  </div>
+                ))}
+                <button
+                  onClick={() => updateField('research_projects', [...(editData.research_projects || []), { type: 'research', title: '', organization: '', role: '', location: '', start_date: '', end_date: '', technologies: '', description: '', outcomes: '', url: '' }])}
+                  className="w-full py-3 border-2 border-dashed border-gray-300 rounded-card text-[14px] font-medium text-text-secondary hover:border-primary hover:text-primary transition-colors"
+                >
+                  + Add Research / Project
                 </button>
               </div>
             )}
@@ -923,6 +1027,67 @@ export default function ResumePage() {
                     className="text-[13px] font-medium text-primary hover:underline mt-1"
                   >
                     + Add Publication
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeEditorTab === 'references' && (
+              <div className="space-y-4">
+                <div className="bg-white rounded-card border border-gray-200 p-4 md:p-5">
+                  <h3 className="text-[16px] font-bold text-text-primary mb-3">References</h3>
+                  {(editData.ref_list || []).length === 0 && (
+                    <p className="text-[13px] text-text-secondary mb-3">No references added yet. Add professional references below.</p>
+                  )}
+                  {(editData.ref_list || []).map((ref: any, idx: number) => (
+                    <div key={idx} className="p-3 mb-3 bg-gray-50 rounded-lg border border-gray-100">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
+                        <input
+                          type="text"
+                          value={ref.name || ''}
+                          onChange={(e) => {
+                            const updated = [...(editData.ref_list || [])];
+                            updated[idx] = { ...updated[idx], name: e.target.value };
+                            updateField('ref_list', updated);
+                          }}
+                          className="p-2.5 bg-white border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none"
+                          placeholder="Full name"
+                        />
+                        <input
+                          type="text"
+                          value={ref.position || ''}
+                          onChange={(e) => {
+                            const updated = [...(editData.ref_list || [])];
+                            updated[idx] = { ...updated[idx], position: e.target.value };
+                            updateField('ref_list', updated);
+                          }}
+                          className="p-2.5 bg-white border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none"
+                          placeholder="Position / Title"
+                        />
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          value={ref.contact || ''}
+                          onChange={(e) => {
+                            const updated = [...(editData.ref_list || [])];
+                            updated[idx] = { ...updated[idx], contact: e.target.value };
+                            updateField('ref_list', updated);
+                          }}
+                          className="p-2.5 bg-white border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none"
+                          placeholder="Email or phone"
+                        />
+                        <button onClick={() => updateField('ref_list', (editData.ref_list || []).filter((_: any, i: number) => i !== idx))} className="text-red-500 self-center">
+                          <span className="material-symbols-outlined text-[18px]">delete</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => updateField('ref_list', [...(editData.ref_list || []), { name: '', position: '', contact: '' }])}
+                    className="text-[13px] font-medium text-primary hover:underline mt-1"
+                  >
+                    + Add Reference
                   </button>
                 </div>
               </div>
