@@ -71,7 +71,8 @@ class ResumeOut(BaseModel):
     analysis: dict
     issues: List[Any]
     ai_suggestions: Optional[str]
-    overall_score: Optional[int]
+    overall_score: Optional[int] = None
+    section_scores: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
 

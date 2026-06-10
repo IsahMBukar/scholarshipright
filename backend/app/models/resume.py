@@ -47,6 +47,7 @@ class Resume(Base):
     issues = Column(JSONB, default=[])
     ai_suggestions = Column(Text, nullable=True)
     overall_score = Column(Integer, nullable=True)
+    section_scores = Column(JSONB, default={})
     raw_text = Column(Text, nullable=True)
 
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

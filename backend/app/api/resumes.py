@@ -13,6 +13,7 @@ from app.models.resume import Resume
 from app.models.user import User
 from app.schemas.resume import ResumeOut, ResumeUpdate
 from app.services.resume_analyzer import extract_text_from_file, analyze_resume, rewrite_field
+from app.services.scoring import calculate_resume_score
 from app.api.users import get_current_user
 
 router = APIRouter(prefix="/api/resumes", tags=["resumes"])
@@ -142,6 +143,19 @@ async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename
                 resume.issues = analysis.get("issues", [])
                 resume.ai_suggestions = analysis.get("ai_suggestions", "")
                 resume.status = "completed"
+                
+                # Calculate deterministic score
+                resume_dict = {
+                    "email": resume.email, "phone": resume.phone, "location": resume.location,
+                    "linkedin_url": resume.linkedin_url, "summary": resume.summary,
+                    "education": resume.education or [], "experience": resume.experience or [],
+                    "research_projects": resume.research_projects or [], "skills": resume.skills or [],
+                    "certifications": resume.certifications or [], "publications": resume.publications or [],
+                    "languages": resume.languages or [],
+                }
+                score_result = calculate_resume_score(resume_dict)
+                resume.overall_score = score_result["overall_score"]
+                resume.section_scores = score_result["section_scores"]
             else:
                 resume.status = "error"
                 resume.issues = [{"field": "file", "severity": "urgent", "message": "Could not extract text from file. Try a clearer image or PDF.", "suggestion": "Re-upload or paste text manually."}]
@@ -183,6 +197,19 @@ async def update_resume(resume_id: str, data: ResumeUpdate, user: User = Depends
     
     for key, value in update_data.items():
         setattr(resume, key, value)
+    
+    # Recalculate score on save
+    resume_dict = {
+        "email": resume.email, "phone": resume.phone, "location": resume.location,
+        "linkedin_url": resume.linkedin_url, "summary": resume.summary,
+        "education": resume.education or [], "experience": resume.experience or [],
+        "research_projects": resume.research_projects or [], "skills": resume.skills or [],
+        "certifications": resume.certifications or [], "publications": resume.publications or [],
+        "languages": resume.languages or [],
+    }
+    score_result = calculate_resume_score(resume_dict)
+    resume.overall_score = score_result["overall_score"]
+    resume.section_scores = score_result["section_scores"]
     
     await db.commit()
     await db.refresh(resume)
