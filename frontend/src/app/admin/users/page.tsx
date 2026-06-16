@@ -10,6 +10,7 @@ import DataTable, { type Column } from '@/components/admin/ui/DataTable';
 import Badge, { type BadgeTone } from '@/components/admin/ui/Badge';
 import Button from '@/components/admin/ui/Button';
 import Drawer from '@/components/admin/ui/Drawer';
+import { useToast } from '@/components/admin/ui/Toast';
 import { adminApi, type ListUsersParams } from '@/lib/admin/api';
 import { AdminApiError } from '@/lib/admin/client';
 import type { AdminUser, AdminRole } from '@/lib/admin/types';
@@ -27,6 +28,7 @@ function fmtDate(iso: string | null): string {
 
 export default function AdminUsersPage() {
   const qc = useQueryClient();
+  const toast = useToast();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
@@ -148,7 +150,7 @@ export default function AdminUsersPage() {
         setPage(1);
       }}
       placeholder="Search by email or name"
-      className="h-9 w-64 px-3 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+      className="h-9 w-72 px-3 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
     />
   );
 
@@ -217,8 +219,18 @@ export default function AdminUsersPage() {
         onClose={() => setSelectedUser(null)}
         onSave={async (body) => {
           if (!selectedUser) return;
-          await updateUser.mutateAsync({ id: selectedUser.id, body });
-          setSelectedUser(null);
+          try {
+            await updateUser.mutateAsync({ id: selectedUser.id, body });
+            toast.success(
+              'User updated',
+              selectedUser.email
+            );
+            setSelectedUser(null);
+          } catch (err) {
+            const msg = err instanceof AdminApiError ? err.message : 'Update failed';
+            toast.error('Failed to update user', msg);
+            throw err; // let drawer keep its error visible
+          }
         }}
         saving={updateUser.isPending}
         saveError={(updateUser.error as AdminApiError | null)?.message ?? null}

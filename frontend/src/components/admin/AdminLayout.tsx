@@ -14,6 +14,8 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import AdminTopbar from '@/components/admin/AdminTopbar';
+import { ErrorBoundary } from '@/components/admin/ui/ErrorBoundary';
+import { Skeleton } from '@/components/admin/ui/Skeleton';
 import { ShieldOff } from 'lucide-react';
 import type { AdminRole } from '@/lib/admin/types';
 
@@ -54,9 +56,43 @@ function ForbiddenView({ email, onBack }: { email?: string; onBack: () => void }
 }
 
 function LoadingView() {
+  // Skeleton shell — matches the AdminShell so there's no layout jump when
+  // the auth check resolves.
   return (
-    <div className="h-screen flex items-center justify-center bg-gray-100">
-      <div className="text-sm text-text-secondary">Verifying admin access…</div>
+    <div className="h-screen bg-gray-100 flex">
+      <div className="hidden md:flex flex-col w-64 h-full bg-white border-r border-gray-200">
+        <div className="flex items-center gap-3 h-16 px-5 border-b border-gray-200">
+          <Skeleton className="w-9 h-9 rounded-xl" />
+          <div className="flex-1 space-y-1">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-2.5 w-16" />
+          </div>
+        </div>
+        <div className="flex-1 p-3 space-y-1">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-9 w-full rounded-btn" />
+          ))}
+        </div>
+      </div>
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <div className="h-16 border-b border-gray-200 bg-white/80 flex items-center px-6">
+          <div className="space-y-1">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-3 w-48" />
+          </div>
+        </div>
+        <div className="flex-1 p-6 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="bg-white rounded-card border border-gray-200 p-5">
+                <Skeleton className="h-3 w-24" />
+                <Skeleton className="h-8 w-16 mt-3" />
+                <Skeleton className="h-3 w-20 mt-3" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -79,7 +115,9 @@ function AdminShell({
       <AdminSidebar adminEmail={identity.email} adminRole={identity.admin_role ?? undefined} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <AdminTopbar title={pageTitle} description={pageDescription} actions={actions} />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-6">
+          <ErrorBoundary label={pageTitle}>{children}</ErrorBoundary>
+        </main>
       </div>
     </div>
   );
@@ -112,6 +150,11 @@ function AdminLayoutInner({ title, description, actions, children }: AdminLayout
       try {
         const res = await fetch(`${API_URL}/api/auth/me`, { credentials: 'include' });
         if (!res.ok) {
+          // 401 → not logged in. Redirect to /login with return URL.
+          if (!cancelled && res.status === 401) {
+            router.replace(`/login?next=${encodeURIComponent('/admin')}`);
+            return;
+          }
           if (!cancelled) setState({ kind: 'forbidden' });
           return;
         }
@@ -132,13 +175,15 @@ function AdminLayoutInner({ title, description, actions, children }: AdminLayout
           }
         }
       } catch {
+        // Network error: don't kick the user out — show forbidden so they
+        // can retry from the "Back to app" button.
         if (!cancelled) setState({ kind: 'forbidden' });
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [router]);
 
   if (state.kind === 'loading') return <LoadingView />;
   if (state.kind === 'forbidden')

@@ -1,13 +1,24 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+// Only allow internal paths as the ?next= target. Block absolute URLs and
+// protocol-relative ones to prevent open-redirect via crafted query.
+function safeNext(raw: string | null, fallback: string): string {
+  if (!raw) return fallback;
+  if (!raw.startsWith('/')) return fallback;
+  if (raw.startsWith('//')) return fallback;
+  return raw;
+}
+
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = safeNext(searchParams.get('next'), '/scholarships');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,10 +28,10 @@ export default function LoginPage() {
   useEffect(() => {
     fetch(`${API_URL}/api/auth/me`, { credentials: 'include' })
       .then((r) => {
-        if (r.ok) router.push('/scholarships');
+        if (r.ok) router.push(nextPath);
       })
       .finally(() => setChecking(false));
-  }, [router]);
+  }, [router, nextPath]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +45,22 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
       if (res.ok) {
-        router.push('/scholarships');
+        // If a `?next` was passed (e.g. /admin), honor it. Otherwise
+        // walk through onboarding if the user has no profile.
+        if (searchParams.get('next')) {
+          router.push(nextPath);
+          return;
+        }
+        try {
+          const profileRes = await fetch(`${API_URL}/api/profile`, { credentials: 'include' });
+          if (profileRes.status === 404) {
+            router.push('/onboarding');
+          } else {
+            router.push('/scholarships');
+          }
+        } catch {
+          router.push('/scholarships');
+        }
       } else {
         const data = await res.json().catch(() => ({}));
         setError(data.detail || 'Invalid email or password');
@@ -54,7 +80,7 @@ export default function LoginPage() {
         method: 'POST',
         credentials: 'include',
       });
-      if (res.ok) router.push('/scholarships');
+      if (res.ok) router.push(nextPath);
     } catch (err) {
       setError('Connection failed.');
     } finally {

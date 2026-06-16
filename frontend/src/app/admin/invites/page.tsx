@@ -12,8 +12,11 @@ import AdminLayout from '@/components/admin/AdminLayout';
 import DataTable, { type Column } from '@/components/admin/ui/DataTable';
 import Badge, { type BadgeTone } from '@/components/admin/ui/Badge';
 import Button from '@/components/admin/ui/Button';
+import { useToast } from '@/components/admin/ui/Toast';
+import { useConfirm } from '@/components/admin/ui/ConfirmDialog';
 import { adminApi, type ListInvitesParams } from '@/lib/admin/api';
 import { AdminApiError } from '@/lib/admin/client';
+import EmptyState from '@/components/admin/ui/EmptyState';
 import type { AdminInviteListEntry, AdminRole } from '@/lib/admin/types';
 
 type Status = 'pending' | 'accepted' | 'revoked' | 'expired';
@@ -45,6 +48,7 @@ function fmtDate(iso: string | null): string {
 
 export default function AdminInvitesPage() {
   const qc = useQueryClient();
+  const toast = useToast();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [includeAccepted, setIncludeAccepted] = useState(false);
@@ -80,12 +84,24 @@ export default function AdminInvitesPage() {
       setCopied(false);
       setEmail('');
       setNote('');
+      toast.success('Invite created', `Sent to ${data.email}`);
+    },
+    onError: (err) => {
+      const msg = err instanceof AdminApiError ? err.message : 'Create failed';
+      toast.error('Failed to create invite', msg);
     },
   });
 
   const revoke = useMutation({
     mutationFn: (id: string) => adminApi.revokeInvite(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'invites'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'invites'] });
+      toast.success('Invite revoked');
+    },
+    onError: (err) => {
+      const msg = err instanceof AdminApiError ? err.message : 'Revoke failed';
+      toast.error('Failed to revoke invite', msg);
+    },
   });
 
   const handleCopy = useCallback(async () => {
@@ -161,22 +177,7 @@ export default function AdminInvitesPage() {
           if (status !== 'pending') {
             return <span className="text-text-secondary text-xs">—</span>;
           }
-          return (
-            <Button
-              variant="danger"
-              size="sm"
-              loading={revoke.isPending && revoke.variables === r.id}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (confirm(`Revoke invite for ${r.email}?`)) {
-                  revoke.mutate(r.id);
-                }
-              }}
-            >
-              <Trash2 className="w-3 h-3" />
-              Revoke
-            </Button>
-          );
+          return <RevokeButton invite={r} onRevoke={() => revoke.mutate(r.id)} />;
         },
         align: 'right',
       },
@@ -332,9 +333,53 @@ export default function AdminInvitesPage() {
             setPageSize(n);
             setPage(1);
           }}
-          emptyMessage="No invites yet."
+          emptyState={
+            <EmptyState
+              title="No invites yet"
+              description="Create your first admin invite using the form above."
+              icon={<Mail className="w-6 h-6" />}
+            />
+          }
         />
       </div>
     </AdminLayout>
+  );
+}
+
+// ── RevokeButton ───────────────────────────────────────────────────
+// Defined outside AdminInvitesPage so it can use the useConfirm() hook
+// (column cell renderers are plain functions, not React components, so
+// they can't call hooks directly).
+function RevokeButton({
+  invite,
+  onRevoke,
+}: {
+  invite: AdminInviteListEntry;
+  onRevoke: () => void;
+}) {
+  const confirm = useConfirm();
+  return (
+    <Button
+      variant="danger"
+      size="sm"
+      onClick={async (e) => {
+        e.stopPropagation();
+        const ok = await confirm({
+          title: 'Revoke invite?',
+          description: (
+            <>
+              <span className="font-mono">{invite.email}</span> won&apos;t be
+              able to accept this invite. This can&apos;t be undone.
+            </>
+          ),
+          confirmLabel: 'Revoke invite',
+          tone: 'danger',
+        });
+        if (ok) onRevoke();
+      }}
+    >
+      <Trash2 className="w-3 h-3" />
+      Revoke
+    </Button>
   );
 }

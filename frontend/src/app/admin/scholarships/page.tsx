@@ -15,8 +15,10 @@ import DataTable, { type Column } from '@/components/admin/ui/DataTable';
 import Badge, { type BadgeTone } from '@/components/admin/ui/Badge';
 import Button from '@/components/admin/ui/Button';
 import Drawer from '@/components/admin/ui/Drawer';
+import { useToast } from '@/components/admin/ui/Toast';
 import { adminApi, type ListScholarshipsParams } from '@/lib/admin/api';
 import { AdminApiError } from '@/lib/admin/client';
+import SearchInput from '@/components/admin/ui/SearchInput';
 import type { AdminScholarship } from '@/lib/admin/types';
 
 const FUNDING_OPTIONS = [
@@ -45,6 +47,7 @@ function deadlineTone(iso: string | null): BadgeTone {
 
 export default function AdminScholarshipsPage() {
   const qc = useQueryClient();
+  const toast = useToast();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
@@ -171,15 +174,15 @@ export default function AdminScholarshipsPage() {
   );
 
   const headerSearch = (
-    <input
-      type="text"
+    <SearchInput
       value={search}
-      onChange={(e) => {
-        setSearch(e.target.value);
+      onChange={(v) => {
+        setSearch(v);
         setPage(1);
       }}
+      label="Search scholarships"
       placeholder="Search by name or provider"
-      className="h-9 w-72 px-3 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+      widthClass="w-72"
     />
   );
 
@@ -229,6 +232,7 @@ export default function AdminScholarshipsPage() {
         size="md"
         onClick={() => scholarships.refetch()}
         title="Refresh"
+        aria-label="Refresh scholarships"
       >
         <RotateCw className="w-3.5 h-3.5" />
       </Button>
@@ -244,7 +248,23 @@ export default function AdminScholarshipsPage() {
           size="sm"
           loading={patch.isPending}
           onClick={() => {
-            rows.forEach((r) => patch.mutate({ id: r.id, body: { is_active: true } }));
+            const ids = rows.map((r) => r.id);
+            Promise.allSettled(
+              ids.map((id) => patch.mutateAsync({ id, body: { is_active: true } }))
+            ).then((results) => {
+              const ok = results.filter((r) => r.status === 'fulfilled').length;
+              const failed = results.length - ok;
+              if (failed === 0) {
+                toast.success(
+                  `Activated ${ok} scholarship${ok === 1 ? '' : 's'}`,
+                );
+              } else {
+                toast.warning(
+                  `Activated ${ok}, ${failed} failed`,
+                  'Check the audit log for details.',
+                );
+              }
+            });
           }}
         >
           Activate
@@ -254,14 +274,30 @@ export default function AdminScholarshipsPage() {
           size="sm"
           loading={patch.isPending}
           onClick={() => {
-            rows.forEach((r) => patch.mutate({ id: r.id, body: { is_active: false } }));
+            const ids = rows.map((r) => r.id);
+            Promise.allSettled(
+              ids.map((id) => patch.mutateAsync({ id, body: { is_active: false } }))
+            ).then((results) => {
+              const ok = results.filter((r) => r.status === 'fulfilled').length;
+              const failed = results.length - ok;
+              if (failed === 0) {
+                toast.success(
+                  `Deactivated ${ok} scholarship${ok === 1 ? '' : 's'}`,
+                );
+              } else {
+                toast.warning(
+                  `Deactivated ${ok}, ${failed} failed`,
+                  'Check the audit log for details.',
+                );
+              }
+            });
           }}
         >
           Deactivate
         </Button>
       </div>
     ),
-    [patch]
+    [patch, toast]
   );
 
   return (
@@ -301,8 +337,15 @@ export default function AdminScholarshipsPage() {
         onClose={() => setSelected(null)}
         onSave={async (body) => {
           if (!selected) return;
-          await patch.mutateAsync({ id: selected.id, body });
-          setSelected(null);
+          try {
+            await patch.mutateAsync({ id: selected.id, body });
+            toast.success('Scholarship updated', selected.name);
+            setSelected(null);
+          } catch (err) {
+            const msg = err instanceof AdminApiError ? err.message : 'Update failed';
+            toast.error('Failed to update scholarship', msg);
+            throw err;
+          }
         }}
         saving={patch.isPending}
         saveError={(patch.error as AdminApiError | null)?.message ?? null}
