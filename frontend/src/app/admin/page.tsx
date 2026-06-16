@@ -1,21 +1,51 @@
 'use client';
 
-// Overview page. KPI cards + signups line chart + agent activity bar/donut.
+// Overview page. Backend returns:
+//   OverviewResponse { kpis: OverviewKPI[], recent_signups_7d, recent_match_computes_7d, generated_at }
+//   AnalyticsResponse { range_days, series: AnalyticsSeries[], generated_at }
+//
+// We render the 6 KPIs as StatCards (driven by overview.kpis), then 4 charts
+// from analytics.series: signups / resume_uploads / match_computes / chat_sessions.
 
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { Users, GraduationCap, FileText, MessageSquare, Bookmark, Activity } from 'lucide-react';
 import AdminLayout from '@/components/admin/AdminLayout';
 import StatCard from '@/components/admin/ui/StatCard';
 import LineChart, { type LinePoint } from '@/components/admin/charts/LineChart';
 import BarChart, { type BarDatum } from '@/components/admin/charts/BarChart';
-import DonutChart, { type DonutSlice } from '@/components/admin/charts/DonutChart';
 import { adminApi } from '@/lib/admin/api';
 import { AdminApiError } from '@/lib/admin/client';
+import { CHART_COLORS } from '@/components/admin/charts/colors';
+import type { KpiFormat } from '@/lib/admin/types';
 
-function pctChange(current: number, baseline: number): number {
-  if (baseline <= 0) return current > 0 ? 100 : 0;
-  return ((current - baseline) / baseline) * 100;
+function formatKpiValue(value: number, format: KpiFormat): string {
+  switch (format) {
+    case 'percent':
+      return `${value.toFixed(1)}%`;
+    case 'currency':
+      return `$${value.toLocaleString()}`;
+    case 'duration':
+      return `${value.toFixed(1)}h`;
+    case 'number':
+    default:
+      if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+      if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
+      return Math.round(value).toLocaleString();
+  }
+}
+
+function seriesPointsToLine(points: Array<{ date: string; value: number }>): LinePoint[] {
+  return points.map((p) => ({ x: new Date(p.date), y: p.value }));
+}
+
+function seriesPointsToBar(points: Array<{ date: string; value: number }>, days = 14): BarDatum[] {
+  return points.slice(-days).map((p) => {
+    const d = new Date(p.date);
+    return {
+      label: d.toLocaleDateString('en', { month: 'short', day: 'numeric' }),
+      value: p.value,
+    };
+  });
 }
 
 export default function AdminOverviewPage() {
@@ -28,68 +58,31 @@ export default function AdminOverviewPage() {
     queryFn: () => adminApi.getAnalytics(30),
   });
 
-  const signupsPoints: LinePoint[] = useMemo(
-    () =>
-      (analytics.data?.signups_daily ?? []).map((p) => ({
-        x: new Date(p.date),
-        y: p.value,
-      })),
-    [analytics.data]
-  );
-  const resumesPoints: LinePoint[] = useMemo(
-    () =>
-      (analytics.data?.resumes_uploaded_daily ?? []).map((p) => ({
-        x: new Date(p.date),
-        y: p.value,
-      })),
-    [analytics.data]
-  );
+  // Pull series by key from the analytics response.
+  const seriesByKey = useMemo(() => {
+    const map: Record<string, Array<{ date: string; value: number }>> = {};
+    for (const s of analytics.data?.series ?? []) {
+      map[s.key] = s.points;
+    }
+    return map;
+  }, [analytics.data]);
 
-  const agentDaily: BarDatum[] = useMemo(
-    () =>
-      (analytics.data?.agent_messages_daily ?? []).slice(-14).map((p) => ({
-        label: new Date(p.date).toLocaleDateString('en', { month: 'short', day: 'numeric' }),
-        value: p.value,
-      })),
-    [analytics.data]
-  );
+  const signupsPoints = seriesPointsToLine(seriesByKey['signups'] ?? []);
+  const resumesPoints = seriesPointsToLine(seriesByKey['resume_uploads'] ?? []);
+  const matchesPoints = seriesPointsToLine(seriesByKey['match_computes'] ?? []);
+  const agentDaily = seriesPointsToBar(seriesByKey['chat_sessions'] ?? []);
 
-  const overview_ = overview.data;
-  const newUsersDelta = overview_
-    ? pctChange(overview_.new_users_7d, Math.max(overview_.total_users - overview_.new_users_7d, 1))
-    : 0;
-  const resumesDelta = overview_
-    ? pctChange(
-        overview_.resumes_analyzed_7d,
-        Math.max(overview_.total_resumes - overview_.resumes_analyzed_7d, 1)
-      )
-    : 0;
-  const matchesDelta = overview_
-    ? pctChange(
-        overview_.matches_computed_7d,
-        Math.max(overview_.total_matches_computed - overview_.matches_computed_7d, 1)
-      )
-    : 0;
+  const kpis = overview.data?.kpis ?? [];
 
-  const isLoading = overview.isLoading || analytics.isLoading;
+  const isLoading = overview.isLoading && !overview.data;
   const errorMessage =
     (overview.error as AdminApiError | null)?.message ||
     (analytics.error as AdminApiError | null)?.message ||
     null;
 
-  const donutData: DonutSlice[] = overview_
-    ? [
-        { label: 'Active', value: overview_.active_users_7d },
-        { label: 'Dormant', value: Math.max(overview_.total_users - overview_.active_users_7d, 0) },
-      ]
-    : [];
-
   return (
-    <AdminLayout
-      title="Overview"
-      description="Platform-wide signals and engagement"
-    >
-      {isLoading && !overview.data && !analytics.data ? (
+    <AdminLayout title="Overview" description="Platform-wide signals and engagement">
+      {isLoading ? (
         <div className="text-sm text-text-secondary">Loading overview…</div>
       ) : errorMessage ? (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-card p-4">
@@ -97,95 +90,58 @@ export default function AdminOverviewPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {/* KPIs */}
+          {/* KPIs — backend supplies a list of {key,label,value,format,delta} */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            <StatCard
-              label="Total users"
-              value={overview_?.total_users ?? 0}
-              delta={{ value: newUsersDelta, label: 'vs prior' }}
-              hint={`${overview_?.new_users_7d ?? 0} new in 7d`}
-              icon={<Users className="w-4 h-4" />}
-            />
-            <StatCard
-              label="Active users (7d)"
-              value={overview_?.active_users_7d ?? 0}
-              hint="had activity in last 7 days"
-              icon={<Activity className="w-4 h-4" />}
-            />
-            <StatCard
-              label="Scholarships"
-              value={overview_?.total_scholarships ?? 0}
-              hint={`${overview_?.active_scholarships ?? 0} active`}
-              icon={<GraduationCap className="w-4 h-4" />}
-            />
-            <StatCard
-              label="Resumes analyzed"
-              value={overview_?.total_resumes ?? 0}
-              delta={{ value: resumesDelta, label: '7d' }}
-              hint={`${overview_?.resumes_analyzed_7d ?? 0} in 7d`}
-              icon={<FileText className="w-4 h-4" />}
-            />
-            <StatCard
-              label="Matches computed"
-              value={overview_?.total_matches_computed ?? 0}
-              delta={{ value: matchesDelta, label: '7d' }}
-              hint={`${overview_?.matches_computed_7d ?? 0} in 7d`}
-              icon={<Bookmark className="w-4 h-4" />}
-            />
-            <StatCard
-              label="Agent sessions"
-              value={overview_?.total_agent_sessions ?? 0}
-              hint="all time"
-              icon={<MessageSquare className="w-4 h-4" />}
-            />
-            <StatCard
-              label="Saved scholarships"
-              value={overview_?.total_saved_scholarships ?? 0}
-              hint="all time"
-              icon={<Bookmark className="w-4 h-4" />}
-            />
+            {kpis.map((k) => (
+              <StatCard
+                key={k.key}
+                label={k.label}
+                value={formatKpiValue(k.value, k.format)}
+                delta={
+                  k.delta !== null && k.delta !== undefined
+                    ? { value: k.delta, label: k.delta_period ?? 'vs prior' }
+                    : undefined
+                }
+              />
+            ))}
           </div>
 
           {/* Charts row 1 */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="bg-white rounded-card border border-gray-200 p-5">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <h2 className="text-sm font-semibold text-text-primary">Signups (30d)</h2>
-                  <p className="text-xs text-text-secondary">Daily new user registrations</p>
-                </div>
+              <div className="mb-2">
+                <h2 className="text-sm font-semibold text-text-primary">New sign-ups (30d)</h2>
+                <p className="text-xs text-text-secondary">Daily user registrations</p>
               </div>
-              <LineChart data={signupsPoints} />
+              <LineChart data={signupsPoints} color={CHART_COLORS.primary} />
             </div>
             <div className="bg-white rounded-card border border-gray-200 p-5">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <h2 className="text-sm font-semibold text-text-primary">Resumes uploaded (30d)</h2>
-                  <p className="text-xs text-text-secondary">Daily resume submissions</p>
-                </div>
+              <div className="mb-2">
+                <h2 className="text-sm font-semibold text-text-primary">Resumes uploaded (30d)</h2>
+                <p className="text-xs text-text-secondary">Daily resume submissions</p>
               </div>
-              <LineChart data={resumesPoints} color="#3b82f6" />
+              <LineChart data={resumesPoints} color={CHART_COLORS.info} />
             </div>
           </div>
 
           {/* Charts row 2 */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2 bg-white rounded-card border border-gray-200 p-5">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-white rounded-card border border-gray-200 p-5">
               <div className="mb-2">
-                <h2 className="text-sm font-semibold text-text-primary">Agent messages (last 14d)</h2>
-                <p className="text-xs text-text-secondary">Daily AI agent traffic</p>
+                <h2 className="text-sm font-semibold text-text-primary">Matches computed (30d)</h2>
+                <p className="text-xs text-text-secondary">Daily match recomputations</p>
               </div>
-              <BarChart data={agentDaily} color="#10b981" yFormat={(n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n))} />
+              <LineChart data={matchesPoints} color={CHART_COLORS.positive} />
             </div>
             <div className="bg-white rounded-card border border-gray-200 p-5">
               <div className="mb-2">
-                <h2 className="text-sm font-semibold text-text-primary">User engagement</h2>
-                <p className="text-xs text-text-secondary">Active vs dormant in 7d</p>
+                <h2 className="text-sm font-semibold text-text-primary">Chat sessions (last 14d)</h2>
+                <p className="text-xs text-text-secondary">Daily agent activity</p>
               </div>
-              <DonutChart
-                data={donutData}
-                centerValue={String(overview_?.active_users_7d ?? 0)}
-                centerLabel="active 7d"
+              <BarChart
+                data={agentDaily}
+                color={CHART_COLORS.series[4]}
+                yFormat={(n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n))}
               />
             </div>
           </div>

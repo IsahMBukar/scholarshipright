@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useCallback } from 'react';
 import { Calendar, ShieldCheck, ShieldOff } from 'lucide-react';
 import AdminLayout from '@/components/admin/AdminLayout';
-import DataTable, { type Column, type SortDir } from '@/components/admin/ui/DataTable';
+import DataTable, { type Column } from '@/components/admin/ui/DataTable';
 import Badge, { type BadgeTone } from '@/components/admin/ui/Badge';
 import Button from '@/components/admin/ui/Button';
 import Drawer from '@/components/admin/ui/Drawer';
@@ -16,9 +16,7 @@ import type { AdminUser, AdminRole } from '@/lib/admin/types';
 
 const ROLE_TONE: Record<AdminRole, BadgeTone> = {
   super_admin: 'negative',
-  admin: 'primary',
-  support: 'info',
-  viewer: 'neutral',
+  support_staff: 'info',
 };
 
 function fmtDate(iso: string | null): string {
@@ -32,8 +30,7 @@ export default function AdminUsersPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
-  const [sortKey, setSortKey] = useState<string | null>('created_at');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [sort, setSort] = useState<ListUsersParams['sort']>('newest');
   const [activeFilter, setActiveFilter] = useState<'' | 'true' | 'false'>('');
   const [adminFilter, setAdminFilter] = useState<'' | 'true' | 'false'>('');
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
@@ -41,14 +38,13 @@ export default function AdminUsersPage() {
   const params: ListUsersParams = useMemo(
     () => ({
       page,
-      page_size: pageSize,
+      limit: pageSize,
       search: search || undefined,
-      sort_by: sortKey ?? undefined,
-      sort_dir: sortDir ?? undefined,
+      sort,
       is_active: activeFilter ? activeFilter === 'true' : undefined,
       is_admin: adminFilter ? adminFilter === 'true' : undefined,
     }),
-    [page, pageSize, search, sortKey, sortDir, activeFilter, adminFilter]
+    [page, pageSize, search, sort, activeFilter, adminFilter]
   );
 
   const users = useQuery({
@@ -57,18 +53,23 @@ export default function AdminUsersPage() {
   });
 
   const updateUser = useMutation({
-    mutationFn: ({
-      id,
-      body,
-    }: {
-      id: number;
-      body: Parameters<typeof adminApi.updateUser>[1];
-    }) => adminApi.updateUser(id, body),
+    mutationFn: ({ id, body }: { id: string; body: Parameters<typeof adminApi.updateUser>[1] }) =>
+      adminApi.updateUser(id, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'users'] });
       qc.invalidateQueries({ queryKey: ['admin', 'overview'] });
     },
   });
+
+  // Map DataTable's "sort key + dir" to the backend's sort enum. We only
+  // support a few useful combinations; everything else falls back to "newest".
+  const mapSort = (key: string | null, dir: 'asc' | 'desc' | null): ListUsersParams['sort'] => {
+    if (key === 'email' && dir === 'asc') return 'email_asc';
+    if (key === 'email' && dir === 'desc') return 'newest';
+    if (key === 'last_active_at') return 'last_active';
+    if (key === 'created_at' && dir === 'asc') return 'oldest';
+    return 'newest';
+  };
 
   const columns: Column<AdminUser>[] = useMemo(
     () => [
@@ -102,27 +103,21 @@ export default function AdminUsersPage() {
         header: 'Status',
         accessor: (r) => (r.is_active ? 1 : 0),
         cell: (r) =>
-          r.is_active ? (
-            <Badge tone="positive">active</Badge>
-          ) : (
-            <Badge tone="negative">disabled</Badge>
-          ),
+          r.is_active ? <Badge tone="positive">active</Badge> : <Badge tone="negative">disabled</Badge>,
         disableFilter: true,
       },
       {
         key: 'created_at',
         header: 'Joined',
         accessor: (r) => r.created_at,
-        cell: (r) => (
-          <span className="text-text-secondary text-xs">{fmtDate(r.created_at)}</span>
-        ),
+        cell: (r) => <span className="text-text-secondary text-xs">{fmtDate(r.created_at)}</span>,
       },
       {
-        key: 'last_login_at',
-        header: 'Last login',
-        accessor: (r) => r.last_login_at ?? '',
+        key: 'last_active_at',
+        header: 'Last active',
+        accessor: (r) => r.last_active_at ?? '',
         cell: (r) => (
-          <span className="text-text-secondary text-xs">{fmtDate(r.last_login_at)}</span>
+          <span className="text-text-secondary text-xs">{fmtDate(r.last_active_at)}</span>
         ),
         disableFilter: true,
       },
@@ -144,7 +139,6 @@ export default function AdminUsersPage() {
     []
   );
 
-  // Top-level toolbar (renders a global search input that overrides the column filter).
   const headerSearch = (
     <input
       type="text"
@@ -202,9 +196,7 @@ export default function AdminUsersPage() {
           pageSize={pageSize}
           columns={columns}
           isLoading={users.isLoading}
-          error={
-            (users.error as AdminApiError | null)?.message ?? null
-          }
+          error={(users.error as AdminApiError | null)?.message ?? null}
           keyExtractor={(r) => r.id}
           onPageChange={setPage}
           onPageSizeChange={(n) => {
@@ -212,8 +204,7 @@ export default function AdminUsersPage() {
             setPage(1);
           }}
           onSortChange={(key, dir) => {
-            setSortKey(key);
-            setSortDir(dir);
+            setSort(mapSort(key, dir));
             setPage(1);
           }}
           onRowClick={(r) => setSelectedUser(r)}
@@ -230,9 +221,7 @@ export default function AdminUsersPage() {
           setSelectedUser(null);
         }}
         saving={updateUser.isPending}
-        saveError={
-          (updateUser.error as AdminApiError | null)?.message ?? null
-        }
+        saveError={(updateUser.error as AdminApiError | null)?.message ?? null}
       />
     </AdminLayout>
   );
@@ -249,8 +238,7 @@ function UserDrawer({
   onClose: () => void;
   onSave: (body: {
     is_active?: boolean;
-    is_admin?: boolean;
-    admin_role?: AdminRole | null;
+    admin_role?: AdminRole | 'remove';
   }) => Promise<void>;
   saving: boolean;
   saveError: string | null;
@@ -269,8 +257,7 @@ function UserDrawer({
     if (!user) return;
     onSave({
       is_active: isActive,
-      is_admin: role !== '' || user.is_admin,
-      admin_role: role === '' ? null : role,
+      admin_role: role === '' ? 'remove' : role,
     });
   }, [user, isActive, role, onSave]);
 
@@ -305,7 +292,7 @@ function UserDrawer({
               </div>
               <div className="flex items-center gap-2 text-text-primary">
                 <Calendar className="w-3.5 h-3.5 text-text-secondary" />
-                <span>Last login {fmtDate(user.last_login_at)}</span>
+                <span>Last active {fmtDate(user.last_active_at)}</span>
               </div>
               <div className="text-text-secondary text-xs pt-1">
                 {user.resume_count} resumes · {user.saved_count} saved
@@ -341,10 +328,8 @@ function UserDrawer({
               className="w-full h-10 px-3 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary"
             >
               <option value="">Not an admin</option>
-              <option value="viewer">Viewer (read-only)</option>
-              <option value="support">Support (audit, no destructive)</option>
-              <option value="admin">Admin (full except invites)</option>
-              <option value="super_admin">Super Admin (everything)</option>
+              <option value="support_staff">Support staff (read + audit)</option>
+              <option value="super_admin">Super admin (full access)</option>
             </select>
             <p className="text-xs text-text-secondary mt-1">
               {role === 'super_admin' && (
@@ -352,9 +337,7 @@ function UserDrawer({
                   <ShieldCheck className="w-3 h-3" /> Full destructive access.
                 </span>
               )}
-              {role === 'admin' && 'Full access except creating invites.'}
-              {role === 'support' && 'Read access to users and audit. Cannot delete or invite.'}
-              {role === 'viewer' && 'Read-only across all admin pages.'}
+              {role === 'support_staff' && 'Read access to users and audit. Cannot delete or invite.'}
               {role === '' && (
                 <span className="inline-flex items-center gap-1">
                   <ShieldOff className="w-3 h-3" /> Regular user, no admin access.

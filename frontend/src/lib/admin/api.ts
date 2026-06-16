@@ -3,68 +3,125 @@
 
 import { adminFetch } from './client';
 import type {
-  AdminOverview,
-  AdminAnalytics,
-  AdminUserListResponse,
-  AdminScholarshipListResponse,
-  AdminAuditListResponse,
-  AdminInviteListResponse,
+  OverviewResponse,
+  AnalyticsResponse,
+  AdminUser,
+  AdminUserPatch,
+  AdminScholarship,
+  AdminScholarshipPatch,
+  AdminAuditEntry,
+  AdminInviteListEntry,
   CreateInviteRequest,
-  CreateInviteResponse,
+  AdminInviteResponse,
   AdminRole,
+  PaginatedResponse,
 } from './types';
 
+// Re-export common types for callers.
+export type { AdminUser, AdminScholarship, AdminAuditEntry };
+
+// ── List param shapes (real backend param names) ──────────────────
 export interface ListUsersParams {
   page?: number;
-  page_size?: number;
+  limit?: number;
   search?: string;
   is_active?: boolean;
   is_admin?: boolean;
+  sort?: 'newest' | 'oldest' | 'email_asc' | 'last_active';
 }
 
+export interface ListScholarshipsParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  is_active?: boolean;
+  is_verified?: boolean;
+  funding_type?: string;
+  country?: string;
+  sort?: 'newest' | 'oldest' | 'deadline_asc' | 'name';
+}
+
+export interface ListAuditParams {
+  page?: number;
+  limit?: number;
+  action?: string;
+  target_type?: string;
+  admin_id?: string;
+  since?: string; // ISO datetime
+  until?: string; // ISO datetime
+}
+
+export interface ListInvitesParams {
+  page?: number;
+  limit?: number;
+  include_accepted?: boolean;
+  include_revoked?: boolean;
+}
+
+// ── API surface ───────────────────────────────────────────────────
 export const adminApi = {
   // Overview / analytics
-  getOverview: () => adminFetch<AdminOverview>('/api/admin/overview'),
-  getAnalytics: (days: number = 30) =>
-    adminFetch<AdminAnalytics>('/api/admin/analytics', { params: { days } }),
+  getOverview: () => adminFetch<OverviewResponse>('/api/admin/overview'),
+  getAnalytics: (range_days: number = 30) =>
+    adminFetch<AnalyticsResponse>('/api/admin/analytics', {
+      params: { range_days },
+    }),
 
   // Users
   listUsers: (params: ListUsersParams = {}) =>
-    adminFetch<AdminUserListResponse>('/api/admin/users', { params }),
+    adminFetch<PaginatedResponse<AdminUser>>('/api/admin/users', { params }),
 
-  updateUser: (
-    id: number,
-    body: { is_active?: boolean; is_admin?: boolean; admin_role?: AdminRole | null }
-  ) =>
-    adminFetch<{ ok: true }>(`/api/admin/users/${id}`, {
+  updateUser: (id: string, body: AdminUserPatch) =>
+    adminFetch<AdminUser>(`/api/admin/users/${id}`, {
       method: 'PATCH',
       body,
     }),
 
   // Scholarships
-  listScholarships: (params: ListUsersParams = {}) =>
-    adminFetch<AdminScholarshipListResponse>('/api/admin/scholarships', { params }),
+  listScholarships: (params: ListScholarshipsParams = {}) =>
+    adminFetch<PaginatedResponse<AdminScholarship>>(
+      '/api/admin/scholarships',
+      { params }
+    ),
 
-  setScholarshipActive: (id: number, is_active: boolean) =>
-    adminFetch<{ ok: true }>(`/api/admin/scholarships/${id}`, {
+  patchScholarship: (id: string, body: AdminScholarshipPatch) =>
+    adminFetch<AdminScholarship>(`/api/admin/scholarships/${id}`, {
       method: 'PATCH',
-      body: { is_active },
+      body,
+    }),
+
+  deleteScholarship: (id: string) =>
+    adminFetch<{ ok: true }>(`/api/admin/scholarships/${id}`, {
+      method: 'DELETE',
     }),
 
   // Audit
-  listAudit: (params: ListUsersParams & { action?: string } = {}) =>
-    adminFetch<AdminAuditListResponse>('/api/admin/audit', { params }),
+  listAudit: (params: ListAuditParams = {}) =>
+    adminFetch<PaginatedResponse<AdminAuditEntry>>('/api/admin/audit', {
+      params,
+    }),
 
   // Invites
-  listInvites: (params: ListUsersParams = {}) =>
-    adminFetch<AdminInviteListResponse>('/api/admin/invites', { params }),
+  listInvites: (params: ListInvitesParams = {}) =>
+    adminFetch<PaginatedResponse<AdminInviteListEntry>>(
+      '/api/admin/invites',
+      { params }
+    ),
 
   createInvite: (body: CreateInviteRequest) =>
-    adminFetch<CreateInviteResponse>('/api/admin/invites', {
+    adminFetch<AdminInviteResponse>('/api/admin/invites', {
       method: 'POST',
       body,
     }),
 
-  revokeInvite: (id: number) =>
+  revokeInvite: (id: string) =>
     adminFetch<{ ok: true }>(`/api/admin/invites/${id}`, { method: 'DELETE' }),
 };
+
+// ── Admin identity (returned by /api/auth/me) ─────────────────────
+export interface AdminIdentity {
+  id: string;
+  email: string;
+  is_admin: boolean;
+  admin_role: AdminRole | null;
+}

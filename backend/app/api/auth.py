@@ -10,6 +10,7 @@ import os
 
 from app.db.session import get_db
 from app.models.user import User
+from app.core.rate_limit import auth_rate_limit
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -61,7 +62,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 # ── Endpoints ──
 
-@router.post("/register")
+@router.post("/register", dependencies=[Depends(auth_rate_limit)])
 async def register(body: RegisterRequest, response: Response, db: AsyncSession = Depends(get_db)):
     """Register a new user with email + password."""
     email = body.email.strip().lower()
@@ -92,7 +93,7 @@ async def register(body: RegisterRequest, response: Response, db: AsyncSession =
     return {"id": str(user.id), "email": user.email, "full_name": user.full_name}
 
 
-@router.post("/login")
+@router.post("/login", dependencies=[Depends(auth_rate_limit)])
 async def login(body: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
     """Login with email + password."""
     email = body.email.strip().lower()
@@ -140,7 +141,13 @@ async def get_me(request: Request, db: AsyncSession = Depends(get_db)):
     if not user:
         raise HTTPException(401, "User not found")
 
-    return {"id": str(user.id), "email": user.email, "full_name": user.full_name}
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "full_name": user.full_name,
+        "is_admin": bool(user.is_admin),
+        "admin_role": user.admin_role,
+    }
 
 
 # ── Dev login (keep for backward compat) ──
