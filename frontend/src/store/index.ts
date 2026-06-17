@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import type { Scholarship, Profile, ChatSession, ChatMessage } from '@/services/api';
+import type { Scholarship, Profile } from '@/services/api';
 
 // Auth Store
 interface AuthState {
@@ -61,29 +61,4 @@ export const useSavedStore = create<SavedState>((set, get) => ({
     savedIds: new Set(list.map((s) => s.scholarship_id)),
     savedMap: new Map(list.map((s) => [s.scholarship_id, { status: s.status, notes: s.notes, reminder_enabled: s.reminder_enabled }])),
   }),
-}));
-
-// Chat Store
-interface ChatState {
-  sessions: ChatSession[];
-  activeSessionId: string | null;
-  messages: ChatMessage[];
-  isStreaming: boolean;
-  setSessions: (sessions: ChatSession[]) => void;
-  setActiveSession: (id: string | null) => void;
-  addMessage: (msg: ChatMessage) => void;
-  setMessages: (msgs: ChatMessage[]) => void;
-  setIsStreaming: (v: boolean) => void;
-}
-
-export const useChatStore = create<ChatState>((set) => ({
-  sessions: [],
-  activeSessionId: null,
-  messages: [],
-  isStreaming: false,
-  setSessions: (sessions) => set({ sessions }),
-  setActiveSession: (id) => set({ activeSessionId: id }),
-  addMessage: (msg) => set((state) => ({ messages: [...state.messages, msg] })),
-  setMessages: (messages) => set({ messages }),
-  setIsStreaming: (isStreaming) => set({ isStreaming }),
 }));

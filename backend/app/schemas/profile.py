@@ -14,9 +14,7 @@ class ProfileBase(BaseModel):
     graduation_year: Optional[int] = None
     university: Optional[str] = None
     country_of_origin: Optional[str] = None
-    publications: Optional[List[str]] = []
     research_interests: Optional[List[str]] = []
-    certifications: Optional[List[str]] = []
     work_experience_years: Optional[int] = None
     target_degree: Optional[str] = None
     target_fields: Optional[List[str]] = []
@@ -24,9 +22,8 @@ class ProfileBase(BaseModel):
     target_countries: Optional[List[str]] = []
     has_ielts: bool = False
     ielts_score: Optional[Decimal] = None
-    languages: Optional[List[str]] = []
 
-    @field_validator('publications', 'research_interests', 'certifications', 'target_fields', 'target_countries', 'languages', mode='before')
+    @field_validator('research_interests', 'target_fields', 'target_countries', mode='before')
     @classmethod
     def none_to_empty_list(cls, v):
         return v if v is not None else []

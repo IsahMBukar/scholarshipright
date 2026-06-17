@@ -69,8 +69,8 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
     return float(dot / norm)
 
 
-def profile_to_text(profile) -> str:
-    """Convert a profile object to text for embedding."""
+def profile_to_text(profile, resume=None) -> str:
+    """Convert a profile + resume objects to text for embedding."""
     parts = []
     if profile.degree_level:
         parts.append(f"{profile.degree_level} student")
@@ -88,8 +88,9 @@ def profile_to_text(profile) -> str:
         parts.append(f"targeting {', '.join(profile.target_countries)}")
     if profile.research_interests:
         parts.append(f"research in {', '.join(r.replace('_', ' ') for r in profile.research_interests)}")
-    if profile.languages:
-        parts.append(f"speaks {', '.join(profile.languages)}")
+    if resume and resume.languages:
+        langs = [l if isinstance(l, str) else l.get('language', '') for l in resume.languages]
+        parts.append(f"speaks {', '.join(langs)}")
     if profile.has_ielts and profile.ielts_score:
         parts.append(f"IELTS {profile.ielts_score}")
     return ". ".join(parts) if parts else "student seeking scholarships"

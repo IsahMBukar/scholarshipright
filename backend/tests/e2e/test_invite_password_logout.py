@@ -18,8 +18,10 @@ Run from anywhere (uses urllib stdlib, no pip installs required):
 """
 import json
 import os
+import random
 import re
 import sys
+import time
 import urllib.request
 import urllib.error
 from http.cookiejar import CookieJar
@@ -30,18 +32,37 @@ TEST_EMAIL = "e2e-staff@scholarshipright.com"
 TEST_PASSWORD = "S" + "ecureP" + "ass2026" + "!"
 tests_passed = 0
 tests_failed = 0
+_TEST_IP = None  # per-process random IP for rate limit isolation
 
 
-def call(method, path, body=None, jar=None):
+def call(method, path, body=None, jar=None, _retries=0):
+    """HTTP call that retries on 429 with exponential backoff.
+
+    The E2E suite fires 10+ auth calls from the same IP in 15 min, which
+    can exhaust the auth rate limit. We retry up to 6 times with backoff
+    capped at 60s — total worst case ~2 min — so the test waits for the
+    bucket to drain rather than failing on a 429.
+
+    We honor the server's Retry-After header (in seconds) when present.
+
+    IP isolation: each test process uses a single random X-Forwarded-For
+    so the rate limit bucket is unique per test run, not shared with
+    other concurrent tests or prior runs. (Production users share the
+    bucket; tests are isolated to keep prod limits strict.)
+    """
+    global _TEST_IP
+    if _TEST_IP is None:
+        _TEST_IP = f"10.99.{random.randint(0, 255)}.{random.randint(0, 255)}"
     url = BASE + path
     data = None
-    headers = {}
+    headers = {"X-Forwarded-For": _TEST_IP}
     if body is not None:
         data = json.dumps(body).encode()
         headers["Content-Type"] = "application/json"
 
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    retry_after = None
     try:
         with opener.open(req) as r:
             status = r.status
@@ -49,6 +70,15 @@ def call(method, path, body=None, jar=None):
     except urllib.error.HTTPError as e:
         status = e.code
         raw = e.read().decode("utf-8", "replace")
+        # Try to honor server's Retry-After hint
+        ra = e.headers.get("Retry-After") if e.headers else None
+        if ra and ra.isdigit():
+            retry_after = int(ra)
+        if status == 429 and _retries < 6:
+            wait = retry_after if retry_after is not None else 2 ** _retries
+            wait = min(wait, 60)  # cap at 60s per attempt
+            time.sleep(wait)
+            return call(method, path, body=body, jar=jar, _retries=_retries + 1)
 
     parsed = None
     if raw:

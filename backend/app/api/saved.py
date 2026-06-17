@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from typing import List
+from sqlalchemy import select, func
+from typing import List, Optional
 from uuid import UUID
 
 from app.db.session import get_db
@@ -13,9 +13,12 @@ from app.models.user import User
 
 router = APIRouter()
 
+VALID_STATUSES = {"saved", "applying", "applied", "reviewing", "rejected", "accepted"}
+
 
 @router.get("", response_model=List[SavedScholarshipResponse])
 async def list_saved(
+    status: Optional[str] = Query(None, description="Filter by status"),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -23,8 +26,13 @@ async def list_saved(
         select(SavedScholarship, Scholarship)
         .join(Scholarship, SavedScholarship.scholarship_id == Scholarship.id)
         .where(SavedScholarship.user_id == user.id)
-        .order_by(SavedScholarship.created_at.desc())
     )
+
+    if status:
+        statuses = [s.strip() for s in status.split(",")]
+        query = query.where(SavedScholarship.status.in_(statuses))
+
+    query = query.order_by(SavedScholarship.created_at.desc())
     result = await db.execute(query)
     rows = result.all()
 
@@ -44,6 +52,30 @@ async def list_saved(
         )
         for ss, s in rows
     ]
+
+
+@router.get("/stats")
+async def get_stats(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get application status counts."""
+    result = await db.execute(
+        select(SavedScholarship.status, func.count())
+        .where(SavedScholarship.user_id == user.id)
+        .group_by(SavedScholarship.status)
+    )
+    counts = {row[0]: row[1] for row in result.all()}
+
+    return {
+        "total": sum(counts.values()),
+        "saved": counts.get("saved", 0),
+        "applying": counts.get("applying", 0),
+        "applied": counts.get("applied", 0),
+        "reviewing": counts.get("reviewing", 0),
+        "accepted": counts.get("accepted", 0),
+        "rejected": counts.get("rejected", 0),
+    }
 
 
 @router.post("/{scholarship_id}", response_model=SavedScholarshipResponse)
@@ -102,7 +134,16 @@ async def update_saved(
     if not saved:
         raise HTTPException(status_code=404, detail="Saved scholarship not found")
 
-    for field, value in update_data.model_dump(exclude_unset=True).items():
+    update_dict = update_data.model_dump(exclude_unset=True)
+
+    # Validate status
+    if "status" in update_dict and update_dict["status"] not in VALID_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status. Must be one of: {', '.join(VALID_STATUSES)}"
+        )
+
+    for field, value in update_dict.items():
         setattr(saved, field, value)
 
     await db.commit()

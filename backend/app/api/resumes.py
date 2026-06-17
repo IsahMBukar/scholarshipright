@@ -15,6 +15,16 @@ from app.schemas.resume import ResumeOut, ResumeUpdate
 from app.services.resume_analyzer import extract_text_from_file, analyze_resume, rewrite_field
 from app.services.scoring import calculate_resume_score
 from app.api.users import get_current_user
+from app.core.rate_limit import resume_analysis_rate_limit, resume_rewrite_rate_limit, resume_upload_rate_limit
+from app.core.upload_validation import validate_resume_upload
+from app.services.match_auto import (
+    REASON_RESUME_CREATED,
+    REASON_RESUME_DELETED,
+    REASON_RESUME_PRIMARY_CHANGED,
+    REASON_RESUME_UPDATED,
+    clear_user_matches,
+    trigger_recompute,
+)
 
 router = APIRouter(prefix="/api/resumes", tags=["resumes"])
 
@@ -41,7 +51,7 @@ async def get_resume(resume_id: str, user: User = Depends(get_current_user), db:
     return resume
 
 
-@router.post("", response_model=ResumeOut)
+@router.post("", response_model=ResumeOut, dependencies=[Depends(resume_upload_rate_limit)])
 async def create_resume(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
@@ -53,15 +63,15 @@ async def create_resume(
 ):
     """Upload a CV file, create resume, and trigger AI analysis in background."""
     
-    # Read file content
+    # Read and validate file content before saving anything to disk/DB.
     content = await file.read()
-    mime_type = file.content_type or "application/octet-stream"
-    filename = file.filename or "resume.pdf"
+    validated = validate_resume_upload(file, content)
+    mime_type = validated.mime_type
+    filename = validated.filename
     
-    # Save file
+    # Save file using a generated name and validated extension only.
     file_id = str(uuid_lib.uuid4())
-    ext = os.path.splitext(filename)[1] or ".pdf"
-    saved_path = os.path.join(UPLOAD_DIR, f"{file_id}{ext}")
+    saved_path = os.path.join(UPLOAD_DIR, f"{file_id}{validated.extension}")
     with open(saved_path, "wb") as f:
         f.write(content)
     
@@ -93,12 +103,75 @@ async def create_resume(
     await db.refresh(resume)
     
     resume_id = str(resume.id)
-    
+
     # Schedule AI analysis in background — returns immediately
     background_tasks.add_task(
         _run_analysis, resume_id, content, mime_type, filename, fields_list, target_degree
     )
-    
+
+    # Resume creation adds a primary-source-of-truth for the match engine.
+    # Recompute in the background; the next /api/matches call will wait if needed.
+    trigger_recompute(user.id, REASON_RESUME_CREATED, background_tasks)
+
+    return resume
+
+
+# ── Manual path: create a stub resume with no file ──────────────
+#
+# Users who don't have a resume to upload need a resume record anyway,
+# because the profile page's edit modals (Education, Work Experience,
+# Skills, etc.) all read/write through the resumes table via PATCH
+# /api/resumes/{id}. This endpoint creates a "manual" stub so the
+# existing UI works for users filling in details by hand.
+#
+# Idempotent: if the user already has a manual resume, return it instead
+# of creating a duplicate.
+@router.post("/manual", response_model=ResumeOut)
+async def create_manual_resume(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create an empty resume record for manual entry (no file upload).
+
+    Returns the existing manual resume if one already exists.
+    """
+    # Look for an existing manual resume
+    existing_q = await db.execute(
+        select(Resume).where(
+            Resume.user_id == user.id,
+            Resume.status == "manual",
+        )
+    )
+    existing = existing_q.scalars().first()
+    if existing:
+        return existing
+
+    resume = Resume(
+        user_id=user.id,
+        title="My Profile",
+        target_fields=[],
+        target_degree=None,
+        original_filename=None,
+        original_file_url=None,
+        original_mime_type=None,
+        status="manual",
+    )
+
+    # If first resume, make it primary so the profile page uses it.
+    any_existing = (await db.execute(
+        select(Resume).where(Resume.user_id == user.id)
+    )).scalars().first()
+    if not any_existing:
+        resume.is_primary = True
+
+    db.add(resume)
+    await db.commit()
+    await db.refresh(resume)
+
+    # New primary source → recompute (the profile fields the user fills
+    # in by hand will be the source of truth until they upload a real CV).
+    trigger_recompute(user.id, REASON_RESUME_CREATED, BackgroundTasks())
+
     return resume
 
 
@@ -106,7 +179,10 @@ async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename
     """Background task: extract text, run AI analysis, update resume."""
     import traceback
     try:
-        raw_text = await extract_text_from_file(content, mime_type, filename)
+        raw_text = await asyncio.wait_for(
+            extract_text_from_file(content, mime_type, filename),
+            timeout=180,
+        )
         # Sanitize
         if raw_text:
             raw_text = raw_text.replace('\x00', '').encode('utf-8', errors='ignore').decode('utf-8')
@@ -121,7 +197,10 @@ async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename
             resume.raw_text = raw_text[:20000] if raw_text else None
             
             if raw_text and len(raw_text.strip()) > 20:
-                analysis = await analyze_resume(raw_text, fields_list, target_degree)
+                analysis = await asyncio.wait_for(
+                    analyze_resume(raw_text, fields_list, target_degree),
+                    timeout=120,
+                )
                 
                 resume.full_name = analysis.get("full_name", "")
                 resume.email = analysis.get("email", "")
@@ -139,8 +218,7 @@ async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename
                 resume.research_projects = analysis.get("research_projects", [])
                 resume.awards = analysis.get("awards", [])
                 resume.ref_list = analysis.get("ref_list", [])
-                resume.overall_score = analysis.get("overall_score", 0)
-                resume.issues = analysis.get("issues", [])
+                # Issues will come from deterministic scorer below
                 resume.ai_suggestions = analysis.get("ai_suggestions", "")
                 resume.status = "completed"
                 
@@ -156,12 +234,29 @@ async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename
                 score_result = calculate_resume_score(resume_dict)
                 resume.overall_score = score_result["overall_score"]
                 resume.section_scores = score_result["section_scores"]
+                # Convert flat issues list to structured format with severity
+                resume.issues = [
+                    {"field": "general", "severity": "likely", "message": issue}
+                    for issue in score_result["issues"]
+                ]
             else:
                 resume.status = "error"
                 resume.issues = [{"field": "file", "severity": "urgent", "message": "Could not extract text from file. Try a clearer image or PDF.", "suggestion": "Re-upload or paste text manually."}]
             
             await db.commit()
             print(f"Background analysis complete for resume {resume_id}: status={resume.status}")
+    except asyncio.TimeoutError:
+        print(f"Background analysis timed out for resume {resume_id}")
+        try:
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(select(Resume).where(Resume.id == resume_id))
+                resume = result.scalar_one_or_none()
+                if resume:
+                    resume.status = "error"
+                    resume.issues = [{"field": "general", "severity": "urgent", "message": "AI analysis timed out before completion.", "suggestion": "Try a smaller/clearer file or re-run analysis later."}]
+                    await db.commit()
+        except Exception:
+            pass
     except Exception as e:
         print(f"Background analysis error for resume {resume_id}: {e}")
         traceback.print_exc()
@@ -178,27 +273,30 @@ async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename
 
 
 @router.put("/{resume_id}", response_model=ResumeOut)
-async def update_resume(resume_id: str, data: ResumeUpdate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def update_resume(resume_id: str, data: ResumeUpdate, background_tasks: BackgroundTasks, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
     )
     resume = result.scalar_one_or_none()
     if not resume:
         raise HTTPException(404, "Resume not found")
-    
+
     update_data = data.model_dump(exclude_unset=True)
-    
+
     # Handle setting primary
-    if update_data.get("is_primary") is True:
+    is_becoming_primary = update_data.get("is_primary") is True
+
+    # Handle setting primary
+    if is_becoming_primary:
         # Clear other primaries
         await db.execute(
             update(Resume).where(Resume.user_id == user.id, Resume.id != resume_id).values(is_primary=False)
         )
-    
+
     for key, value in update_data.items():
         setattr(resume, key, value)
-    
-    # Recalculate score on save
+
+    # Recalculate score on save (deterministic only)
     resume_dict = {
         "email": resume.email, "phone": resume.phone, "location": resume.location,
         "linkedin_url": resume.linkedin_url, "summary": resume.summary,
@@ -210,9 +308,21 @@ async def update_resume(resume_id: str, data: ResumeUpdate, user: User = Depends
     score_result = calculate_resume_score(resume_dict)
     resume.overall_score = score_result["overall_score"]
     resume.section_scores = score_result["section_scores"]
-    
+    resume.issues = [
+        {"field": "general", "severity": "likely", "message": issue}
+        for issue in score_result["issues"]
+    ]
+
     await db.commit()
     await db.refresh(resume)
+
+    # Resume fields feed the match engine — but only recompute if the user
+    # actually changed something the engine reads, or if they switched which
+    # resume is primary. The `is_becoming_primary` change is the most
+    # important trigger here.
+    reason = REASON_RESUME_PRIMARY_CHANGED if is_becoming_primary else REASON_RESUME_UPDATED
+    trigger_recompute(user.id, reason, background_tasks)
+
     return resume
 
 
@@ -224,21 +334,27 @@ async def delete_resume(resume_id: str, user: User = Depends(get_current_user), 
     resume = result.scalar_one_or_none()
     if not resume:
         raise HTTPException(404, "Resume not found")
-    
+
     await db.delete(resume)
     await db.commit()
+
+    # If the deleted resume was primary, the next /api/matches will pick the
+    # most recent remaining resume (or no resume). Hard-clear the cache so
+    # stale scores don't leak, and mark dirty so the next read recomputes.
+    await clear_user_matches(user.id)
+
     return {"status": "deleted"}
 
 
 @router.post("/{resume_id}/set-primary", response_model=ResumeOut)
-async def set_primary(resume_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def set_primary(resume_id: str, background_tasks: BackgroundTasks, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
     )
     resume = result.scalar_one_or_none()
     if not resume:
         raise HTTPException(404, "Resume not found")
-    
+
     # Clear all primaries
     await db.execute(
         update(Resume).where(Resume.user_id == user.id).values(is_primary=False)
@@ -246,10 +362,15 @@ async def set_primary(resume_id: str, user: User = Depends(get_current_user), db
     resume.is_primary = True
     await db.commit()
     await db.refresh(resume)
+
+    # The primary resume is the one used by the match engine, so a change
+    # here must trigger a recompute.
+    trigger_recompute(user.id, REASON_RESUME_PRIMARY_CHANGED, background_tasks)
+
     return resume
 
 
-@router.post("/{resume_id}/rewrite")
+@router.post("/{resume_id}/rewrite", dependencies=[Depends(resume_rewrite_rate_limit)])
 async def rewrite_resume_field(resume_id: str, body: dict, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """AI rewrite a specific field."""
     result = await db.execute(
@@ -263,11 +384,19 @@ async def rewrite_resume_field(resume_id: str, body: dict, user: User = Depends(
     current_value = body.get("value", "")
     context = body.get("context", f"Resume for {resume.title}, targeting {resume.target_degree or 'any degree'}")
     
-    improved = await rewrite_field(field_name, current_value, context)
+    try:
+        improved = await asyncio.wait_for(
+            rewrite_field(field_name, current_value, context),
+            timeout=60,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(504, "AI rewrite timed out. Please try again.")
+    except Exception as e:
+        raise HTTPException(502, f"AI rewrite failed: {str(e)[:120]}")
     return {"field": field_name, "improved_value": improved}
 
 
-@router.post("/{resume_id}/reanalyze", response_model=ResumeOut)
+@router.post("/{resume_id}/reanalyze", response_model=ResumeOut, dependencies=[Depends(resume_analysis_rate_limit)])
 async def reanalyze_resume(resume_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Re-run AI analysis on the resume."""
     result = await db.execute(
@@ -294,13 +423,52 @@ async def reanalyze_resume(resume_id: str, user: User = Depends(get_current_user
         text = "\n".join(parts)
     
     try:
-        analysis = await analyze_resume(text, resume.target_fields or [], resume.target_degree or "")
-        resume.overall_score = analysis.get("overall_score", resume.overall_score)
-        resume.issues = analysis.get("issues", [])
+        analysis = await asyncio.wait_for(
+            analyze_resume(text, resume.target_fields or [], resume.target_degree or ""),
+            timeout=120,
+        )
+        # Apply AI-parsed structured data
+        resume.full_name = analysis.get("full_name", resume.full_name)
+        resume.email = analysis.get("email", resume.email)
+        resume.phone = analysis.get("phone", resume.phone)
+        resume.location = analysis.get("location", resume.location)
+        resume.linkedin_url = analysis.get("linkedin_url", resume.linkedin_url)
+        resume.portfolio_url = analysis.get("portfolio_url", resume.portfolio_url)
+        resume.summary = analysis.get("summary", resume.summary)
+        resume.education = analysis.get("education", resume.education)
+        resume.experience = analysis.get("experience", resume.experience)
+        resume.skills = analysis.get("skills", resume.skills)
+        resume.certifications = analysis.get("certifications", resume.certifications)
+        resume.publications = analysis.get("publications", resume.publications)
+        resume.languages = analysis.get("languages", resume.languages)
+        resume.research_projects = analysis.get("research_projects", resume.research_projects)
+        resume.awards = analysis.get("awards", resume.awards)
+        resume.ref_list = analysis.get("ref_list", resume.ref_list)
         resume.ai_suggestions = analysis.get("ai_suggestions", "")
         resume.status = "completed"
+
+        # Score with deterministic engine only
+        resume_dict = {
+            "email": resume.email, "phone": resume.phone, "location": resume.location,
+            "linkedin_url": resume.linkedin_url, "summary": resume.summary,
+            "education": resume.education or [], "experience": resume.experience or [],
+            "research_projects": resume.research_projects or [], "skills": resume.skills or [],
+            "certifications": resume.certifications or [], "publications": resume.publications or [],
+            "languages": resume.languages or [],
+        }
+        score_result = calculate_resume_score(resume_dict)
+        resume.overall_score = score_result["overall_score"]
+        resume.section_scores = score_result["section_scores"]
+        resume.issues = [
+            {"field": "general", "severity": "likely", "message": issue}
+            for issue in score_result["issues"]
+        ]
+    except asyncio.TimeoutError:
+        resume.status = "error"
+        resume.issues = [{"field": "general", "severity": "urgent", "message": "AI analysis timed out before completion.", "suggestion": "Try again later or reduce the resume text size."}]
     except Exception as e:
         resume.status = "error"
+        resume.issues = [{"field": "general", "severity": "urgent", "message": f"AI analysis failed: {str(e)[:120]}", "suggestion": "Try again or edit the resume manually."}]
 
     await db.commit()
     await db.refresh(resume)

@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import AppLayout from '@/components/AppLayout';
 import { ScholarshipDetailSkeleton } from '@/components/Skeletons';
-import { fetchScholarship, saveScholarship, removeSavedScholarship, fetchSavedScholarships } from '@/services/api';
+import { fetchScholarship, saveScholarship, removeSavedScholarship, fetchSavedScholarships, updateSavedScholarship } from '@/services/api';
 import type { Scholarship } from '@/services/api';
 
 function deterministicScore(id: string): number {
@@ -22,6 +22,7 @@ export default function ScholarshipDetailPage() {
   const [scholarship, setScholarship] = useState<Scholarship | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSaved, setIsSaved] = useState(false);
+  const [savedStatus, setSavedStatus] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'overview' | 'provider'>('overview');
 
   useEffect(() => {
@@ -31,7 +32,9 @@ export default function ScholarshipDetailPage() {
         fetchSavedScholarships().catch(() => []),
       ]).then(([sch, saved]) => {
         setScholarship(sch);
-        setIsSaved(saved.some((s: any) => s.id === sch.id));
+        const found = saved.find((s: any) => (s.scholarship_id || s.id) === sch.id);
+        setIsSaved(!!found);
+        if (found) setSavedStatus((found as any).status || 'saved');
       }).catch(console.error)
         .finally(() => setLoading(false));
     }
@@ -42,10 +45,24 @@ export default function ScholarshipDetailPage() {
     if (isSaved) {
       await removeSavedScholarship(scholarship.id).catch(() => {});
       setIsSaved(false);
+      setSavedStatus('');
     } else {
       await saveScholarship(scholarship.id).catch(() => {});
       setIsSaved(true);
+      setSavedStatus('saved');
     }
+  }
+
+  async function handleApplyNow() {
+    if (!scholarship) return;
+    // Auto-save if not saved yet
+    if (!isSaved) {
+      await saveScholarship(scholarship.id).catch(() => {});
+      setIsSaved(true);
+    }
+    // Set status to applying
+    await updateSavedScholarship(scholarship.id, { status: 'applying' }).catch(() => {});
+    setSavedStatus('applying');
   }
 
   if (loading) {
@@ -104,6 +121,15 @@ export default function ScholarshipDetailPage() {
               <span className="material-symbols-outlined text-[22px] text-text-secondary">arrow_back</span>
             </Link>
             <div className="flex items-center gap-2">
+              {/* Status badge if saved */}
+              {isSaved && savedStatus && savedStatus !== 'saved' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-600 whitespace-nowrap">
+                  <span className="material-symbols-outlined text-[13px]">
+                    {savedStatus === 'applying' ? 'edit_note' : savedStatus === 'applied' ? 'check_circle' : savedStatus === 'reviewing' ? 'hourglass_top' : savedStatus === 'accepted' ? 'celebration' : 'cancel'}
+                  </span>
+                  {savedStatus.charAt(0).toUpperCase() + savedStatus.slice(1)}
+                </span>
+              )}
               <button className="w-10 h-10 flex items-center justify-center rounded-full border border-gray-200 hover:bg-gray-50 text-text-secondary transition">
                 <span className="material-symbols-outlined text-[18px]">share</span>
               </button>
@@ -113,14 +139,12 @@ export default function ScholarshipDetailPage() {
               >
                 <span className="material-symbols-outlined text-[18px]">{isSaved ? 'bookmark' : 'bookmark_border'}</span>
               </button>
-              <a
-                href={scholarship.official_url}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                onClick={handleApplyNow}
                 className="px-4 py-2 bg-primary hover:brightness-110 text-white font-semibold rounded-lg text-[13px] md:text-sm flex items-center gap-1 shadow-sm transition"
               >
                 APPLY <span className="material-symbols-outlined text-[14px]">open_in_new</span>
-              </a>
+              </button>
             </div>
           </div>
         </div>

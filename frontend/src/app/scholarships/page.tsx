@@ -5,7 +5,10 @@ import AppLayout from '@/components/AppLayout';
 import ScholarshipCard from '@/components/ScholarshipCard';
 import FilterBar from '@/components/FilterBar';
 import { ScholarshipListSkeleton } from '@/components/Skeletons';
-import { fetchScholarships, saveScholarship, removeSavedScholarship, fetchSavedScholarships } from '@/services/api';
+import NotificationBell from '@/components/NotificationBell';
+import OnboardingProgress from '@/components/OnboardingProgress';
+import { useOnboarding } from '@/hooks/useOnboarding';
+import { fetchScholarships, saveScholarship, removeSavedScholarship, fetchSavedScholarships, updateSavedScholarship } from '@/services/api';
 import type { Scholarship, ScholarshipListResponse } from '@/services/api';
 
 const TABS = ['Recommended', 'Saved', 'Applied', 'External'];
@@ -42,12 +45,19 @@ export default function ScholarshipsPage() {
   const [activeTab, setActiveTab] = useState('Recommended');
   const [scholarships, setScholarships] = useState<Scholarship[]>([]);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+  const [savedStatuses, setSavedStatuses] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Match scores are only meaningful once the user has a complete profile.
+  // Until then, hide them (and the deterministic placeholder) so we don't
+  // mislead the user with fake numbers.
+  const ob = useOnboarding();
+  const showMatchScores = !ob.loading && ob.hasProfile;
 
   // Fetch scholarships whenever filters or search changes
   const loadScholarships = useCallback(async (filters: string[], search: string) => {
@@ -69,7 +79,15 @@ export default function ScholarshipsPage() {
     async function init() {
       try {
         const saved = await fetchSavedScholarships().catch(() => []);
-        setSavedIds(new Set(saved.map((s: any) => s.id)));
+        const ids = new Set<string>();
+        const statuses: Record<string, string> = {};
+        for (const s of saved as any[]) {
+          const schId = s.scholarship_id || s.id;  // prefer scholarship_id from API
+          ids.add(schId);
+          statuses[schId] = s.status || 'saved';
+        }
+        setSavedIds(ids);
+        setSavedStatuses(statuses);
       } catch {}
       await loadScholarships([], '');
     }
@@ -88,10 +106,23 @@ export default function ScholarshipsPage() {
     if (savedIds.has(id)) {
       await removeSavedScholarship(id).catch(() => {});
       setSavedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
+      setSavedStatuses((prev) => { const n = { ...prev }; delete n[id]; return n; });
     } else {
       await saveScholarship(id).catch(() => {});
       setSavedIds((prev) => new Set(prev).add(id));
+      setSavedStatuses((prev) => ({ ...prev, [id]: 'saved' }));
     }
+  }
+
+  async function handleApplyNow(id: string) {
+    // Auto-save if not saved yet
+    if (!savedIds.has(id)) {
+      await saveScholarship(id).catch(() => {});
+      setSavedIds((prev) => new Set(prev).add(id));
+    }
+    // Set status to applying
+    await updateSavedScholarship(id, { status: 'applying' }).catch(() => {});
+    setSavedStatuses((prev) => ({ ...prev, [id]: 'applying' }));
   }
 
   function toggleFilter(filter: string) {
@@ -102,7 +133,9 @@ export default function ScholarshipsPage() {
 
   // Filter scholarships for Saved/Applied tabs (client-side from savedIds)
   const displayScholarships = activeTab === 'Saved'
-    ? scholarships.filter(s => savedIds.has(s.id))
+    ? scholarships.filter(s => savedIds.has(s.id) && (savedStatuses[s.id] || 'saved') === 'saved')
+    : activeTab === 'Applied'
+    ? scholarships.filter(s => savedIds.has(s.id) && ['applying', 'applied', 'reviewing', 'accepted', 'rejected'].includes(savedStatuses[s.id] || ''))
     : scholarships;
 
   return (
@@ -131,20 +164,26 @@ export default function ScholarshipsPage() {
               </button>
             ))}
           </div>
-          <div className="hidden md:flex items-center gap-2 ml-auto bg-white border border-gray-200 rounded-lg px-3 py-1.5 w-[220px]">
-            <span className="material-symbols-outlined text-[18px] text-text-secondary">search</span>
-            <input
-              type="text"
-              placeholder="Search scholarships..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 text-[13px] bg-transparent outline-none text-text-primary placeholder-text-secondary"
-            />
+          <div className="flex-shrink-0 md:hidden">
+            <NotificationBell />
+          </div>
+          <div className="hidden md:flex items-center gap-2 ml-auto">
+            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 w-[220px]">
+              <span className="material-symbols-outlined text-[18px] text-text-secondary">search</span>
+              <input
+                type="text"
+                placeholder="Search scholarships..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-1 text-[13px] bg-transparent outline-none text-text-primary placeholder-text-secondary"
+              />
             {searchQuery && (
               <button onClick={() => setSearchQuery('')} className="text-text-secondary hover:text-text-primary">
                 <span className="material-symbols-outlined text-[16px]">close</span>
               </button>
             )}
+            </div>
+            <NotificationBell />
           </div>
         </div>
 
@@ -194,6 +233,30 @@ export default function ScholarshipsPage() {
       )}
 
       <div className="px-4 md:px-6 py-4">
+        {/* Onboarding nudge for users without a complete profile */}
+        {!ob.loading && !ob.hasProfile && ob.authenticated && (
+          <div className="flex items-start gap-3 p-4 mb-4 bg-primary/8 border border-primary/20 rounded-2xl">
+            <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
+              <span className="material-symbols-outlined text-primary text-[18px]">school</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[14px] font-bold text-text-primary">
+                Complete your profile to unlock match scores
+              </p>
+              <p className="text-[12px] text-text-secondary mt-0.5">
+                You can browse scholarships now — personalised match scores appear once you
+                add your degree, field, country and language scores.
+              </p>
+            </div>
+            <a
+              href="/profile"
+              className="self-center px-3.5 py-1.5 bg-primary text-text-inverse text-[12px] font-bold rounded-btn hover:brightness-110 transition-all flex-shrink-0"
+            >
+              Complete →
+            </a>
+          </div>
+        )}
+
         {/* Result count */}
         {!loading && (
           <p className="text-[12px] text-text-secondary mb-3">
@@ -213,13 +276,16 @@ export default function ScholarshipsPage() {
                 scholarship={sch}
                 onSave={handleSave}
                 isSaved={savedIds.has(sch.id)}
+                savedStatus={savedStatuses[sch.id]}
+                onApplyNow={handleApplyNow}
+                showMatchScore={showMatchScores}
               />
             ))}
             {displayScholarships.length === 0 && (
               <div className="text-center py-16">
                 <span className="material-symbols-outlined text-5xl text-text-secondary mb-4 block">search_off</span>
                 <p className="text-[16px] text-text-secondary">
-                  {activeTab === 'Saved' ? 'No saved scholarships yet' : 'No scholarships match your filters'}
+                  {activeTab === 'Saved' ? 'No saved scholarships yet' : activeTab === 'Applied' ? 'No applications started yet' : 'No scholarships match your filters'}
                 </p>
                 {activeFilters.length > 0 && (
                   <button

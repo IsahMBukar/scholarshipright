@@ -22,9 +22,7 @@ class Profile(Base):
     country_of_origin = Column(String, nullable=True)
 
     # Research & experience
-    publications = Column(ARRAY(String), default=[])
     research_interests = Column(ARRAY(String), default=[])
-    certifications = Column(ARRAY(String), default=[])
     work_experience_years = Column(Integer, nullable=True)
 
     # Target preferences
@@ -34,9 +32,6 @@ class Profile(Base):
     target_countries = Column(ARRAY(String), default=[])
     has_ielts = Column(Boolean, default=False)
     ielts_score = Column(Numeric(3, 1), nullable=True)
-
-    # Language
-    languages = Column(ARRAY(String), default=[])
 
     # Embedding (stored as float array — no pgvector needed)
     embedding = Column(ARRAY(Float), nullable=True)

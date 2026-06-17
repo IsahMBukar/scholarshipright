@@ -27,7 +27,7 @@
 import { Suspense, useEffect, useState, type FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { LogIn, AlertTriangle, Loader2, Zap } from 'lucide-react';
+import { LogIn, AlertTriangle, CheckCircle2, Loader2, Zap } from 'lucide-react';
 import Button from '@/components/admin/ui/Button';
 import PasswordField from '@/components/auth/PasswordField';
 
@@ -51,6 +51,12 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Banners driven by query params:
+  //   ?reset=success  → password was just reset
+  //   ?signup=ok      → account was just created (existing)
+  // ?next= is honored if present (see safeNext).
+  const justReset = searchParams.get('reset') === 'success';
+  const justSignedUp = searchParams.get('signup') === 'ok';
 
   useEffect(() => {
     let cancelled = false;
@@ -179,6 +185,25 @@ function LoginForm() {
             autoComplete="current-password"
             disabled={submitting}
           />
+          <div className="flex justify-end -mt-2">
+            <Link
+              href="/forgot-password"
+              className="text-[11px] font-medium text-primary hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </div>
+
+          {(justReset || justSignedUp) && !error && (
+            <div className="flex items-start gap-2 rounded-btn border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700">
+              <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+              <span>
+                {justReset
+                  ? 'Your password has been updated. Sign in with your new password.'
+                  : 'Account created. Sign in to continue.'}
+              </span>
+            </div>
+          )}
 
           {error && (
             <div className="flex items-start gap-2 rounded-btn border border-red-200 bg-red-50 p-3 text-xs text-red-700">

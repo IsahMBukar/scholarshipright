@@ -22,6 +22,7 @@ from app.models.admin_invite import (
     make_invite_url,
 )
 from app.models.user import User
+from app.api.auth import hash_password
 
 logger = logging.getLogger(__name__)
 
@@ -165,8 +166,13 @@ async def accept_invite(
     *,
     raw_token: str,
     full_name: Optional[str] = None,
+    password: Optional[str] = None,
 ) -> tuple[Optional[User], Optional[AdminInvite], str]:
     """Look up an invite by token, validate, and create-or-promote the user.
+
+    If `password` is provided, it's hashed and stored on the user record
+    (overwriting any prior password — accepting the invite IS a credential
+    reset, since the inviter controls the email).
 
     Returns (user_or_None, invite_or_None, status):
         status: "accepted" | "expired" | "revoked" | "already_accepted" | "not_found"
@@ -197,6 +203,10 @@ async def accept_invite(
     else:
         if full_name and not u.full_name:
             u.full_name = full_name
+
+    # Set / overwrite password if provided
+    if password:
+        u.password_hash = hash_password(password)
 
     # Promote to admin
     u.is_admin = True

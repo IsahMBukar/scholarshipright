@@ -13,7 +13,7 @@ import DataTable, { type Column } from '@/components/admin/ui/DataTable';
 import Badge, { type BadgeTone } from '@/components/admin/ui/Badge';
 import Button from '@/components/admin/ui/Button';
 import { useToast } from '@/components/admin/ui/Toast';
-import { useConfirm } from '@/components/admin/ui/ConfirmDialog';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { adminApi, type ListInvitesParams } from '@/lib/admin/api';
 import { AdminApiError } from '@/lib/admin/client';
 import EmptyState from '@/components/admin/ui/EmptyState';

@@ -6,6 +6,24 @@ from app.core.config import get_settings
 settings = get_settings()
 
 
+def _llm_chat_url() -> str:
+    """Build the chat-completions URL from the configured base URL.
+
+    The 0G router (and most OpenAI-compatible providers) serves chat at
+    /v1/chat/completions. The configured OPENAI_BASE_URL already includes /v1,
+    so we simply append /chat/completions to whatever the operator set — we
+    do NOT strip /v1, because the 0G router returns 404 on the bare path.
+
+    Examples (with the key in .env):
+      https://router-api.0g.ai/v1     -> https://router-api.0g.ai/v1/chat/completions   ✓
+      https://api.xiaomimimo.com/v1   -> https://api.xiaomimimo.com/v1/chat/completions ✓
+    """
+    base = settings.openai_base_url.rstrip("/")
+    return f"{base}/chat/completions"
+
+
+
+
 async def extract_text_from_file(file_content: bytes, mime_type: str, filename: str) -> str:
     """Extract text from uploaded file. For images, use vision API. For PDFs/Docs, use raw text with vision fallback."""
     
@@ -43,12 +61,14 @@ async def extract_text_from_file(file_content: bytes, mime_type: str, filename: 
 async def _vision_extract(b64_image: str, mime_type: str) -> str:
     """Use LLM vision to extract text from image."""
     try:
-        # Use mimo-v2.5 for vision (pro model doesn't support image input)
-        vision_model = "mimo-v2.5"
+        # Use the configured model for vision. 0G router's minimax-m3
+        # supports multimodal input; if it doesn't we fall through to
+        # text-only and the caller (analyze_resume) skips this code path.
+        vision_model = settings.openai_model or "minimax-m3"
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
-                f"{settings.openai_base_url}/v1/chat/completions",
-                headers={"api-key": settings.openai_api_key},
+                _llm_chat_url(),
+                headers={"Authorization": f"Bearer {settings.openai_api_key}"},
                 json={
                     "model": vision_model,
                     "messages": [
@@ -264,15 +284,6 @@ Analyze this CV/resume text and return a JSON object with the following structur
       "contact": "string"
     }}
   ],
-  "overall_score": 75,
-  "issues": [
-    {{
-      "field": "field_name",
-      "severity": "urgent|severe|likely",
-      "message": "What's wrong",
-      "suggestion": "How to fix it"
-    }}
-  ],
   "ai_suggestions": "Overall suggestions for improving this resume for scholarship applications"
 }}
 
@@ -285,11 +296,6 @@ CRITICAL RULES:
 - If the CV mentions "Key Project" or "Final-Year Project" or personal projects, put them in research_projects, NOT experience.
 - ref_list: Extract any references mentioned (name, position, contact info). If none found, use empty array [].
 
-SEVERITY LEVELS:
-- urgent: Missing critical info (no email, no education, etc.) — must fix
-- severe: Weak areas that significantly hurt chances (vague descriptions, no achievements, etc.)
-- likely: Minor improvements that would help (formatting, missing optional sections)
-
 CV TEXT:
 {raw_text[:4000]}
 
@@ -298,24 +304,38 @@ Return ONLY valid JSON. No markdown, no code blocks."""
     try:
         async with httpx.AsyncClient(timeout=300) as client:
             resp = await client.post(
-                f"{settings.openai_base_url}/v1/chat/completions",
-                headers={"api-key": settings.openai_api_key},
+                _llm_chat_url(),
+                headers={"Authorization": f"Bearer {settings.openai_api_key}"},
                 json={
-                    "model": settings.openai_model or "mimo-v2.5",
+                    "model": settings.openai_model or "minimax-m3",
                     "messages": [
                         {"role": "system", "content": "You are a resume analysis expert. Always return valid JSON only."},
                         {"role": "user", "content": prompt}
                     ],
                     "temperature": 0.3,
-                    "max_tokens": 8000,
-                    "enable_thinking": False
+                    "max_tokens": 8000
                 }
             )
             data = resp.json()
             content = data["choices"][0]["message"]["content"]
-            
+
             # Strip markdown code blocks if present
             content = content.strip()
+            if content.startswith("```"):
+                content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
+
+            # Strip <think>...</think> reasoning blocks (minimax-m3 emits these
+            # in addition to the final JSON). They can appear anywhere, so
+            # remove every occurrence rather than only at the start.
+            import re
+            content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL)
+            content = content.strip()
+
+            # If the model wrapped the JSON in ```json ... ``` after the
+            # think block, strip that too.
             if content.startswith("```"):
                 content = content.split("\n", 1)[1] if "\n" in content else content[3:]
             if content.endswith("```"):
@@ -330,18 +350,7 @@ Return ONLY valid JSON. No markdown, no code blocks."""
                 return json.loads(repaired)
     except Exception as e:
         print(f"AI analysis error: {e}")
-        return {
-            "full_name": "",
-            "email": "",
-            "phone": "",
-            "summary": "",
-            "education": [],
-            "experience": [],
-            "skills": [],
-            "overall_score": 0,
-            "issues": [{"field": "general", "severity": "urgent", "message": "Failed to analyze CV. Please try again.", "suggestion": "Re-upload or paste your CV text manually."}],
-            "ai_suggestions": "Analysis failed. Please try again."
-        }
+        raise RuntimeError("AI resume analysis failed") from e
 
 
 def _repair_json(text: str) -> str:
@@ -402,10 +411,10 @@ async def rewrite_field(field_name: str, current_value: str, context: str) -> st
     try:
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
-                f"{settings.openai_base_url}/v1/chat/completions",
-                headers={"api-key": settings.openai_api_key},
+                _llm_chat_url(),
+                headers={"Authorization": f"Bearer {settings.openai_api_key}"},
                 json={
-                    "model": settings.openai_model or "mimo-v2.5-pro",
+                    "model": settings.openai_model or "minimax-m3",
                     "messages": [
                         {"role": "system", "content": "You are a professional resume writer for international scholarship applications. Improve the given text to be more impactful, specific, and scholarship-ready."},
                         {"role": "user", "content": f"Improve this resume field for a scholarship application.\n\nField: {field_name}\nCurrent content: {current_value}\nContext: {context}\n\nReturn ONLY the improved text, no explanations."}
@@ -418,4 +427,4 @@ async def rewrite_field(field_name: str, current_value: str, context: str) -> st
             return data["choices"][0]["message"]["content"].strip()
     except Exception as e:
         print(f"AI rewrite error: {e}")
-        return current_value
+        raise RuntimeError("AI resume rewrite failed") from e

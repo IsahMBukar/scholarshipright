@@ -12,3 +12,12 @@ venv/
 backend/uploads/
 backend/debug_output/
 backend/debug_resume.py
+
+# Hermes internals (AI agent runtime data)
+.hermes/
+
+# Local debug artifacts
+cookies.txt
+
+# TypeScript incremental build cache
+*.tsbuildinfo

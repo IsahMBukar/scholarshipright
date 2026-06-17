@@ -1,15 +1,14 @@
 """
-ScholarBot — AI scholarship advisor powered by Claude.
+Scholara — AI scholarship advisor powered by BluesMinds GPT-5.5.
 
-Uses the user's profile and top matched scholarships to provide
-grounded, accurate scholarship recommendations and advice.
+Unified with the agent service for consistent LLM backend.
 """
 from typing import Optional
 import json
 
 
-SCHOLARBOT_SYSTEM = """
-You are ScholarBot, an expert scholarship advisor built into ScholarshipRight.
+SCHOLARA_SYSTEM = """
+You are Scholara, an expert scholarship advisor built into ScholarshipRight.
 You help users find, understand, and apply for fully funded international scholarships.
 
 Your user's profile:
@@ -41,33 +40,40 @@ async def get_scholarbot_response(
     conversation_history: list[dict],
     profile_json: str,
     scholarships_json: str,
-    anthropic_api_key: str,
-    model: str = "claude-sonnet-4-20250514",
+    agent_api_key: str,
+    agent_base_url: str = "https://api.bluesminds.com/v1",
+    model: str = "gpt-5.5",
 ) -> str:
-    """Get a response from ScholarBot using Claude API."""
-    import anthropic
+    """Get a response from Scholara using BluesMinds API."""
+    import httpx
 
-    client = anthropic.AsyncAnthropic(api_key=anthropic_api_key)
-
-    system_prompt = SCHOLARBOT_SYSTEM.format(
+    system_prompt = SCHOLARA_SYSTEM.format(
         profile_json=profile_json,
         scholarships_json=scholarships_json,
     )
 
-    # Build message history
-    messages = []
+    messages = [{"role": "system", "content": system_prompt}]
     for msg in conversation_history:
         messages.append({"role": msg["role"], "content": msg["content"]})
     messages.append({"role": "user", "content": message})
 
-    response = await client.messages.create(
-        model=model,
-        max_tokens=2048,
-        system=system_prompt,
-        messages=messages,
-    )
-
-    return response.content[0].text
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        response = await client.post(
+            f"{agent_base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {agent_api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "messages": messages,
+                "temperature": 0.7,
+                "max_tokens": 2048,
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data["choices"][0]["message"]["content"]
 
 
 async def get_scholarbot_stream(
@@ -75,29 +81,49 @@ async def get_scholarbot_stream(
     conversation_history: list[dict],
     profile_json: str,
     scholarships_json: str,
-    anthropic_api_key: str,
-    model: str = "claude-sonnet-4-20250514",
+    agent_api_key: str,
+    agent_base_url: str = "https://api.bluesminds.com/v1",
+    model: str = "gpt-5.5",
 ):
-    """Stream a response from ScholarBot using Claude API."""
-    import anthropic
+    """Stream a response from Scholara using BluesMinds API."""
+    import httpx
 
-    client = anthropic.AsyncAnthropic(api_key=anthropic_api_key)
-
-    system_prompt = SCHOLARBOT_SYSTEM.format(
+    system_prompt = SCHOLARA_SYSTEM.format(
         profile_json=profile_json,
         scholarships_json=scholarships_json,
     )
 
-    messages = []
+    messages = [{"role": "system", "content": system_prompt}]
     for msg in conversation_history:
         messages.append({"role": msg["role"], "content": msg["content"]})
     messages.append({"role": "user", "content": message})
 
-    async with client.messages.stream(
-        model=model,
-        max_tokens=2048,
-        system=system_prompt,
-        messages=messages,
-    ) as stream:
-        async for text in stream.text_stream:
-            yield text
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        async with client.stream(
+            "POST",
+            f"{agent_base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {agent_api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "messages": messages,
+                "temperature": 0.7,
+                "max_tokens": 2048,
+                "stream": True,
+            },
+        ) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if line.startswith("data: "):
+                    data_str = line[6:]
+                    if data_str.strip() == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data_str)
+                        delta = chunk["choices"][0].get("delta", {})
+                        if "content" in delta:
+                            yield delta["content"]
+                    except (json.JSONDecodeError, KeyError, IndexError):
+                        continue

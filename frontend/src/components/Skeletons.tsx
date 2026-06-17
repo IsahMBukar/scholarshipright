@@ -136,39 +136,130 @@ export function ScholarshipDetailSkeleton() {
   );
 }
 
+/* ---------- Resume List Skeleton ---------- */
+export function ResumeListSkeleton({ count = 3 }: { count?: number }) {
+  return (
+    <div className="px-4 md:px-6 py-6 max-w-[900px]">
+      {/* Page header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="space-y-2">
+          <Pulse className="w-36 h-7 rounded" />
+          <Pulse className="w-56 h-4 rounded" />
+        </div>
+        <Pulse className="w-28 h-10 rounded-btn" />
+      </div>
+
+      {/* Resume cards */}
+      <div className="flex flex-col gap-3">
+        {Array.from({ length: count }).map((_, i) => (
+          <div key={i} className="bg-white rounded-card border border-gray-200 p-4 md:p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 space-y-2.5">
+                {/* Title + badges */}
+                <div className="flex items-center gap-2">
+                  <Pulse className="w-40 h-5 rounded" />
+                  <Pulse className="w-16 h-5 rounded-[6px]" />
+                </div>
+                {/* Subtitle */}
+                <Pulse className="w-64 h-3.5 rounded" />
+                {/* Score bar */}
+                <div className="flex items-center gap-2">
+                  <Pulse className="w-24 h-1.5 rounded-full" />
+                  <Pulse className="w-8 h-3 rounded" />
+                </div>
+                {/* Issue badges */}
+                <div className="flex gap-2">
+                  <Pulse className="w-14 h-5 rounded-[6px]" />
+                  <Pulse className="w-16 h-5 rounded-[6px]" />
+                </div>
+              </div>
+              {/* Action buttons */}
+              <div className="flex flex-col gap-2 flex-shrink-0">
+                <Pulse className="w-14 h-8 rounded-btn" />
+                <Pulse className="w-20 h-8 rounded-btn" />
+                <Pulse className="w-14 h-8 rounded-btn" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ---------- Profile Skeleton ---------- */
 export function ProfileSkeleton() {
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Pulse className="w-16 h-16 rounded-full" />
-        <div className="space-y-2">
-          <Pulse className="w-32 h-5 rounded" />
-          <Pulse className="w-48 h-3.5 rounded" />
-        </div>
+    <div className="px-4 md:px-6 py-6 max-w-[860px]">
+      {/* Page title */}
+      <Pulse className="w-24 h-7 rounded mb-4" />
+
+      {/* Privacy banner */}
+      <div className="flex items-center gap-2.5 px-4 py-3 bg-primary/8 border border-primary/15 rounded-xl mb-5">
+        <Pulse className="w-7 h-7 rounded-full flex-shrink-0" />
+        <Pulse className="w-52 h-3.5 rounded" />
       </div>
 
-      {/* Form fields */}
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="space-y-2">
-          <Pulse className="w-24 h-3.5 rounded" />
-          <Pulse className="w-full h-11 rounded-lg" />
-        </div>
-      ))}
-
-      {/* Tags section */}
-      <div className="space-y-2">
-        <Pulse className="w-28 h-3.5 rounded" />
-        <div className="flex flex-wrap gap-2">
-          <Pulse className="w-20 h-8 rounded-[10px]" />
-          <Pulse className="w-24 h-8 rounded-[10px]" />
-          <Pulse className="w-16 h-8 rounded-[10px]" />
-          <Pulse className="w-20 h-8 rounded-[10px]" />
-        </div>
+      {/* Tab bar */}
+      <div className="flex gap-1 border-b border-gray-200 mb-6">
+        <Pulse className="w-18 h-9 rounded" />
+        <Pulse className="w-22 h-9 rounded" />
+        <Pulse className="w-30 h-9 rounded" />
+        <Pulse className="w-36 h-9 rounded" />
+        <Pulse className="w-14 h-9 rounded" />
       </div>
 
-      <Pulse className="w-32 h-11 rounded-btn" />
+      {/* Content card */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        {/* Personal header */}
+        <div className="p-5 md:p-6">
+          <div className="flex items-start justify-between mb-4">
+            <Pulse className="w-48 h-8 rounded" />
+            <Pulse className="w-8 h-8 rounded-lg" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Pulse className="w-28 h-8 rounded-full" />
+            <Pulse className="w-36 h-8 rounded-full" />
+            <Pulse className="w-32 h-8 rounded-full" />
+          </div>
+        </div>
+
+        {/* Quick stats */}
+        <div className="p-5 md:p-6 border-t border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Pulse className="w-5 h-5 rounded" />
+              <Pulse className="w-24 h-5 rounded" />
+            </div>
+            <Pulse className="w-8 h-8 rounded-lg" />
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="border border-gray-200 rounded-xl p-3.5 space-y-2">
+                <Pulse className="w-5 h-5 rounded" />
+                <Pulse className="w-12 h-3 rounded" />
+                <Pulse className="w-16 h-5 rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Summary */}
+        <div className="p-5 md:p-6 border-t border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Pulse className="w-5 h-5 rounded" />
+              <Pulse className="w-20 h-5 rounded" />
+            </div>
+            <Pulse className="w-8 h-8 rounded-lg" />
+          </div>
+          <div className="space-y-2">
+            <Pulse className="w-full h-3.5 rounded" />
+            <Pulse className="w-full h-3.5 rounded" />
+            <Pulse className="w-3/4 h-3.5 rounded" />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

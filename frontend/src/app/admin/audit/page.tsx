@@ -163,6 +163,7 @@ export default function AdminAuditPage() {
         variant="secondary"
         onClick={() => audit.refetch()}
         title="Refresh now"
+        aria-label="Refresh audit log"
       >
         <RefreshCw className="w-3.5 h-3.5" />
       </Button>

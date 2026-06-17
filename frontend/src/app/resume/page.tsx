@@ -1,8 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import AppLayout from '@/components/AppLayout';
-import { ScholarshipListSkeleton } from '@/components/Skeletons';
+import PageHeader from '@/components/PageHeader';
+import { ResumeListSkeleton } from '@/components/Skeletons';
+import OnboardingProgress from '@/components/OnboardingProgress';
 import {
   fetchResumes, fetchResume, uploadResume, updateResume, deleteResume,
   setPrimaryResume, rewriteField, reanalyzeResume, exportResumePdf,
@@ -19,12 +23,35 @@ const SEVERITY_CONFIG: Record<string, { color: string; bg: string; icon: string;
 };
 
 export default function ResumePage() {
+  // useSearchParams() in App Router requires a Suspense boundary.
+  return (
+    <Suspense
+      fallback={
+        <AppLayout showRightPanel={false}>
+          <PageHeader title="RESUME" />
+          <div className="min-h-[60vh] flex items-center justify-center text-text-secondary text-sm">
+            Loading…
+          </div>
+        </AppLayout>
+      }
+    >
+      <ResumePageInner />
+    </Suspense>
+  );
+}
+
+function ResumePageInner() {
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'list' | 'upload' | 'editor'>('list');
   const [selectedResume, setSelectedResume] = useState<Resume | null>(null);
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+
+  // `?onboarding=1` puts a "Return to onboarding" banner at the top of
+  // the page so the user doesn't get lost after leaving the hub.
+  const searchParams = useSearchParams();
+  const fromOnboarding = searchParams.get('onboarding') === '1';
 
   // Upload form
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -209,8 +236,9 @@ export default function ResumePage() {
   if (loading) {
     return (
       <AppLayout showRightPanel={false}>
+        <PageHeader title="RESUME" />
         <div className="p-4 md:p-6">
-          <ScholarshipListSkeleton count={3} />
+          <ResumeListSkeleton count={3} />
         </div>
       </AppLayout>
     );
@@ -218,14 +246,31 @@ export default function ResumePage() {
 
   return (
     <AppLayout showRightPanel={false}>
+      <PageHeader title="RESUME" />
+      <OnboardingProgress />
       <div className="px-4 md:px-6 py-6 max-w-[900px]">
+
+        {/* Onboarding breadcrumb banner (only when arriving from the hub) */}
+        {fromOnboarding && (
+          <div className="mb-5 flex items-center gap-3 p-3 rounded-xl border border-primary/20 bg-primary/5">
+            <span className="material-symbols-outlined text-primary text-[18px]">arrow_back</span>
+            <p className="text-[12px] text-text-secondary flex-1">
+              You're in onboarding. Upload your resume here, then return to the hub to finish setup.
+            </p>
+            <Link
+              href="/onboarding"
+              className="text-[12px] font-bold text-primary hover:underline whitespace-nowrap"
+            >
+              Return to hub →
+            </Link>
+          </div>
+        )}
 
         {/* ===== LIST VIEW ===== */}
         {view === 'list' && (
           <>
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h1 className="text-[24px] font-bold text-text-primary">My Resumes</h1>
                 <p className="text-[14px] text-text-secondary mt-1">Manage your CVs for scholarship applications</p>
               </div>
               <button
@@ -308,7 +353,6 @@ export default function ResumePage() {
               Back to resumes
             </button>
 
-            <h1 className="text-[24px] font-bold text-text-primary mb-2">Upload Your Resume</h1>
             <p className="text-[14px] text-text-secondary mb-6">Upload your CV and our AI will analyze and structure it for scholarship applications</p>
 
             {/* File upload area */}

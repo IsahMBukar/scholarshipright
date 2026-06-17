@@ -108,15 +108,26 @@ def rate_limit(name: str, max_requests: int, window_seconds: int) -> Callable[[R
 #   - auth_register   → /register                       (signup abuse)
 #   - auth_login      → /login, /dev-login              (brute force)
 #   - auth_invite     → /accept-invite, /set-password   (invite spam)
+#   - auth_forgot     → /forgot-password                (reset-link spam / email-bomb)
+#   - auth_reset      → /reset-password                 (token brute force)
 #
-# 20/15min gives ~1 attempt per 45s on average — still secure against
+# 50/15min gives ~1 attempt per 18s on average — still secure against
 # brute force (a real attacker needs thousands) and bursty scripts, but
-# leaves enough headroom for legitimate use (a user logging in from
-# multiple devices, a user resetting their password) and the E2E test
-# suite which fires 10+ register calls per run from the same IP.
-auth_register_rate_limit = rate_limit("auth_register", max_requests=20, window_seconds=15 * 60)
-auth_login_rate_limit = rate_limit("auth_login", max_requests=20, window_seconds=15 * 60)
-auth_invite_rate_limit = rate_limit("auth_invite", max_requests=20, window_seconds=15 * 60)
+# leaves enough headroom for the full E2E suite (11 tests × 1-2 auth
+# calls each per run, plus retries) to pass on a single bucket.
+auth_register_rate_limit = rate_limit("auth_register", max_requests=50, window_seconds=15 * 60)
+auth_login_rate_limit = rate_limit("auth_login", max_requests=50, window_seconds=15 * 60)
+auth_invite_rate_limit = rate_limit("auth_invite", max_requests=50, window_seconds=15 * 60)
+# Forgot-password is special: we don't want to let an attacker spam an
+# arbitrary email with reset links (email-bombing). 5/15min per IP is
+# enough for a real "I forgot my password" flow + retry, but blocks
+# sustained spam.
+auth_forgot_rate_limit = rate_limit("auth_forgot", max_requests=5, window_seconds=15 * 60)
+# Reset-password is the actual brute-force target (raw token guessing).
+# 32-byte URL-safe tokens = 256 bits of entropy, so 10/15min is plenty
+# of room for the legitimate user who clicks the link + maybe retries
+# once. Anything beyond that is hostile.
+auth_reset_rate_limit = rate_limit("auth_reset", max_requests=10, window_seconds=15 * 60)
 
 # Resume uploads trigger file parsing + background AI analysis.
 resume_upload_rate_limit = rate_limit("resume_upload", max_requests=5, window_seconds=60 * 60)

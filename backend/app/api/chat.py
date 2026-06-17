@@ -72,12 +72,25 @@ async def send_message(
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
-    # Build context for ScholarBot
+    # Build context for Scholara
     settings = get_settings()
 
     # Get user profile
     profile_result = await db.execute(select(Profile).where(Profile.user_id == user.id))
     profile = profile_result.scalar_one_or_none()
+
+    # Get primary resume for languages
+    from app.models.resume import Resume
+    resume_result = await db.execute(
+        select(Resume).where(Resume.user_id == user.id, Resume.is_primary == True)
+    )
+    resume = resume_result.scalar_one_or_none()
+    if not resume:
+        resume_result = await db.execute(
+            select(Resume).where(Resume.user_id == user.id).order_by(Resume.updated_at.desc())
+        )
+        resume = resume_result.scalars().first()
+
     profile_json = json.dumps({
         "degree_level": profile.degree_level,
         "field_of_study": profile.field_of_study,
@@ -87,7 +100,7 @@ async def send_message(
         "target_countries": profile.target_countries,
         "has_ielts": profile.has_ielts,
         "ielts_score": float(profile.ielts_score) if profile.ielts_score else None,
-        "languages": profile.languages,
+        "languages": resume.languages if resume else [],
         "cgpa": float(profile.cgpa) if profile.cgpa else None,
     } if profile else {}, indent=2)
 
@@ -129,14 +142,16 @@ async def send_message(
         for s in scholarships
     ], indent=2)
 
-    # Call ScholarBot
+    # Call Scholara (unified on BluesMinds GPT-5.5)
     try:
         assistant_reply = await get_scholarbot_response(
             message=msg.message,
             conversation_history=messages[:-1],  # Exclude the just-added user message
             profile_json=profile_json,
             scholarships_json=scholarships_json,
-            anthropic_api_key=settings.anthropic_api_key,
+            agent_api_key=settings.agent_api_key,
+            agent_base_url=settings.agent_base_url,
+            model=settings.agent_model,
         )
     except Exception as e:
         assistant_reply = f"I encountered an error: {str(e)}. Please try again."

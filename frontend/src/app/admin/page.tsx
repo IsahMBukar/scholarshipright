@@ -11,6 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import AdminLayout from '@/components/admin/AdminLayout';
 import StatCard from '@/components/admin/ui/StatCard';
+import { StatCardSkeleton, ChartCardSkeleton } from '@/components/admin/ui/Skeleton';
 import LineChart, { type LinePoint } from '@/components/admin/charts/LineChart';
 import BarChart, { type BarDatum } from '@/components/admin/charts/BarChart';
 import { adminApi } from '@/lib/admin/api';
@@ -83,10 +84,38 @@ export default function AdminOverviewPage() {
   return (
     <AdminLayout title="Overview" description="Platform-wide signals and engagement">
       {isLoading ? (
-        <div className="text-sm text-text-secondary">Loading overview…</div>
+        <div className="space-y-6">
+          {/* KPI skeletons — 6 placeholders matching the eventual tile count */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <StatCardSkeleton key={i} />
+            ))}
+          </div>
+          {/* Chart skeletons */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ChartCardSkeleton />
+            <ChartCardSkeleton />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ChartCardSkeleton />
+            <ChartCardSkeleton />
+          </div>
+        </div>
       ) : errorMessage ? (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-card p-4">
-          {errorMessage}
+        <div className="bg-red-50 border border-red-200 rounded-card p-5">
+          <h3 className="text-sm font-semibold text-red-700 mb-1">
+            Couldn&apos;t load overview
+          </h3>
+          <p className="text-sm text-red-600 mb-3">{errorMessage}</p>
+          <button
+            onClick={() => {
+              overview.refetch();
+              analytics.refetch();
+            }}
+            className="h-9 px-4 text-xs font-medium rounded-btn bg-white border border-red-200 text-red-700 hover:bg-red-50"
+          >
+            Try again
+          </button>
         </div>
       ) : (
         <div className="space-y-6">

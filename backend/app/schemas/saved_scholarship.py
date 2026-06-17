@@ -9,7 +9,7 @@ class SavedScholarshipCreate(BaseModel):
 
 
 class SavedScholarshipUpdate(BaseModel):
-    status: Optional[str] = None  # 'saved', 'applying', 'applied', 'rejected', 'accepted'
+    status: Optional[str] = None  # 'saved', 'applying', 'applied', 'reviewing', 'rejected', 'accepted'
     notes: Optional[str] = None
     reminder_enabled: Optional[bool] = None
 

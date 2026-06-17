@@ -16,6 +16,7 @@ from app.services.match_auto import ensure_schema_columns
 from app.core.admin import ensure_admin_schema_columns
 from app.models.admin_audit import ensure_audit_schema_columns
 from app.models.admin_invite import ensure_invites_schema_columns
+from app.models.password_reset import ensure_password_reset_schema_columns
 
 settings = get_settings()
 
@@ -46,6 +47,12 @@ async def lifespan(app: FastAPI):
         await ensure_invites_schema_columns()
     except Exception as e:  # noqa: BLE001
         print(f"ensure_invites_schema_columns failed: {e}")
+
+    # Startup: ensure the password_reset_tokens table exists (idempotent).
+    try:
+        await ensure_password_reset_schema_columns()
+    except Exception as e:  # noqa: BLE001
+        print(f"ensure_password_reset_schema_columns failed: {e}")
 
     # Startup: start deadline checker in background
     task = asyncio.create_task(deadline_checker_loop())

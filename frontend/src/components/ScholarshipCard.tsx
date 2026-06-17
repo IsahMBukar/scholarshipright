@@ -3,19 +3,18 @@
 import Link from 'next/link';
 import type { Scholarship } from '@/services/api';
 
-function deterministicScore(id: string): number {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = ((hash << 5) - hash) + id.charCodeAt(i);
-    hash |= 0;
-  }
-  return 65 + (Math.abs(hash) % 30);
-}
-
 interface ScholarshipCardProps {
   scholarship: Scholarship;
   onSave?: (id: string) => void;
   isSaved?: boolean;
+  savedStatus?: string;
+  onApplyNow?: (id: string) => void;
+  /**
+   * Whether to render match-score UI. Defaults to true for backwards
+   * compatibility. When false, the deterministic 65–95% placeholder is
+   * NOT shown — we never want to mislead users with a fake score.
+   */
+  showMatchScore?: boolean;
 }
 
 function getMatchLabel(score: number): string {
@@ -32,8 +31,13 @@ function getMatchColor(score: number): string {
   return 'text-text-secondary';
 }
 
-export default function ScholarshipCard({ scholarship, onSave, isSaved }: ScholarshipCardProps) {
-  const score = scholarship.match_score || deterministicScore(scholarship.id);
+export default function ScholarshipCard({ scholarship, onSave, isSaved, savedStatus, onApplyNow, showMatchScore = true }: ScholarshipCardProps) {
+  // Only show a real score if both the caller asked for it AND the backend
+  // returned one. Never fall back to a deterministic pseudo-score — that
+  // would mislead users who haven't completed onboarding.
+  const realScore = showMatchScore && scholarship.match_score != null
+    ? scholarship.match_score
+    : null;
   const daysUntilDeadline = Math.max(0, Math.ceil(
     (new Date(scholarship.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
   ));
@@ -44,7 +48,7 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved }: Schola
 
       {/* ===== MOBILE LAYOUT ===== */}
       <div className="md:hidden">
-        {/* Top row: Logo + Verified left | Match label + score right */}
+        {/* Top row: Logo + Verified left | Match label + score right (or profile CTA) */}
         <div className="flex items-center justify-between px-4 pt-4 pb-2">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0 border border-gray-200">
@@ -62,12 +66,23 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved }: Schola
             )}
           </div>
           <div className="flex items-center gap-2">
-            <span className={`text-[12px] font-bold tracking-wide ${getMatchColor(score)}`}>
-              {getMatchLabel(score)}
-            </span>
-            <span className={`text-[22px] font-extrabold ${getMatchColor(score)}`}>
-              {score}<span className="text-[13px] font-bold text-gray-400">%</span>
-            </span>
+            {realScore != null ? (
+              <>
+                <span className={`text-[12px] font-bold tracking-wide ${getMatchColor(realScore)}`}>
+                  {getMatchLabel(realScore)}
+                </span>
+                <span className={`text-[22px] font-extrabold ${getMatchColor(realScore)}`}>
+                  {realScore}<span className="text-[13px] font-bold text-gray-400">%</span>
+                </span>
+              </>
+            ) : (
+              <a
+                href="/profile"
+                className="text-[11px] font-semibold text-primary hover:underline"
+              >
+                Set up profile for score →
+              </a>
+            )}
           </div>
         </div>
 
@@ -78,6 +93,20 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved }: Schola
             <div className="mb-2">
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-[8px] bg-red-50 text-[12px] font-medium text-red-500">
                 Closes in {daysUntilDeadline}d
+              </span>
+            </div>
+          )}
+          {savedStatus && savedStatus !== 'saved' && (
+            <div className="mb-2">
+              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-[8px] text-[11px] font-semibold ${
+                savedStatus === 'applying' ? 'bg-blue-50 text-blue-600' :
+                savedStatus === 'applied' ? 'bg-emerald-50 text-emerald-600' :
+                savedStatus === 'reviewing' ? 'bg-amber-50 text-amber-600' :
+                savedStatus === 'accepted' ? 'bg-green-50 text-green-600' :
+                savedStatus === 'rejected' ? 'bg-red-50 text-red-500' :
+                'bg-gray-100 text-gray-600'
+              }`}>
+                {savedStatus.charAt(0).toUpperCase() + savedStatus.slice(1)}
               </span>
             </div>
           )}
@@ -131,13 +160,14 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved }: Schola
             <span className="material-symbols-outlined text-[18px]">{isSaved ? 'bookmark' : 'bookmark_border'}</span>
             {isSaved ? 'Saved' : 'Save'}
           </button>
-          <Link
+          <a
             href={scholarship.official_url}
             target="_blank"
+            onClick={() => onApplyNow?.(scholarship.id)}
             className="px-5 py-2 bg-primary text-white text-[13px] font-semibold rounded-btn hover:brightness-110 transition-all"
           >
-            Apply Now
-          </Link>
+            {savedStatus === 'applying' ? 'Continue Now' : 'Apply Now'}
+          </a>
         </div>
       </div>
 
@@ -164,6 +194,18 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved }: Schola
             {isUrgent && (
               <span className="inline-flex items-center gap-1 px-3 py-1 rounded-[10px] bg-red-50 text-[13px] font-medium text-red-500">
                 Closes in {daysUntilDeadline}d
+              </span>
+            )}
+            {savedStatus && savedStatus !== 'saved' && (
+              <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-[10px] text-[12px] font-semibold ${
+                savedStatus === 'applying' ? 'bg-blue-50 text-blue-600' :
+                savedStatus === 'applied' ? 'bg-emerald-50 text-emerald-600' :
+                savedStatus === 'reviewing' ? 'bg-amber-50 text-amber-600' :
+                savedStatus === 'accepted' ? 'bg-green-50 text-green-600' :
+                savedStatus === 'rejected' ? 'bg-red-50 text-red-500' :
+                'bg-gray-100 text-gray-600'
+              }`}>
+                {savedStatus.charAt(0).toUpperCase() + savedStatus.slice(1)}
               </span>
             )}
           </div>
@@ -209,32 +251,48 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved }: Schola
         </div>
       </div>
 
-      {/* Desktop score block — right side */}
-      <div className="hidden md:flex flex-col items-center justify-center match-gradient rounded-r-card rounded-l-none p-4 gap-2">
-        <span className="text-[40px] font-extrabold text-white leading-none">
-          {score}<span className="text-[18px] font-bold text-gray-400">%</span>
-        </span>
-        <span className="text-[10px] font-bold tracking-widest text-primary uppercase">
-          {getMatchLabel(score)}
-        </span>
-        {!scholarship.requires_ielts && (
-          <span className="text-[10px] text-gray-400 font-medium">No IELTS</span>
-        )}
-        <div className="w-full h-px bg-gray-700 my-1" />
-        <Link
-          href={scholarship.official_url}
-          target="_blank"
-          className="w-full text-center py-2 bg-primary text-white text-[13px] font-semibold rounded-btn hover:brightness-110 transition-all"
-        >
-          Apply Now
-        </Link>
-        <button
-          onClick={() => onSave?.(scholarship.id)}
-          className="w-full text-center py-1.5 border border-gray-600 text-gray-300 text-[12px] font-medium rounded-btn hover:border-primary hover:text-primary transition-all"
-        >
-          {isSaved ? '★ Saved' : '☆ Save'}
-        </button>
-      </div>
+      {/* Desktop score block — right side (only when we have a real score) */}
+      {realScore != null ? (
+        <div className="hidden md:flex flex-col items-center justify-center match-gradient rounded-r-card rounded-l-none p-4 gap-2">
+          <span className="text-[40px] font-extrabold text-white leading-none">
+            {realScore}<span className="text-[18px] font-bold text-gray-400">%</span>
+          </span>
+          <span className="text-[10px] font-bold tracking-widest text-primary uppercase">
+            {getMatchLabel(realScore)}
+          </span>
+          {!scholarship.requires_ielts && (
+            <span className="text-[10px] text-gray-400 font-medium">No IELTS</span>
+          )}
+          <div className="w-full h-px bg-gray-700 my-1" />
+          <a
+            href={scholarship.official_url}
+            target="_blank"
+            onClick={() => onApplyNow?.(scholarship.id)}
+            className="w-full text-center py-2 bg-primary text-white text-[13px] font-semibold rounded-btn hover:brightness-110 transition-all"
+          >
+            {savedStatus === 'applying' ? 'Continue Now' : 'Apply Now'}
+          </a>
+          <button
+            onClick={() => onSave?.(scholarship.id)}
+            className="w-full text-center py-1.5 border border-gray-600 text-gray-300 text-[12px] font-medium rounded-btn hover:border-primary hover:text-primary transition-all"
+          >
+            {isSaved ? '★ Saved' : '☆ Save'}
+          </button>
+        </div>
+      ) : (
+        <div className="hidden md:flex flex-col items-center justify-center match-gradient rounded-r-card rounded-l-none p-4 gap-2 min-w-[140px]">
+          <span className="material-symbols-outlined text-primary text-[28px]">school</span>
+          <p className="text-[11px] text-center text-white/90 leading-snug px-1">
+            Set up your profile to see your match score.
+          </p>
+          <a
+            href="/profile"
+            className="w-full text-center py-2 bg-primary text-white text-[12px] font-bold rounded-btn hover:brightness-110 transition-all"
+          >
+            Complete profile
+          </a>
+        </div>
+      )}
     </div>
   );
 }

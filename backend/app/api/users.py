@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
@@ -7,6 +7,10 @@ from app.db.session import get_db
 from app.models.profile import Profile
 from app.models.user import User
 from app.schemas.profile import ProfileCreate, ProfileUpdate, ProfileResponse
+from app.services.match_auto import (
+    REASON_PROFILE_UPDATED,
+    trigger_recompute,
+)
 
 router = APIRouter()
 
@@ -53,6 +57,7 @@ async def get_profile(
 @router.post("", response_model=ProfileResponse)
 async def create_or_update_profile(
     profile_data: ProfileCreate,
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -69,4 +74,9 @@ async def create_or_update_profile(
 
     await db.commit()
     await db.refresh(profile)
+
+    # Profile fields feed the match engine — recompute in the background so
+    # the user sees their new matches next time they hit /api/matches.
+    trigger_recompute(user.id, REASON_PROFILE_UPDATED, background_tasks)
+
     return ProfileResponse.model_validate(profile)

@@ -9,7 +9,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const FEATURES = [
   { icon: 'auto_awesome', title: 'AI Match Scoring', desc: 'Get personalized scholarship matches based on your academic profile, research interests, and goals.' },
   { icon: 'public', title: '100+ Scholarships', desc: 'Fully funded opportunities from DAAD, Chevening, MEXT, Fulbright, and many more.' },
-  { icon: 'smart_toy', title: 'ScholarBot Advisor', desc: 'AI chat assistant to help you find, compare, and apply for scholarships.' },
+  { icon: 'smart_toy', title: 'Scholara Advisor', desc: 'AI chat assistant to help you find, compare, and apply for scholarships.' },
   { icon: 'notifications', title: 'Deadline Reminders', desc: 'Never miss a deadline with smart reminders and tracking.' },
 ];
 

@@ -28,6 +28,7 @@ import clsx from 'clsx';
 import { ChevronDown, ChevronUp, ChevronsUpDown, Search } from 'lucide-react';
 import Button from './Button';
 import Badge from './Badge';
+import EmptyState from './EmptyState';
 
 export type SortDir = 'asc' | 'desc' | null;
 
@@ -71,6 +72,8 @@ export interface DataTableProps<T> {
   toolbar?: (selected: T[]) => ReactNode;
   // Empty state copy.
   emptyMessage?: string;
+  // Optional rich empty state (overrides emptyMessage if provided).
+  emptyState?: ReactNode;
 }
 
 interface SortState {
@@ -97,6 +100,7 @@ export default function DataTable<T>({
   onRowClick,
   toolbar,
   emptyMessage = 'No results.',
+  emptyState,
 }: DataTableProps<T>) {
   const [sort, setSort] = useState<SortState>({
     key: initialSortKey,
@@ -182,7 +186,12 @@ export default function DataTable<T>({
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table
+          className="w-full text-sm"
+          role="table"
+          aria-label={`Data table with ${columns.length} columns`}
+          aria-busy={isLoading || undefined}
+        >
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
               <th className="w-10 h-10 px-3">
@@ -197,6 +206,16 @@ export default function DataTable<T>({
               {columns.map((col) => (
                 <th
                   key={col.key}
+                  scope="col"
+                  aria-sort={
+                    sort.key === col.key
+                      ? sort.dir === 'asc'
+                        ? 'ascending'
+                        : sort.dir === 'desc'
+                        ? 'descending'
+                        : 'none'
+                      : undefined
+                  }
                   style={col.width ? { width: col.width } : undefined}
                   className={clsx(
                     'h-10 px-3 text-xs font-semibold uppercase tracking-wide text-text-secondary',
@@ -222,8 +241,15 @@ export default function DataTable<T>({
                 return (
                   <th key={col.key} className="px-2 py-1.5">
                     <div className="relative">
-                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary" />
+                      <Search
+                        className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary pointer-events-none"
+                        aria-hidden="true"
+                      />
+                      <label className="sr-only" htmlFor={`filter-${col.key}`}>
+                        Filter {col.header}
+                      </label>
                       <input
+                        id={`filter-${col.key}`}
                         type="text"
                         value={filters[col.key] ?? ''}
                         onChange={(e) => handleFilterInput(col.key, e.target.value)}
@@ -255,8 +281,10 @@ export default function DataTable<T>({
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={columns.length + 1} className="px-3 py-12 text-center text-sm text-text-secondary">
-                  {emptyMessage}
+                <td colSpan={columns.length + 1} className="p-0">
+                  {emptyState ?? (
+                    <EmptyState title="No results" description={emptyMessage} />
+                  )}
                 </td>
               </tr>
             ) : (

@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { fetchProfile, fetchSavedScholarships, fetchScholarships, type Profile, type Scholarship } from '@/services/api';
 import { useRouter } from 'next/navigation';
+import NotificationBell from './NotificationBell';
+import OnboardingProgress from './OnboardingProgress';
 
 export default function RightPanel() {
   const router = useRouter();
@@ -69,6 +71,13 @@ export default function RightPanel() {
 
   return (
     <aside className="hidden xl:flex flex-col w-[240px] h-full border-l border-gray-200 bg-white p-5 overflow-y-auto">
+      {/* Notification Bell */}
+      <div className="flex justify-end mb-4">
+        <NotificationBell />
+      </div>
+
+      {/* Onboarding progress (auto-hides once everything is done) */}
+      <OnboardingProgress />
       {/* Profile Summary */}
       <button onClick={() => router.push('/profile')} className="mb-6 text-left group">
         <div className="flex items-center gap-3 mb-3">

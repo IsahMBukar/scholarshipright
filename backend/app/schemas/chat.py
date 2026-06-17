@@ -27,6 +27,7 @@ class ChatSessionResponse(BaseModel):
 
 class ChatMessageRequest(BaseModel):
     message: str
+    session_id: Optional[str] = None
 
 
 class MatchScoreResponse(BaseModel):
@@ -35,3 +36,8 @@ class MatchScoreResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class AgentChatStreamRequest(BaseModel):
+    message: str
+    session_id: Optional[str] = None
