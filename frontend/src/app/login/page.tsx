@@ -1,8 +1,35 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+// /login — public sign-in page.
+//
+// Visual DNA is shared with /signup and /admin/accept-invite so all three
+// auth surfaces look and feel identical:
+//   - Same `min-h-screen flex items-center justify-center p-6 bg-gray-100`
+//     page layout
+//   - Same `max-w-md w-full bg-white rounded-card border border-gray-200 p-8`
+//     card (no shadow-sm — accept-invite is the source of truth)
+//   - Same in-card icon+title+subtitle header (LogIn icon, gray-100 circle)
+//   - Same small subtle labels (`text-xs font-medium text-text-secondary`)
+//   - Same white-on-gray-200 input style (40px tall, rounded-btn, small text)
+//   - Same red-pill error display with AlertTriangle icon
+//   - Same `Button` from @/components/admin/ui/Button
+//   - Same `PasswordField` from @/components/auth/PasswordField
+//     (gives login the eye toggle too — small but nice-to-have)
+//
+// Behavior:
+//   - `?next=` is honored if present, but only internal paths (no
+//     open-redirect).
+//   - On success with no `?next=`, redirect to /onboarding if the user
+//     has no profile, else /scholarships.
+//   - Dev login button is preserved (it's still a real dev affordance) but
+//     restyled to use the `Button` secondary variant.
+
+import { Suspense, useEffect, useState, type FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { LogIn, AlertTriangle, Loader2, Zap } from 'lucide-react';
+import Button from '@/components/admin/ui/Button';
+import PasswordField from '@/components/auth/PasswordField';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -15,34 +42,43 @@ function safeNext(raw: string | null, fallback: string): string {
   return raw;
 }
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const nextPath = safeNext(searchParams.get('next'), '/scholarships');
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [checking, setChecking] = useState(true);
-  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     fetch(`${API_URL}/api/auth/me`, { credentials: 'include' })
       .then((r) => {
-        if (r.ok) router.push(nextPath);
+        if (!cancelled && r.ok) router.push(nextPath);
       })
-      .finally(() => setChecking(false));
+      .catch(() => {
+        /* not logged in — fall through to the form */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [router, nextPath]);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const canSubmit = email.trim().length > 0 && password.length > 0 && !submitting;
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setLoading(true);
-    setError('');
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setError(null);
     try {
       const res = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: email.trim(), password }),
       });
       if (res.ok) {
         // If a `?next` was passed (e.g. /admin), honor it. Otherwise
@@ -52,7 +88,9 @@ export default function LoginPage() {
           return;
         }
         try {
-          const profileRes = await fetch(`${API_URL}/api/profile`, { credentials: 'include' });
+          const profileRes = await fetch(`${API_URL}/api/profile`, {
+            credentials: 'include',
+          });
           if (profileRes.status === 404) {
             router.push('/onboarding');
           } else {
@@ -61,111 +99,148 @@ export default function LoginPage() {
         } catch {
           router.push('/scholarships');
         }
-      } else {
-        const data = await res.json().catch(() => ({}));
-        setError(data.detail || 'Invalid email or password');
+        return;
       }
-    } catch (err) {
+      const data = (await res.json().catch(() => ({}))) as { detail?: unknown };
+      const detail = data.detail;
+      if (typeof detail === 'string') {
+        setError(detail);
+      } else if (detail && typeof detail === 'object' && 'user_message' in detail) {
+        setError(String((detail as { user_message?: string }).user_message));
+      } else {
+        setError('Invalid email or password');
+      }
+    } catch {
       setError('Connection failed. Please try again.');
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
-  };
+  }
 
-  const handleDevLogin = async () => {
-    setLoading(true);
-    setError('');
+  async function handleDevLogin() {
+    setSubmitting(true);
+    setError(null);
     try {
       const res = await fetch(`${API_URL}/api/auth/dev-login`, {
         method: 'POST',
         credentials: 'include',
       });
       if (res.ok) router.push(nextPath);
-    } catch (err) {
+      else setError('Dev login failed');
+    } catch {
       setError('Connection failed.');
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
-  };
-
-  if (checking) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="animate-pulse text-text-secondary">Loading...</div>
-      </div>
-    );
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <span className="text-[28px] font-extrabold text-primary">ScholarshipRight</span>
-          <h1 className="text-[32px] font-bold text-text-primary mt-4">Welcome back</h1>
-          <p className="text-[16px] text-text-secondary mt-2">Sign in to your account</p>
+    <div className="min-h-screen flex items-center justify-center p-6 bg-gray-100">
+      <div className="max-w-md w-full bg-white rounded-card border border-gray-200 p-8">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+            <LogIn className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-lg font-semibold text-text-primary">Welcome back</h1>
+            <p className="text-xs text-text-secondary">Sign in to your account</p>
+          </div>
         </div>
 
-        <div className="bg-white p-8 rounded-card border border-gray-200 shadow-sm">
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-card text-[13px] text-red-600">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleLogin}>
-            <label className="text-[14px] font-semibold text-text-primary block mb-2">Email</label>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label
+              htmlFor="email"
+              className="block text-xs font-medium text-text-secondary mb-1"
+            >
+              Email
+              <span className="text-red-500 ml-0.5">*</span>
+            </label>
             <input
+              id="email"
+              name="email"
               type="email"
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="your@email.com"
-              className="w-full p-3.5 bg-gray-100 border border-gray-200 rounded-card text-text-primary placeholder:text-text-secondary focus:ring-2 focus:ring-primary focus:border-transparent mb-4"
+              disabled={submitting}
               required
+              className="w-full h-10 px-3 rounded-btn border border-gray-200 text-sm text-text-primary placeholder:text-text-secondary/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
             />
-
-            <label className="text-[14px] font-semibold text-text-primary block mb-2">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full p-3.5 bg-gray-100 border border-gray-200 rounded-card text-text-primary placeholder:text-text-secondary focus:ring-2 focus:ring-primary focus:border-transparent mb-6"
-              required
-              minLength={6}
-            />
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-primary text-text-inverse font-bold py-3.5 rounded-btn hover:brightness-110 transition-all disabled:opacity-50"
-            >
-              {loading ? 'Signing in...' : 'Sign In'}
-            </button>
-          </form>
-
-          <p className="text-center text-[14px] text-text-secondary mt-6">
-            Don't have an account?{' '}
-            <Link href="/signup" className="text-primary font-semibold hover:underline">
-              Sign up
-            </Link>
-          </p>
-
-          <div className="flex items-center gap-4 my-6">
-            <div className="flex-1 h-px bg-gray-200" />
-            <span className="text-[13px] text-text-secondary">or</span>
-            <div className="flex-1 h-px bg-gray-200" />
           </div>
 
-          <button
-            onClick={handleDevLogin}
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-2 bg-gray-100 text-text-secondary font-medium py-3 rounded-btn hover:bg-gray-200 transition-all text-[13px] disabled:opacity-50"
+          <PasswordField
+            id="password"
+            label="Password"
+            value={password}
+            onChange={setPassword}
+            placeholder="Your password"
+            autoComplete="current-password"
+            disabled={submitting}
+          />
+
+          {error && (
+            <div className="flex items-start gap-2 rounded-btn border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+              <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <Button
+            type="submit"
+            variant="primary"
+            size="md"
+            loading={submitting}
+            disabled={!canSubmit}
+            className="w-full"
           >
-            <span className="material-symbols-outlined text-[18px]">bolt</span>
-            Quick Dev Login (test@scholarshipright.com)
-          </button>
+            {submitting ? 'Signing in…' : 'Sign in'}
+          </Button>
+        </form>
+
+        <p className="text-[11px] text-text-secondary text-center mt-4">
+          Don&apos;t have an account?{' '}
+          <Link href="/signup" className="text-primary font-semibold hover:underline">
+            Sign up
+          </Link>
+        </p>
+
+        <div className="flex items-center gap-4 my-4">
+          <div className="flex-1 h-px bg-gray-200" />
+          <span className="text-[11px] text-text-secondary">or</span>
+          <div className="flex-1 h-px bg-gray-200" />
         </div>
+
+        <Button
+          type="button"
+          variant="secondary"
+          size="md"
+          loading={submitting}
+          onClick={handleDevLogin}
+          leftIcon={<Zap className="w-3.5 h-3.5" />}
+          className="w-full"
+        >
+          Quick dev login
+        </Button>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gray-100">
+          <div className="flex items-center gap-2 text-sm text-text-secondary">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Loading…
+          </div>
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }
