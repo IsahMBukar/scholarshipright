@@ -18,10 +18,11 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.admin import require_admin, require_super_admin
+from app.core.rate_limit import auth_invite_rate_limit
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.admin import (
@@ -32,7 +33,7 @@ from app.schemas.admin import (
 )
 from app.services import admin_invites
 from app.services.admin_audit import log_admin_action
-from app.api.auth import COOKIE_MAX_AGE, COOKIE_NAME, create_token
+from app.api.auth import COOKIE_MAX_AGE, COOKIE_NAME, create_token, hash_password
 
 admin_invites_router = APIRouter()
 accept_invite_router = APIRouter()
@@ -155,9 +156,13 @@ async def revoke_invite_endpoint(
 class AcceptInviteRequest(BaseModel):
     token: str
     full_name: Optional[str] = None
+    # Password is now REQUIRED — every new staff member sets their own
+    # credential on acceptance. Min 8 chars matches our register endpoint's
+    # effective minimum (register allows 6, but admins are internal — be stricter).
+    password: str = Field(..., min_length=8, max_length=128)
 
 
-@accept_invite_router.post("/accept-invite")
+@accept_invite_router.post("/accept-invite", dependencies=[Depends(auth_invite_rate_limit)])
 async def accept_invite_endpoint(
     body: AcceptInviteRequest,
     response: Response,
@@ -166,9 +171,14 @@ async def accept_invite_endpoint(
     """Accept a magic-link invite. Sets the auth cookie on success.
 
     Public endpoint (no admin auth) — the token IS the credential.
+    Body requires: { token, password, full_name? }.
+    The password is hashed and stored on the user record.
     """
     user, invite, status = await admin_invites.accept_invite(
-        db, raw_token=body.token, full_name=body.full_name
+        db,
+        raw_token=body.token,
+        full_name=body.full_name,
+        password=body.password,
     )
     if status != "accepted" or not user or not invite:
         # 410 Gone for accepted/revoked/expired; 404 for not_found

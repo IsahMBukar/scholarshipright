@@ -1,8 +1,9 @@
 """Auth endpoints — registration, login, logout, me."""
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from passlib.context import CryptContext
 from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone
@@ -10,7 +11,11 @@ import os
 
 from app.db.session import get_db
 from app.models.user import User
-from app.core.rate_limit import auth_rate_limit
+from app.core.rate_limit import (
+    auth_invite_rate_limit,
+    auth_login_rate_limit,
+    auth_register_rate_limit,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -62,7 +67,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 # ── Endpoints ──
 
-@router.post("/register", dependencies=[Depends(auth_rate_limit)])
+@router.post("/register", dependencies=[Depends(auth_register_rate_limit)])
 async def register(body: RegisterRequest, response: Response, db: AsyncSession = Depends(get_db)):
     """Register a new user with email + password."""
     email = body.email.strip().lower()
@@ -93,7 +98,7 @@ async def register(body: RegisterRequest, response: Response, db: AsyncSession =
     return {"id": str(user.id), "email": user.email, "full_name": user.full_name}
 
 
-@router.post("/login", dependencies=[Depends(auth_rate_limit)])
+@router.post("/login", dependencies=[Depends(auth_login_rate_limit)])
 async def login(body: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
     """Login with email + password."""
     email = body.email.strip().lower()
@@ -147,6 +152,88 @@ async def get_me(request: Request, db: AsyncSession = Depends(get_db)):
         "full_name": user.full_name,
         "is_admin": bool(user.is_admin),
         "admin_role": user.admin_role,
+        # `has_password` is false for users created via magic-link
+        # invitation (the password is set during accept-invite) AND for
+        # future OAuth/SSO users who haven't set a password yet. The
+        # /settings UI uses this to decide whether to show "Set password"
+        # or "Change password".
+        "has_password": bool(user.password_hash),
+    }
+
+
+# ── Set / change password ─────────────────────────────────────────
+
+
+class SetPasswordRequest(BaseModel):
+    # Required if the user already has a password (changing it).
+    # Omitted when a user is setting a password for the first time
+    # (e.g. after accepting an invite without a password, or a future
+    # Google OAuth user).
+    current_password: Optional[str] = None
+    # Always required. Min 8 chars (matches accept-invite policy).
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
+@router.post("/set-password", dependencies=[Depends(auth_invite_rate_limit)])
+async def set_password(
+    body: SetPasswordRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
+    """Set or change the current user's password.
+
+    Two cases:
+      1. User has NO password (OAuth, future flow): just send new_password.
+      2. User HAS a password (current flow): must send current_password too,
+         and it must verify.
+
+    Returns 200 with the updated user identity (same shape as /api/auth/me).
+    """
+    token = request.cookies.get(COOKIE_NAME)
+    user_id = decode_token(token) if token else None
+    if not user_id:
+        raise HTTPException(401, "Not logged in")
+    from uuid import UUID
+    try:
+        result = await db.execute(select(User).where(User.id == UUID(user_id)))
+    except Exception:
+        raise HTTPException(401, "Invalid user")
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(401, "User not found")
+    if not user.is_active:
+        raise HTTPException(403, "Account is deactivated")
+
+    has_pw = bool(user.password_hash)
+    if has_pw:
+        # Changing an existing password — current_password is required and must match.
+        if not body.current_password:
+            raise HTTPException(
+                400,
+                {"code": "current_password_required",
+                 "user_message": "Enter your current password to set a new one."},
+            )
+        if not verify_password(body.current_password, user.password_hash):
+            raise HTTPException(
+                401,
+                {"code": "current_password_wrong",
+                 "user_message": "Current password is incorrect."},
+            )
+    # else: setting a password for the first time (OAuth) — no current needed.
+
+    user.password_hash = hash_password(body.new_password)
+    user.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(user)
+
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "full_name": user.full_name,
+        "is_admin": bool(user.is_admin),
+        "admin_role": user.admin_role,
+        "has_password": bool(user.password_hash),
     }
 
 
