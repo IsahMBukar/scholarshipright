@@ -8,6 +8,7 @@ import type {
   AdminUser,
   AdminUserPatch,
   AdminScholarship,
+  AdminScholarshipCreate,
   AdminScholarshipPatch,
   AdminAuditEntry,
   AdminInviteListEntry,
@@ -83,6 +84,12 @@ export const adminApi = {
       '/api/admin/scholarships',
       { params }
     ),
+
+  createScholarship: (body: AdminScholarshipCreate) =>
+    adminFetch<AdminScholarship>('/api/admin/scholarships', {
+      method: 'POST',
+      body,
+    }),
 
   patchScholarship: (id: string, body: AdminScholarshipPatch) =>
     adminFetch<AdminScholarship>(`/api/admin/scholarships/${id}`, {

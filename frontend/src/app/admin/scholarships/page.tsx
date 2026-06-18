@@ -3,20 +3,23 @@
 // Scholarships admin page.
 // - DataTable over /api/admin/scholarships (paginated, sortable, filterable).
 // - Top search + active/verified/funding filters.
+// - Primary CTA: "+ New scholarship" → CreateScholarshipDrawer (full form).
 // - Click row → drawer with edit form (is_active, is_verified, name, host_country,
 //   funding_type, deadline, official_url). Save → PATCH /api/admin/scholarships/{id}.
 // - Bulk-activate / bulk-deactivate via the DataTable toolbar.
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useCallback } from 'react';
-import { Calendar, Globe, CheckCircle2, XCircle, ExternalLink, RotateCw } from 'lucide-react';
+import { Calendar, Globe, CheckCircle2, XCircle, ExternalLink, RotateCw, Plus } from 'lucide-react';
 import AdminLayout from '@/components/admin/AdminLayout';
 import DataTable, { type Column } from '@/components/admin/ui/DataTable';
 import Badge, { type BadgeTone } from '@/components/admin/ui/Badge';
 import Button from '@/components/admin/ui/Button';
 import Drawer from '@/components/admin/ui/Drawer';
 import { useToast } from '@/components/admin/ui/Toast';
+import CreateScholarshipDrawer from '@/components/admin/CreateScholarshipDrawer';
 import { adminApi, type ListScholarshipsParams } from '@/lib/admin/api';
+import type { AdminScholarshipCreate } from '@/lib/admin/types';
 import { AdminApiError } from '@/lib/admin/client';
 import SearchInput from '@/components/admin/ui/SearchInput';
 import type { AdminScholarship } from '@/lib/admin/types';
@@ -56,6 +59,7 @@ export default function AdminScholarshipsPage() {
   const [fundingFilter, setFundingFilter] = useState<string>('');
   const [sort, setSort] = useState<ListScholarshipsParams['sort']>('newest');
   const [selected, setSelected] = useState<AdminScholarship | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const params: ListScholarshipsParams = useMemo(
     () => ({
@@ -81,6 +85,24 @@ export default function AdminScholarshipsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'scholarships'] });
       qc.invalidateQueries({ queryKey: ['admin', 'overview'] });
+    },
+  });
+
+  const create = useMutation({
+    mutationFn: (body: AdminScholarshipCreate) => adminApi.createScholarship(body),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'scholarships'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'overview'] });
+      toast.success('Scholarship created', data.name);
+      setCreateOpen(false);
+    },
+    onError: (err) => {
+      // Error is rendered in the drawer footer; we just log here. The
+      // most common case is a duplicate slug (409) which the API surfaces
+      // as a clear user_message.
+      const msg = err instanceof AdminApiError ? err.message : 'Create failed';
+      // eslint-disable-next-line no-console
+      console.error('create scholarship failed:', msg);
     },
   });
 
@@ -188,6 +210,14 @@ export default function AdminScholarshipsPage() {
 
   const headerActions = (
     <div className="flex items-center gap-2">
+      <Button
+        variant="primary"
+        size="md"
+        onClick={() => setCreateOpen(true)}
+        leftIcon={<Plus className="w-3.5 h-3.5" />}
+      >
+        New scholarship
+      </Button>
       <select
         value={activeFilter}
         onChange={(e) => {
@@ -349,6 +379,24 @@ export default function AdminScholarshipsPage() {
         }}
         saving={patch.isPending}
         saveError={(patch.error as AdminApiError | null)?.message ?? null}
+      />
+
+      <CreateScholarshipDrawer
+        open={createOpen}
+        onClose={() => {
+          if (!create.isPending) setCreateOpen(false);
+        }}
+        onCreate={async (body) => {
+          await create.mutateAsync(body);
+        }}
+        saving={create.isPending}
+        saveError={
+          create.error instanceof AdminApiError
+            ? create.error.message
+            : create.error
+            ? 'Create failed — see console for details.'
+            : null
+        }
       />
     </AdminLayout>
   );

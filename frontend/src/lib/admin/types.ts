@@ -136,6 +136,56 @@ export interface AdminScholarshipPatch {
   official_url?: string;
 }
 
+// AdminScholarshipCreate: all fields the backend POST /api/admin/scholarships
+// accepts. Required: name, slug, host_country, funding_type, deadline,
+// official_url. Everything else is optional. Date fields accept ISO strings
+// (YYYY-MM-DD). Numeric fields accept strings or numbers (adminFetch
+// serialises as JSON). Array fields accept string[] OR comma-separated
+// strings (the form does the splitting client-side).
+export interface AdminScholarshipCreate {
+  // Required
+  name: string;
+  slug: string;
+  host_country: string;
+  funding_type: string;
+  deadline: string;
+  official_url: string;
+  // Optional — identity
+  host_institution?: string | null;
+  provider?: string | null;
+  // Optional — scope
+  degree_levels?: string[] | null;
+  fields_of_study?: string[] | null;
+  eligible_nationalities?: string[] | null;
+  eligible_regions?: string[] | null;
+  // Optional — funding
+  covers_tuition?: boolean | null;
+  covers_living?: boolean | null;
+  covers_flight?: boolean | null;
+  covers_health?: boolean | null;
+  monthly_stipend_usd?: number | null;
+  // Optional — requirements
+  requires_ielts?: boolean | null;
+  min_ielts_score?: number | string | null;
+  requires_gre?: boolean | null;
+  requires_application_fee?: boolean | null;
+  min_cgpa?: number | string | null;
+  language_of_instruction?: string | null;
+  // Optional — dates
+  open_date?: string | null;
+  program_start_date?: string | null;
+  duration_months?: number | null;
+  // Optional — content
+  description?: string | null;
+  benefits_summary?: string | null;
+  how_to_apply?: string | null;
+  logo_url?: string | null;
+  // Optional — status
+  is_active?: boolean | null;
+  is_verified?: boolean | null;
+  source?: string | null;
+}
+
 // ── Audit log ─────────────────────────────────────────────────────
 export interface AdminAuditEntry {
   id: string; // UUID
