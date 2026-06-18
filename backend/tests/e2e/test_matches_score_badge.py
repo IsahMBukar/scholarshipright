@@ -60,8 +60,9 @@ slide_src = open(MATCHES_SLIDE).read()
 # 1. The slide uses the user-specific matches endpoint
 check("slide imports fetchMatches (user-specific scores)",
       "fetchMatches" in slide_src)
-check("slide imports computeMatches (trigger compute when empty)",
-      "computeMatches" in slide_src)
+check("slide does NOT import computeMatches (auto-recompute is transparent)",
+      "computeMatches" not in slide_src,
+      "(replaced by transparent /api/matches auto-recompute on stale data)")
 check("slide also imports fetchFeaturedScholarships (fallback)",
       "fetchFeaturedScholarships" in slide_src)
 

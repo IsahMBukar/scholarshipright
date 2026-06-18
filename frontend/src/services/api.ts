@@ -130,11 +130,6 @@ export async function fetchMatches(): Promise<Array<{ scholarship: Scholarship; 
   return data;
 }
 
-export async function computeMatches(): Promise<{ status: string }> {
-  const { data } = await api.post('/api/matches/compute');
-  return data;
-}
-
 // Saved Scholarships API
 export async function fetchSavedScholarships(statusFilter?: string): Promise<Array<Scholarship & { status: string; notes?: string; reminder_enabled: boolean }>> {
   const params: Record<string, string> = {};

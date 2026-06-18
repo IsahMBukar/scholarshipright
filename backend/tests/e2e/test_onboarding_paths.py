@@ -171,10 +171,15 @@ check("profile is complete for onboarding", is_complete,
       f"target={profile.get('target_degree')}, country={profile.get('country_of_origin')}, "
       f"cgpa={profile.get('cgpa')}")
 
-# ── STEP 8: Trigger match compute ───────────────────────────────────────
-step("STEP 8: Trigger match recompute")
-status, body = call("POST", "/api/matches/compute", jar=jar)
-check("compute returns 200 or 202", status in (200, 202), f"(got {status})")
+# ── STEP 8: Auto-recompute has already fired on profile create. We verify ─
+#              by hitting GET /api/matches and checking matches exist. The
+#              server transparently recomputes stale data on read, so the
+#              user never needs to call a manual compute endpoint.
+step("STEP 8: Auto-recompute after profile save — verify via GET /api/matches")
+status, body = call("GET", "/api/matches", jar=jar)
+check("GET /api/matches returns 200", status == 200, f"(got {status})")
+match_count = len(body) if isinstance(body, list) else 0
+check("auto-recompute produced matches", match_count > 0, f"({match_count} matches)")
 
 # ── STEP 9: Resume path — upload a tiny PDF to test the upload flow ────
 # (We can't easily upload a binary PDF via urllib, so we just verify the

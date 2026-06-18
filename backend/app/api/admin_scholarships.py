@@ -3,10 +3,18 @@ Admin API: Scholarship management.
 
 GET    /api/admin/scholarships                 — paginated list (includes inactive)
 GET    /api/admin/scholarships/{id}            — full record
+POST   /api/admin/scholarships                 — create new (both admin roles)
 PATCH  /api/admin/scholarships/{id}            — edit any field (both admin roles)
 DELETE /api/admin/scholarships/{id}            — HARD delete (super_admin only)
 
 For soft-delete (deactivate), set is_active=false via PATCH.
+
+Match-recompute side effects:
+- POST  → mark all users dirty so the new scholarship appears in their next
+          /api/matches read (and may trigger a `match_new` notif if ≥70%)
+- PATCH that flips is_active from false→true → same as POST
+- PATCH that changes other fields → no global invalidate (per-user recompute
+  happens on their next /api/matches read; cached scores may be stale until then)
 """
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -15,6 +23,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.admin import require_admin, require_super_admin
@@ -22,13 +31,21 @@ from app.db.session import get_db
 from app.models.scholarship import Scholarship
 from app.models.user import User
 from app.schemas.admin import (
+    AdminScholarshipCreate,
     AdminScholarshipPatch,
     AdminScholarshipResponse,
     PaginatedResponse,
 )
 from app.services.admin_audit import log_admin_action
+from app.services.match_auto import (
+    REASON_SCHOLARSHIP_DATA_CHANGED,
+    mark_all_users_dirty,
+)
+
+import logging
 
 router = APIRouter()
+logger = logging.getLogger("scholara.admin")
 
 # Fields that accept date strings (ISO YYYY-MM-DD) in PATCH
 _DATE_FIELDS = {"open_date", "deadline", "program_start_date"}
@@ -138,6 +155,81 @@ async def get_scholarship(
     return AdminScholarshipResponse.model_validate(s)
 
 
+# ── create ────────────────────────────────────────────────────────
+
+
+@router.post("/scholarships", response_model=AdminScholarshipResponse)
+async def create_scholarship(
+    body: AdminScholarshipCreate,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Create a new scholarship.
+
+    All admins (super_admin or support_staff) can create. After insert:
+      1. Audit log row is written
+      2. If is_active is True (the default), mark_all_users_dirty() runs
+         so the next /api/matches call for each user recomputes and may
+         emit a `match_new` notification (if score ≥ 70%).
+
+    A unique-slug conflict returns 409 (not 500) so the admin UI can show
+    a clear "slug already taken" message.
+    """
+    raw = body.model_dump(exclude_unset=True)
+    coerced, errors = _coerce_patch(raw)
+    if errors:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "invalid_field",
+                "user_message": "Some fields have invalid values.",
+                "errors": errors,
+                "retryable": False,
+            },
+        )
+
+    s = Scholarship(**coerced)
+    if s.is_active is None:
+        s.is_active = True  # model default
+    db.add(s)
+    try:
+        await db.commit()
+    except IntegrityError as e:
+        await db.rollback()
+        # Most common cause: duplicate slug. Surface as 409.
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "scholarship_slug_taken",
+                "user_message": f"A scholarship with slug '{body.slug}' already exists.",
+                "retryable": False,
+            },
+        ) from e
+    await db.refresh(s)
+
+    await log_admin_action(
+        db,
+        admin_id=admin.id,
+        admin_email=admin.email,
+        action="scholarship.create",
+        target_type="scholarship",
+        target_id=str(s.id),
+        payload={"name": s.name, "slug": s.slug, "is_active": s.is_active},
+    )
+    await db.commit()
+
+    # If the new scholarship is active, every user's match cache is now
+    # stale. Mark them all dirty so their next read picks it up.
+    if s.is_active:
+        marked = await mark_all_users_dirty(reason=REASON_SCHOLARSHIP_DATA_CHANGED)
+        logger.info(
+            "scholarship.create: marked %s users dirty (scholarship_id=%s slug=%s)",
+            marked, s.id, s.slug,
+        )
+
+    return AdminScholarshipResponse.model_validate(s)
+
+
 # ── patch ──────────────────────────────────────────────────────────
 
 
@@ -173,12 +265,16 @@ async def patch_scholarship(
         )
 
     changes: dict = {}
+    is_active_flipped_on = False
     for k, v in coerced.items():
         if not hasattr(s, k):
             continue
         old = getattr(s, k)
         if old != v:
             changes[k] = {"old": str(old) if old is not None else None, "new": str(v) if v is not None else None}
+            # Detect false→true flip on is_active specifically
+            if k == "is_active" and old is False and v is True:
+                is_active_flipped_on = True
             setattr(s, k, v)
 
     if changes:
@@ -195,6 +291,16 @@ async def patch_scholarship(
             payload={"changes": changes, "name": s.name, "slug": s.slug},
         )
         await db.commit()
+
+    # If we flipped is_active false→true, every user's match cache is now
+    # stale. Mark all users dirty so their next read recomputes and may
+    # emit a `match_new` notification.
+    if is_active_flipped_on:
+        marked = await mark_all_users_dirty(reason=REASON_SCHOLARSHIP_DATA_CHANGED)
+        logger.info(
+            "scholarship.patch: marked %s users dirty (is_active false→true, scholarship_id=%s)",
+            marked, s.id,
+        )
 
     return AdminScholarshipResponse.model_validate(s)
 

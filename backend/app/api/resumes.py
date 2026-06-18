@@ -14,6 +14,7 @@ from app.models.user import User
 from app.schemas.resume import ResumeOut, ResumeUpdate
 from app.services.resume_analyzer import extract_text_from_file, analyze_resume, rewrite_field
 from app.services.scoring import calculate_resume_score
+from app.services.notifications import emit_resume_failed
 from app.api.users import get_current_user
 from app.core.rate_limit import resume_analysis_rate_limit, resume_rewrite_rate_limit, resume_upload_rate_limit
 from app.core.upload_validation import validate_resume_upload
@@ -242,7 +243,14 @@ async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename
             else:
                 resume.status = "error"
                 resume.issues = [{"field": "file", "severity": "urgent", "message": "Could not extract text from file. Try a clearer image or PDF.", "suggestion": "Re-upload or paste text manually."}]
-            
+                # No text extracted — the AI is unlikely to recover, so notify the user.
+                await emit_resume_failed(
+                    db,
+                    user_id=resume.user_id,
+                    resume_id=resume.id,
+                    reason="We couldn't read the file.",
+                )
+
             await db.commit()
             print(f"Background analysis complete for resume {resume_id}: status={resume.status}")
     except asyncio.TimeoutError:
@@ -254,6 +262,12 @@ async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename
                 if resume:
                     resume.status = "error"
                     resume.issues = [{"field": "general", "severity": "urgent", "message": "AI analysis timed out before completion.", "suggestion": "Try a smaller/clearer file or re-run analysis later."}]
+                    await emit_resume_failed(
+                        db,
+                        user_id=resume.user_id,
+                        resume_id=resume.id,
+                        reason="AI analysis timed out.",
+                    )
                     await db.commit()
         except Exception:
             pass
@@ -267,6 +281,12 @@ async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename
                 if resume:
                     resume.status = "error"
                     resume.issues = [{"field": "general", "severity": "urgent", "message": f"Analysis failed: {str(e)[:100]}", "suggestion": "Try again or paste your CV text."}]
+                    await emit_resume_failed(
+                        db,
+                        user_id=resume.user_id,
+                        resume_id=resume.id,
+                        reason=f"Analysis failed: {str(e)[:100]}",
+                    )
                     await db.commit()
         except:
             pass

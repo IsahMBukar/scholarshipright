@@ -134,8 +134,9 @@ if jar is None:
     sys.exit(0 if (tests_failed == 0 and tests_passed > 0) else 1)
 check("user created", jar is not None, f"({email})")
 
-# Trigger recompute
-call("POST", "/api/matches/compute", jar=jar)
+# Matches are auto-recomputed on profile create. The first GET /api/matches
+# call below will trigger a synchronous recompute if the background one
+# hasn't finished — no manual "compute" endpoint needed.
 tier2_count = get_match_count(jar)
 tier2_top = get_top_match_score(jar)
 check("matches computed with only 3 critical fields", tier2_count > 0,
@@ -150,7 +151,8 @@ tier2_cgpa = {
     "cgpa": 3.8,
 }
 jar2, _ = make_user(tier2_cgpa)
-call("POST", "/api/matches/compute", jar=jar2)
+# Auto-recompute fires on profile create. Next GET /api/matches will see
+# the new scores (synchronously recomputing if needed).
 tier2_cgpa_count = get_match_count(jar2)
 tier2_cgpa_top = get_top_match_score(jar2)
 check("matches computed with Tier 2 + CGPA", tier2_cgpa_count > 0,
@@ -171,7 +173,7 @@ tier_full = {
     "degree_level": "bachelor",
 }
 jar3, _ = make_user(tier_full)
-call("POST", "/api/matches/compute", jar=jar3)
+# Auto-recompute is transparent — the next GET recomputes on read.
 tier_full_count = get_match_count(jar3)
 tier_full_top = get_top_match_score(jar3)
 check("matches computed with all fields", tier_full_count > 0,
@@ -182,8 +184,10 @@ check("top score is >= Tier 2 + CGPA", tier_full_top >= tier2_cgpa_top,
 # ── STEP 4: User with NO profile — should not error, just low scores ─
 step("STEP 4: User with NO profile — engine should not crash")
 jar4, _ = make_user(None)  # no profile data
-# Don't trigger recompute — match_auto will skip and return "no_profile"
-status, body = call("POST", "/api/matches/compute", jar=jar4)
+# No profile → no recompute ever fires (match_auto skips with status="skipped").
+# We can't call the old manual endpoint (it was removed — auto-recompute only),
+# so just verify GET /api/matches doesn't 500.
+status, body = call("GET", "/api/matches", jar=jar4)
 # The match_auto recompute should skip with status="skipped", "no_profile"
 # But the endpoint might return 200 anyway. Just check it didn't 500.
 check("compute with no profile doesn't 500", status in (200, 400, 422),

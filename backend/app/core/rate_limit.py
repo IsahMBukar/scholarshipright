@@ -140,6 +140,3 @@ resume_rewrite_rate_limit = rate_limit("resume_rewrite", max_requests=20, window
 
 # General agent/chat/actions call the LLM and sometimes tools.
 agent_rate_limit = rate_limit("agent", max_requests=30, window_seconds=60 * 60)
-
-# Match compute is CPU/DB work. Limit bursts but allow normal recalculation.
-match_compute_rate_limit = rate_limit("match_compute", max_requests=10, window_seconds=15 * 60)

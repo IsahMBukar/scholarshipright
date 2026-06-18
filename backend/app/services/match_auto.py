@@ -29,6 +29,12 @@ from app.models.user import User
 from app.models.profile import Profile
 from app.models.resume import Resume
 from app.services.match_engine import compute_match_score
+from app.services.notifications import (
+    emit_match_new,
+    emit_match_improved,
+    is_improvement,
+    is_new_match,
+)
 
 
 logger = logging.getLogger("scholara.matches")
@@ -92,6 +98,12 @@ async def recompute_matches_for_user(user_id: UUID, reason: str = REASON_MANUAL)
 
     Opens its own DB session so it's safe to run from a background task or
     from a CLI script. Returns a small result dict for logging/audit.
+
+    Side effects:
+      - Updates match_scores for this user (delete + insert)
+      - Emits match_new notifications for newly-crossed 70%+ scholarships
+      - Emits match_improved notifications for scholarships that jumped
+        by ≥10 points or crossed into the 80+ tier
     """
     async with AsyncSessionLocal() as db:
         try:
@@ -114,9 +126,18 @@ async def recompute_matches_for_user(user_id: UUID, reason: str = REASON_MANUAL)
             sch_result = await db.execute(select(Scholarship).where(Scholarship.is_active == True))
             scholarships = sch_result.scalars().all()
 
+            # Snapshot the old scores BEFORE we delete them, so we can diff
+            # against the new set and emit improvement/new-match notifications.
+            old_scores_q = await db.execute(
+                select(MatchScore.scholarship_id, MatchScore.score)
+                .where(MatchScore.user_id == user_id)
+            )
+            old_scores: dict[UUID, float] = {row[0]: float(row[1]) for row in old_scores_q.all()}
+
             await db.execute(delete(MatchScore).where(MatchScore.user_id == user_id))
 
             computed = 0
+            new_scores: dict[UUID, float] = {}
             for sch in scholarships:
                 result = compute_match_score(profile, sch, resume=resume)
                 if result["score"] > 0:
@@ -126,6 +147,7 @@ async def recompute_matches_for_user(user_id: UUID, reason: str = REASON_MANUAL)
                         score=result["score"],
                         breakdown=result["breakdown"],
                     ))
+                    new_scores[sch.id] = float(result["score"])
                     computed += 1
 
             await db.execute(
@@ -133,15 +155,52 @@ async def recompute_matches_for_user(user_id: UUID, reason: str = REASON_MANUAL)
                 .where(User.id == user_id)
                 .values(match_dirty=False, match_invalidated_at=datetime.now(timezone.utc))
             )
+
+            # ── Notification side-effects ────────────────────────────
+            # Compute the diff in this same session so the notif INSERTs
+            # share the transaction with the match INSERTs.
+            notif_new = 0
+            notif_improved = 0
+            for sch_id, new_score in new_scores.items():
+                old_score = old_scores.get(sch_id)
+                if old_score is None:
+                    # New match — was not in the old set
+                    if is_new_match(new_score):
+                        n = await emit_match_new(
+                            db,
+                            user_id=user_id,
+                            scholarship_id=sch_id,
+                            score=new_score,
+                        )
+                        if n is not None:
+                            notif_new += 1
+                else:
+                    # Existing match — check for improvement
+                    if is_improvement(new_score, old_score):
+                        n = await emit_match_improved(
+                            db,
+                            user_id=user_id,
+                            scholarship_id=sch_id,
+                            new_score=new_score,
+                            old_score=old_score,
+                        )
+                        if n is not None:
+                            notif_improved += 1
+
             await db.commit()
 
-            logger.info("recompute ok user=%s reason=%s matches=%s", user_id, reason, computed)
+            logger.info(
+                "recompute ok user=%s reason=%s matches=%s new_notifs=%s improved_notifs=%s",
+                user_id, reason, computed, notif_new, notif_improved,
+            )
             return {
                 "status": "computed",
                 "reason": reason,
                 "matches": computed,
                 "total_scholarships": len(scholarships),
                 "resume_used": bool(resume),
+                "notifs_new": notif_new,
+                "notifs_improved": notif_improved,
             }
         except Exception as e:  # noqa: BLE001
             await db.rollback()

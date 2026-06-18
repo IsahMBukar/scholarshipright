@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import {
   fetchMatches,
-  computeMatches,
   fetchFeaturedScholarships,
   type Scholarship,
 } from '@/services/api';
@@ -16,9 +15,11 @@ import {
  * Each card shows a match-score badge so the user can see at a glance
  * how well each scholarship fits.
  *
- * If /api/matches returns empty, triggers a compute and re-fetches. Falls
- * back to /api/scholarships/featured (which carries match_score) only if
- * the real matches endpoint is unavailable.
+ * Auto-recompute is fully transparent: if the user just updated their
+ * profile/resume and the match cache is stale, the next GET /api/matches
+ * call recomputes on the fly. Falls back to /api/scholarships/featured
+ * (which carries match_score) only if the real matches endpoint is
+ * unavailable.
  *
  * Two exit paths:
  *   - "See all my matches" → /scholarships
@@ -179,20 +180,12 @@ export default function MatchesPreviewSlide({
 
     (async () => {
       try {
-        // 1. Try /api/matches first (user-specific, has real scores)
+        // 1. Try /api/matches first (user-specific, has real scores).
+        //    The backend transparently recomputes stale data on read —
+        //    no manual compute step is needed.
         let list = await fetchMatches();
 
-        // 2. If empty, the match engine may not have run yet — trigger compute and refetch
-        if (!list || list.length === 0) {
-          try {
-            await computeMatches();
-            list = await fetchMatches();
-          } catch {
-            /* fall through to featured */
-          }
-        }
-
-        // 3. If still empty (engine failed, or no scholarships match), fall back to featured
+        // 2. If still empty (no profile yet, or engine returned zero), fall back to featured
         if (!list || list.length === 0) {
           const featured = await fetchFeaturedScholarships();
           if (!cancelled) {
@@ -212,7 +205,6 @@ export default function MatchesPreviewSlide({
         if (!cancelled) setMatches(list.slice(0, 2));
       } catch (err) {
         if (!cancelled) setLoadError("We couldn't load your matches.");
-        console.error('MatchesPreviewSlide load error:', err);
       } finally {
         if (!cancelled) setLoading(false);
       }

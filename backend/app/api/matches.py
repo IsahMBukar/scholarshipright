@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
@@ -11,7 +11,6 @@ from app.schemas.scholarship import ScholarshipResponse
 from app.api.users import get_current_user
 from app.models.user import User
 from app.services.match_engine import compute_match_score
-from app.core.rate_limit import match_compute_rate_limit
 from app.services.match_auto import (
     REASON_MANUAL,
     recompute_matches_for_user,
@@ -29,7 +28,9 @@ async def get_matches(
 
     If the user's data changed since the last compute (resume edited, profile
     updated, etc.) and the recompute job hasn't finished yet, we transparently
-    run a synchronous recompute so the response is never stale.
+    run a synchronous recompute so the response is never stale. Auto-recompute
+    fires automatically on every profile/resume write — there is no manual
+    "recompute" endpoint by design.
     """
     user_row = await db.get(User, user.id)
     if user_row is not None and getattr(user_row, "match_dirty", False):
@@ -57,30 +58,3 @@ async def get_matches(
         }
         for ms, scholarship in rows
     ]
-
-
-@router.post("/compute", dependencies=[Depends(match_compute_rate_limit)])
-async def compute_matches(
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Trigger match score computation for user against all active scholarships."""
-    # Delegate to the shared auto-recompute so behaviour matches the background
-    # path: if the user has no profile yet, we report it cleanly.
-    from app.models.profile import Profile
-
-    profile_result = await db.execute(select(Profile).where(Profile.user_id == user.id))
-    if not profile_result.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Complete your profile before computing matches")
-
-    result = await recompute_matches_for_user(user.id, reason=REASON_MANUAL)
-    if result.get("status") == "error":
-        raise HTTPException(status_code=500, detail=f"Match recompute failed: {result.get('error')}")
-
-    return {
-        "status": result.get("status", "computed"),
-        "total_scholarships": result.get("total_scholarships", 0),
-        "matches_found": result.get("matches", 0),
-        "resume_used": result.get("resume_used", False),
-        "scoring_version": "smart_resume_requirement_v2",
-    }

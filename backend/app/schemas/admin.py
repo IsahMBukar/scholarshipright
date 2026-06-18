@@ -160,6 +160,47 @@ class AdminScholarshipResponse(BaseModel):
         from_attributes = True
 
 
+class AdminScholarshipCreate(BaseModel):
+    """Create a new scholarship. Required fields are those the DB model
+    marks NOT NULL (name, slug, host_country, funding_type, deadline, official_url).
+    Everything else is optional and has the same default the model uses.
+    """
+    name: str = Field(..., max_length=512)
+    slug: str = Field(..., max_length=512)
+    host_country: str
+    funding_type: str  # 'fully_funded' | 'partial' | 'stipend_only'
+    deadline: str       # ISO date string
+    official_url: str
+
+    host_institution: Optional[str] = None
+    provider: Optional[str] = None
+    degree_levels: Optional[List[str]] = None
+    fields_of_study: Optional[List[str]] = None
+    eligible_nationalities: Optional[List[str]] = None
+    eligible_regions: Optional[List[str]] = None
+    covers_tuition: Optional[bool] = None
+    covers_living: Optional[bool] = None
+    covers_flight: Optional[bool] = None
+    covers_health: Optional[bool] = None
+    monthly_stipend_usd: Optional[int] = None
+    requires_ielts: Optional[bool] = None
+    min_ielts_score: Optional[Decimal] = None
+    requires_gre: Optional[bool] = None
+    requires_application_fee: Optional[bool] = None
+    min_cgpa: Optional[Decimal] = None
+    language_of_instruction: Optional[str] = None
+    open_date: Optional[str] = None
+    program_start_date: Optional[str] = None
+    duration_months: Optional[int] = None
+    description: Optional[str] = None
+    benefits_summary: Optional[str] = None
+    how_to_apply: Optional[str] = None
+    logo_url: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_verified: Optional[bool] = None
+    source: Optional[str] = None
+
+
 class AdminScholarshipPatch(BaseModel):
     """Partial scholarship update. Most fields editable from the admin form."""
     name: Optional[str] = Field(None, max_length=512)

@@ -14,6 +14,7 @@ from app.models.saved_scholarship import SavedScholarship
 from app.models.scholarship import Scholarship
 from app.models.notification import Notification
 from app.db.session import AsyncSessionLocal
+from app.services.notifications import emit_notification
 
 
 # Reminder windows: (days_before_deadline, notification_title_template)
@@ -61,18 +62,25 @@ async def check_deadlines():
                     if existing.scalar_one_or_none():
                         continue  # Already notified today
 
-                    # Create notification
+                    # Create notification via the shared helper — dedup
+                    # rules (DEDUP_WINDOWS["deadline"]) apply.
                     deadline_str = scholarship.deadline.strftime("%b %d, %Y")
-                    notification = Notification(
+                    n = await emit_notification(
+                        db,
                         user_id=saved.user_id,
-                        type="deadline",
+                        kind="deadline",
                         title=f"{title_template} — {scholarship.name}",
-                        message=f"The application deadline for {scholarship.name} ({scholarship.host_country}) is on {deadline_str}. Don't miss it!",
+                        message=(
+                            f"The application deadline for {scholarship.name} "
+                            f"({scholarship.host_country}) is on {deadline_str}. "
+                            "Don't miss it!"
+                        ),
                         link=f"/scholarships/{scholarship.slug}",
                         scholarship_id=scholarship.id,
+                        dedup=True,
                     )
-                    db.add(notification)
-                    notifications_created += 1
+                    if n is not None:
+                        notifications_created += 1
 
             await db.commit()
             if notifications_created > 0:
