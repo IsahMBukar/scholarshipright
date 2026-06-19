@@ -39,10 +39,13 @@ def _scholarship_response(scholarship: Scholarship, match_score: Optional[float]
 @router.get("", response_model=ScholarshipListResponse)
 async def list_scholarships(
     request: Request,
-    degree: Optional[str] = Query(None, description="Comma-separated degree levels"),
+    degree: Optional[str] = Query(None, description="Comma-separated degree levels (bachelor, master, phd, other)"),
     field: Optional[str] = Query(None, description="Comma-separated fields of study"),
     country: Optional[str] = Query(None, description="Comma-separated host countries"),
     funding: Optional[str] = Query(None, description="Funding type: fully_funded, partial, stipend_only"),
+    language_test: Optional[str] = Query(None, description="Comma-separated English tests (IELTS, TOEFL, PTE, Duolingo, Cambridge)"),
+    verified: Optional[bool] = Query(None, description="Only verified scholarships"),
+    min_stipend: Optional[int] = Query(None, ge=0, description="Minimum monthly stipend in USD"),
     no_ielts: Optional[bool] = Query(None, description="Filter for scholarships without IELTS requirement"),
     no_fee: Optional[bool] = Query(None, description="Filter for scholarships without application fee"),
     deadline_before: Optional[date] = Query(None),
@@ -71,6 +74,22 @@ async def list_scholarships(
 
     if funding:
         query = query.where(Scholarship.funding_type == funding)
+
+    if language_test:
+        tests = [t.strip() for t in language_test.split(",") if t.strip()]
+        if tests:
+            # Overlap: returns rows where accepted_english_tests shares at
+            # least one element with the requested set. Backed by the GIN
+            # index added in ensure_scholarship_schema_columns().
+            query = query.where(Scholarship.accepted_english_tests.overlap(tests))
+
+    if verified is not None:
+        query = query.where(Scholarship.is_verified == verified)
+
+    if min_stipend is not None:
+        # NULL monthly_stipend_usd is excluded by SQL three-valued logic,
+        # so scholarships without a recorded stipend don't match a min.
+        query = query.where(Scholarship.monthly_stipend_usd >= min_stipend)
 
     if no_ielts:
         query = query.where(Scholarship.requires_ielts == False)
@@ -169,6 +188,70 @@ async def featured_scholarships(request: Request, db: AsyncSession = Depends(get
     if user_id:
         return [_scholarship_response(s, score, breakdown) for s, score, breakdown in rows]
     return [ScholarshipResponse.model_validate(row[0]) for row in rows]
+
+
+@router.get("/filters/metadata")
+async def filter_metadata(db: AsyncSession = Depends(get_db)):
+    """Single source of truth for the frontend FilterPanel.
+
+    Returns the list of currently-filterable values derived from the
+    scholarships table (so the UI only ever shows values that have
+    data) plus the static filter labels (English tests, funding
+    types, degree classes) that don't change with data.
+    """
+    # Distinct host countries, sorted
+    country_rows = await db.execute(
+        select(Scholarship.host_country)
+        .distinct()
+        .order_by(Scholarship.host_country)
+    )
+    countries = [r[0] for r in country_rows.all() if r[0]]
+
+    # Distinct fields of study — unnest the array, distinct, sort
+    field_rows = await db.execute(
+        select(func.unnest(Scholarship.fields_of_study))
+        .distinct()
+        .order_by(func.unnest(Scholarship.fields_of_study))
+    )
+    fields = [r[0] for r in field_rows.all() if r[0]]
+
+    # Distinct degree levels — unnest the array, distinct, sort
+    degree_rows = await db.execute(
+        select(func.unnest(Scholarship.degree_levels))
+        .distinct()
+        .order_by(func.unnest(Scholarship.degree_levels))
+    )
+    degrees = [r[0] for r in degree_rows.all() if r[0]]
+
+    # Distinct funding types actually present
+    funding_rows = await db.execute(
+        select(Scholarship.funding_type)
+        .distinct()
+        .order_by(Scholarship.funding_type)
+    )
+    funding_types = [r[0] for r in funding_rows.all() if r[0]]
+
+    return {
+        "countries": countries,
+        "fields": fields,
+        "degrees": degrees,
+        "funding_types": funding_types,
+        # Static lists — the filter supports these values even if no
+        # scholarships currently use them, so the user can still see
+        # the option and discover the gap.
+        "english_tests": ["IELTS", "TOEFL", "PTE", "Duolingo", "Cambridge"],
+        "degree_labels": {
+            "bachelor": "BSc / Bachelor",
+            "master": "MSc / Master",
+            "phd": "PhD",
+            "other": "Other",
+        },
+        "funding_labels": {
+            "fully_funded": "Fully funded",
+            "partial": "Partial funding",
+            "stipend_only": "Stipend only",
+        },
+    }
 
 
 @router.get("/{slug}", response_model=ScholarshipResponse)
