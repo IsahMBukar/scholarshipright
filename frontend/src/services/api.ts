@@ -74,6 +74,38 @@ export interface Profile {
 // API client
 const api = axios.create({ baseURL: API_URL, withCredentials: true });
 
+// Filter metadata — the canonical list of every filter value the
+// backend supports, plus display labels. The FilterPanel renders
+// directly from this so a new scholarship row in the DB shows up
+// in the dropdown without a frontend deploy.
+export interface FilterMetadata {
+  countries: string[];
+  fields: string[];
+  degrees: string[];
+  funding_types: string[];
+  english_tests: string[];
+  degree_labels: Record<string, string>;
+  funding_labels: Record<string, string>;
+}
+
+let _filterMetadataCache: FilterMetadata | null = null;
+let _filterMetadataInflight: Promise<FilterMetadata> | null = null;
+
+export async function fetchFilterMetadata(force = false): Promise<FilterMetadata> {
+  if (!force && _filterMetadataCache) return _filterMetadataCache;
+  if (!force && _filterMetadataInflight) return _filterMetadataInflight;
+  _filterMetadataInflight = api
+    .get<FilterMetadata>('/api/scholarships/filters/metadata')
+    .then((r) => {
+      _filterMetadataCache = r.data;
+      return r.data;
+    })
+    .finally(() => {
+      _filterMetadataInflight = null;
+    });
+  return _filterMetadataInflight;
+}
+
 // Scholarships API
 export async function fetchScholarships(params: Record<string, string> = {}): Promise<ScholarshipListResponse> {
   const { data } = await api.get('/api/scholarships', { params });

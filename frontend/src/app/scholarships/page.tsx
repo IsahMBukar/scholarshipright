@@ -3,43 +3,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
 import ScholarshipCard from '@/components/ScholarshipCard';
-import FilterBar from '@/components/FilterBar';
+import FilterPanel, { EMPTY_FILTERS, activeFilterCount, type FilterState } from '@/components/FilterPanel';
+import ActiveFilterChips from '@/components/ActiveFilterChips';
 import { ScholarshipListSkeleton } from '@/components/Skeletons';
 import NotificationBell from '@/components/NotificationBell';
-import OnboardingProgress from '@/components/OnboardingProgress';
 import { useOnboarding } from '@/hooks/useOnboarding';
+import { fetchFilterMetadata } from '@/services/api';
 import { fetchScholarships, saveScholarship, removeSavedScholarship, fetchSavedScholarships, updateSavedScholarship } from '@/services/api';
-import type { Scholarship, ScholarshipListResponse } from '@/services/api';
+import type { Scholarship, ScholarshipListResponse, FilterMetadata } from '@/services/api';
+import { filtersToApiParams } from '@/lib/filterParams';
 
 const TABS = ['Recommended', 'Saved', 'Applied', 'External'];
-
-// Map filter labels to API query params
-function buildFilterParams(filters: string[], search: string): Record<string, string> {
-  const params: Record<string, string> = { limit: '50' };
-  const degrees: string[] = [];
-
-  for (const f of filters) {
-    switch (f) {
-      case 'Master': degrees.push('master'); break;
-      case 'PhD': degrees.push('phd'); break;
-      case 'Fully Funded': params.funding = 'fully_funded'; break;
-      case 'No IELTS': params.no_ielts = 'true'; break;
-      case 'Deadline Soon': {
-        const d = new Date();
-        d.setDate(d.getDate() + 30);
-        params.deadline_before = d.toISOString().split('T')[0];
-        break;
-      }
-      case 'Country': params.country = 'UK,USA,Germany,Japan,Australia,Canada'; break;
-      case 'Field': break; // Too many to pre-filter; skip
-    }
-  }
-
-  if (degrees.length > 0) params.degree = degrees.join(',');
-  if (search) params.search = search;
-
-  return params;
-}
 
 export default function ScholarshipsPage() {
   const [activeTab, setActiveTab] = useState('Recommended');
@@ -47,11 +21,12 @@ export default function ScholarshipsPage() {
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [savedStatuses, setSavedStatuses] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
-  const [activeFilters, setActiveFilters] = useState<string[]>([]);
+  const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [meta, setMeta] = useState<FilterMetadata | null>(null);
 
   // Match scores are only meaningful once the user has a complete profile.
   // Until then, hide them (and the deterministic placeholder) so we don't
@@ -59,11 +34,19 @@ export default function ScholarshipsPage() {
   const ob = useOnboarding();
   const showMatchScores = !ob.loading && ob.hasProfile;
 
+  // Filter metadata (countries, fields, etc.) is needed by the chip
+  // labels in ActiveFilterChips even when the FilterPanel has been
+  // closed, so we load it at the page level too. The FilterPanel
+  // loads it independently and shows it inline.
+  useEffect(() => {
+    fetchFilterMetadata().then(setMeta).catch(() => {});
+  }, []);
+
   // Fetch scholarships whenever filters or search changes
-  const loadScholarships = useCallback(async (filters: string[], search: string) => {
+  const loadScholarships = useCallback(async (nextFilters: FilterState, search: string) => {
     setLoading(true);
     try {
-      const params = buildFilterParams(filters, search);
+      const params = filtersToApiParams(nextFilters, { search });
       const schData = await fetchScholarships(params);
       setScholarships(schData.items || []);
       setTotal(schData.total || 0);
@@ -89,18 +72,18 @@ export default function ScholarshipsPage() {
         setSavedIds(ids);
         setSavedStatuses(statuses);
       } catch {}
-      await loadScholarships([], '');
+      await loadScholarships(EMPTY_FILTERS, '');
     }
     init();
   }, [loadScholarships]);
 
-  // Debounced search
+  // Debounced search + filter changes
   useEffect(() => {
     const timer = setTimeout(() => {
-      loadScholarships(activeFilters, searchQuery);
+      loadScholarships(filters, searchQuery);
     }, 400);
     return () => clearTimeout(timer);
-  }, [searchQuery, activeFilters, loadScholarships]);
+  }, [searchQuery, filters, loadScholarships]);
 
   async function handleSave(id: string) {
     if (savedIds.has(id)) {
@@ -123,12 +106,6 @@ export default function ScholarshipsPage() {
     // Set status to applying
     await updateSavedScholarship(id, { status: 'applying' }).catch(() => {});
     setSavedStatuses((prev) => ({ ...prev, [id]: 'applying' }));
-  }
-
-  function toggleFilter(filter: string) {
-    setActiveFilters((prev) =>
-      prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter]
-    );
   }
 
   // Filter scholarships for Saved/Applied tabs (client-side from savedIds)
@@ -187,8 +164,14 @@ export default function ScholarshipsPage() {
           </div>
         </div>
 
-        {/* Filter bar */}
-        <FilterBar activeFilters={activeFilters} onToggleFilter={toggleFilter} />
+        {/* Filter panel — desktop: inline; mobile: bottom sheet (inside the component) */}
+        <div className="mt-3">
+          <FilterPanel
+            filters={filters}
+            onChange={setFilters}
+            resultCount={total}
+          />
+        </div>
       </div>
       </div>
 
@@ -257,12 +240,18 @@ export default function ScholarshipsPage() {
           </div>
         )}
 
-        {/* Result count */}
+        {/* Active filter chips + result count */}
         {!loading && (
-          <p className="text-[12px] text-text-secondary mb-3">
-            {total} scholarship{total !== 1 ? 's' : ''} found
-            {activeFilters.length > 0 && ` with ${activeFilters.length} filter${activeFilters.length > 1 ? 's' : ''}`}
-          </p>
+          <div className="flex flex-col gap-2 mb-3">
+            <ActiveFilterChips
+              filters={filters}
+              onChange={setFilters}
+              labels={meta ? { degree_labels: meta.degree_labels, funding_labels: meta.funding_labels } : undefined}
+            />
+            <p className="text-[12px] text-text-secondary">
+              <strong className="text-text-primary">{total}</strong> scholarship{total !== 1 ? 's' : ''} found
+            </p>
+          </div>
         )}
 
         {/* Scholarship feed */}
@@ -287,9 +276,9 @@ export default function ScholarshipsPage() {
                 <p className="text-[16px] text-text-secondary">
                   {activeTab === 'Saved' ? 'No saved scholarships yet' : activeTab === 'Applied' ? 'No applications started yet' : 'No scholarships match your filters'}
                 </p>
-                {activeFilters.length > 0 && (
+                {activeFilterCount(filters) > 0 && (
                   <button
-                    onClick={() => setActiveFilters([])}
+                    onClick={() => setFilters(EMPTY_FILTERS)}
                     className="mt-3 text-[13px] text-primary font-medium hover:underline"
                   >
                     Clear all filters
