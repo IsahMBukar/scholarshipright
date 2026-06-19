@@ -61,6 +61,8 @@ export interface OnboardingState {
   nextSlide: () => void;
   prevSlide: () => void;
   resetSlides: () => void;
+  // Mark chat step done (localStorage + React state)
+  markChattedNow: () => void;
 }
 
 // localStorage key bases. These are SCOPED per user at the call site
@@ -263,6 +265,25 @@ export function useOnboarding(): OnboardingState {
     setSlideIndexState(0);
   }, [userId]);
 
+  // markChattedNow — flip the chat step to "done" both in localStorage
+  // (persists across page loads) AND in React state (so the
+  // OnboardingProgress reminder hides immediately and the
+  // /onboarding redirect effect sees percent===100). The previous
+  // version only wrote localStorage, which left users stuck on
+  // slide 4 of the wizard even after clicking "Open Scholara" —
+  // the React state had hasChatted=false so percent stayed 80%.
+  // Standalone `markChatted` (exported at the bottom) is kept for
+  // backward compatibility but new code should use this method.
+  const markChattedNow = useCallback(() => {
+    if (typeof window === 'undefined' || !userId) return;
+    try {
+      window.localStorage.setItem(scopedKey(CHAT_FLAG_KEY, userId), '1');
+      setHasChatted(true);
+    } catch {
+      // ignore quota / privacy-mode errors
+    }
+  }, [userId]);
+
   // ── Save profile fields (used by the inline profile slide) ───────
   // Returns the saved Profile or null on failure. We refresh internal
   // state so the next /api/profile call sees the new values.
@@ -336,6 +357,7 @@ export function useOnboarding(): OnboardingState {
     nextSlide,
     prevSlide,
     resetSlides,
+    markChattedNow,
   };
 }
 

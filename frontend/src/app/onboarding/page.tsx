@@ -65,33 +65,26 @@ export default function OnboardingPage() {
       .finally(() => setAuthChecked(true));
   }, [router]);
 
-  // ── Redirect completed users away from /onboarding ──────────────
-  // A user is "completed" when they have a source (resume or manual
-  // stub) AND a complete profile. We only redirect on the FIRST
-  // render after data loads — if they navigate back to /onboarding
-  // mid-flow, the slideIndex is already > 0 and we let them finish.
+  // ── Redirect when user has nothing left to gain from the wizard ──
+  // "Done" means all 5 onboarding steps are complete:
+  //   account + source (resume/manual) + profile + matches + chat.
+  // A user mid-wizard (e.g. on slide 3 with resume+profile already
+  // uploaded) keeps their place and is NOT redirected — that's the
+  // "Finish Setup" reminder flow. They can come back and pick up
+  // from where they left off.
   //
-  // We intentionally do NOT depend on ob.slideIndex here, because
-  // for a completed user the persisted slideIndex is usually 3 or 4
-  // (they finished), and a hard redirect is the right behavior
-  // regardless. The mid-flow protection comes from checking the
-  // FRESH state: if the user has been on this page for a while and
-  // has touched the slideIndex, that state is already > 0 and the
-  // check below wouldn't redirect them anyway.
+  // This replaced the old `hasResume && hasProfile` check, which
+  // incorrectly fired on slide 3 mid-wizard (a user who uploaded a
+  // resume and filled the profile at slides 1-2 has both flags true
+  // before they ever see the matches/Scholara slides). The percent
+  // signal is stricter and matches what the reminder UI cares about
+  // (it hides at 100% too — see OnboardingProgress).
   useEffect(() => {
     if (ob.loading) return;
-    // A returning user mid-flow has ob.slideIndex > 0. Don't redirect.
-    if (ob.slideIndex > 0) return;
-    // A completed user has BOTH a source and a complete profile.
-    if (ob.hasResume && ob.hasProfile) {
+    if (ob.percent === 100) {
       router.push('/scholarships');
     }
-    // hasManualSource covers users who picked "I don't have a resume"
-    // and filled in the manual path instead.
-    else if (ob.hasManualSource && ob.hasProfile) {
-      router.push('/scholarships');
-    }
-  }, [ob.loading, ob.hasResume, ob.hasProfile, ob.hasManualSource, ob.slideIndex, router]);
+  }, [ob.loading, ob.percent, router]);
 
   if (!authChecked || ob.loading) {
     return (
@@ -102,7 +95,11 @@ export default function OnboardingPage() {
   }
 
   const handleSkipAll = () => {
-    ob.resetSlides();
+    // Do NOT reset slideIndex — the user can re-enter /onboarding later
+    // via the "Finish Setup" reminder (onboardingProgress card) and
+    // resume from this slide. The /onboarding page already redirects
+    // completed users (hasResume && hasProfile) away, so a stale
+    // slideIndex won't trap them in the wizard.
     router.push('/scholarships');
   };
 
@@ -166,7 +163,8 @@ export default function OnboardingPage() {
         <ScholaraIntroSlide
           onComplete={() => router.push('/chat')}
           onSkip={() => {
-            ob.resetSlides();
+            // No resetSlides — slideIndex stays at 4, completion is
+            // derived from hasResume && hasProfile in the redirect effect.
             router.push('/scholarships');
           }}
         />

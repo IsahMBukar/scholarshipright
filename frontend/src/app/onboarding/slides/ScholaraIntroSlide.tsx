@@ -1,14 +1,19 @@
 'use client';
 
-import { markChatted } from '@/hooks/useOnboarding';
+import { useOnboarding } from '@/hooks/useOnboarding';
 
 /**
  * ScholaraIntroSlide — slide 4 (final) of the onboarding carousel.
  *
  * Tries Scholara in 1 sentence, shows 3 sample prompts the user can
- * try, and offers "Open Scholara" or "Skip for now".
+ * try, and offers "Open Scholara" or "Browse scholarships first".
  *
- * Optional: the user can skip without consequences.
+ * Any positive action (Open Scholara or Browse scholarships first)
+ * marks the chat step as done so the user is considered finished
+ * with the wizard — the OnboardingProgress reminder hides and the
+ * /onboarding redirect kicks in. "Skip for now" is the explicit
+ * deferral path (keeps the reminder visible until the user comes
+ * back via "Finish Setup").
  */
 
 const SAMPLE_PROMPTS = [
@@ -24,9 +29,18 @@ export default function ScholaraIntroSlide({
   onComplete: () => void;
   onSkip: () => void;
 }) {
+  const ob = useOnboarding();
+
   const handleOpen = () => {
-    markChatted();
+    ob.markChattedNow();
     onComplete();
+  };
+
+  const handleBrowseFirst = () => {
+    // User chose to skip chat and go straight to scholarships — still
+    // marks the wizard as done. They can return to Scholara from /chat
+    // any time; we shouldn't keep nudging them via the wizard.
+    ob.markChattedNow();
   };
 
   return (
@@ -73,6 +87,7 @@ export default function ScholaraIntroSlide({
         </button>
         <a
           href="/scholarships"
+          onClick={handleBrowseFirst}
           className="px-5 py-3 text-[13px] font-semibold text-text-secondary hover:text-primary transition-colors text-center"
         >
           Browse scholarships first →
