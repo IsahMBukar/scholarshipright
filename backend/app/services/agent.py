@@ -110,7 +110,7 @@ def _is_llm_configured() -> bool:
         settings = get_settings()
     except Exception:  # noqa: BLE001
         return False
-    return bool(getattr(settings, "agent_api_key", ""))
+    return bool(settings.resolved_llm_api_key)
 
 
 AGENT_SYSTEM_PROMPT = """You are Scholara, an expert AI scholarship advisor built into ScholarshipRight.
@@ -313,7 +313,7 @@ def _llm_request_body(
     """
     settings = get_settings()
     body: dict = {
-        "model": settings.agent_model,
+        "model": settings.resolved_llm_model,
         "messages": messages,
         "temperature": 0.4,
         "max_tokens": 4096,
@@ -368,16 +368,16 @@ async def _llm_call_with_tools(
     for the caller to surface in the SSE stream.
     """
     if not _is_llm_configured():
-        return None, make_agent_error(LLM_AUTH, technical="agent_api_key missing", retryable=False)
+        return None, make_agent_error(LLM_AUTH, technical="llm_api_key missing", retryable=False)
 
     settings = get_settings()
     body = _llm_request_body(messages, stream=False, tools=tools)
     try:
         async with httpx.AsyncClient(timeout=LLM_CHAT_TIMEOUT) as client:
             response = await client.post(
-                f"{settings.agent_base_url}/chat/completions",
+                f"{settings.resolved_llm_base_url}/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {settings.agent_api_key}",
+                    "Authorization": f"Bearer {settings.resolved_llm_api_key}",
                     "Content-Type": "application/json",
                 },
                 content=json.dumps(body),
@@ -403,15 +403,15 @@ async def _llm_call_with_tools(
 def _extract_delta(chunk: dict) -> tuple[str, str]:
     """Return (visible_content, reasoning_content) for a single SSE chunk.
 
-    The 0G router exposes the model's chain-of-thought in a separate
-    `delta.reasoning_content` field. We surface it as a `thinking` SSE event
-    so the UI can show a "Scholara is thinking..." indicator.
+    Different routers expose chain-of-thought in either `delta.reasoning_content`
+    (DeepSeek) or `delta.reasoning` (StepFun / other routers). We surface it as a
+    `thinking` SSE event so the UI can show a "Scholara is thinking..." indicator.
     """
     try:
         choice = chunk.get("choices", [{}])[0]
         delta = choice.get("delta") or {}
         content = delta.get("content") or ""
-        reasoning = delta.get("reasoning_content") or ""
+        reasoning = delta.get("reasoning_content") or delta.get("reasoning") or ""
         return content, reasoning
     except Exception:
         return "", ""
@@ -610,9 +610,9 @@ async def _stream_llm_answer(messages: list[dict]) -> AsyncGenerator[dict, None]
             try:
                 async with client.stream(
                     "POST",
-                    f"{settings.agent_base_url}/chat/completions",
+                    f"{settings.resolved_llm_base_url}/chat/completions",
                     headers={
-                        "Authorization": f"Bearer {settings.agent_api_key}",
+                        "Authorization": f"Bearer {settings.resolved_llm_api_key}",
                         "Content-Type": "application/json",
                     },
                     content=json.dumps(_llm_request_body(messages, stream=True)),
@@ -692,7 +692,7 @@ async def stream_agent_response(
          always closes cleanly.
     """
     if not _is_llm_configured():
-        err = make_agent_error(LLM_AUTH, technical="agent_api_key missing", retryable=False)
+        err = make_agent_error(LLM_AUTH, technical="llm_api_key missing", retryable=False)
         yield {"event": "error", "data": err.to_dict()}
         return
 
@@ -756,7 +756,7 @@ async def stream_agent_response(
         if not tool_calls:
             content = (message_obj.get("content") or "")
             content = _strip_think_blocks(content)
-            reasoning = (message_obj.get("reasoning_content") or "").strip()
+            reasoning = (message_obj.get("reasoning_content") or message_obj.get("reasoning") or "").strip()
             if reasoning:
                 yield {"event": "thinking", "data": reasoning}
             if content.strip():
@@ -858,7 +858,7 @@ async def call_agent_structured(
     structured payload or a structured `error` envelope on failure.
     """
     if not _is_llm_configured():
-        err = make_agent_error(LLM_AUTH, technical="agent_api_key missing", retryable=False)
+        err = make_agent_error(LLM_AUTH, technical="llm_api_key missing", retryable=False)
         return {"type": action or "chat", "error": True, **err.to_dict()}
 
     tool_defs = get_tool_definitions()
@@ -898,7 +898,7 @@ async def call_agent_structured(
         if not tool_calls:
             content = (message_obj.get("content") or "")
             content = _strip_think_blocks(content)
-            reasoning = (message_obj.get("reasoning_content") or "").strip()
+            reasoning = (message_obj.get("reasoning_content") or message_obj.get("reasoning") or "").strip()
             if not content.strip():
                 err = make_agent_error(LLM_EMPTY_RESPONSE, technical="empty content")
                 return {"type": action or "chat", "error": True, **err.to_dict()}
@@ -968,9 +968,9 @@ async def _legacy_call(prompt: str) -> dict:
     try:
         async with httpx.AsyncClient(timeout=LLM_CHAT_TIMEOUT) as client:
             response = await client.post(
-                f"{settings.agent_base_url}/chat/completions",
+                f"{settings.resolved_llm_base_url}/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {settings.agent_api_key}",
+                    "Authorization": f"Bearer {settings.resolved_llm_api_key}",
                     "Content-Type": "application/json",
                 },
                 json=_llm_request_body(_messages(prompt), stream=False),

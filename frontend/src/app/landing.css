@@ -1,0 +1,88 @@
+/* ═══ Landing page animations — V7 Match-First ══════════════════ */
+/* Custom CSS for effects that can't be expressed as Tailwind utilities:
+   @property (Houdini), @keyframes, ::before pseudo-elements             */
+
+/* ── Border beam: animated conic gradient sweep ─────────────────── */
+@property --sr-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes sr-beam {
+  to { --sr-angle: 360deg; }
+}
+.sr-border-beam {
+  position: relative;
+  isolation: isolate;
+}
+.sr-border-beam::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(from var(--sr-angle, 0deg), transparent 60%, #f5b942 80%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: sr-beam 3s linear infinite;
+  z-index: -1;
+}
+
+/* ── Spotlight: radial glow on cards ────────────────────────────── */
+.sr-spotlight {
+  position: relative;
+}
+.sr-spotlight::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: radial-gradient(600px circle at 50% 0%, rgba(245, 185, 66, 0.16), transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+.sr-spotlight > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Floating animation for chat bubbles ────────────────────────── */
+@keyframes sr-floaty {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.sr-float { animation: sr-floaty 6s ease-in-out infinite; }
+.sr-float-d1 { animation-delay: -2s; }
+.sr-float-d2 { animation-delay: -4s; }
+
+/* ── Chat typing dots ───────────────────────────────────────────── */
+@keyframes sr-typing {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-3px); }
+}
+.sr-typing-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #1a1a1a;
+  margin: 0 1px;
+  opacity: 0.4;
+  animation: sr-typing 1.4s infinite;
+}
+.sr-typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.sr-typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* ── Shimmer text gradient ──────────────────────────────────────── */
+@keyframes sr-shimmer {
+  to { background-position: -200% 0; }
+}
+.sr-shimmer {
+  background: linear-gradient(110deg, #f5b942 30%, #ffffff 50%, #f5b942 70%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: sr-shimmer 4s linear infinite;
+}

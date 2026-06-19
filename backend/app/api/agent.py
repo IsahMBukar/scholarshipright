@@ -1,5 +1,6 @@
 """Agent API endpoints for Scholara AI advisor with streaming and tool calling."""
 import json
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +32,7 @@ from app.services.agent import (
 )
 from app.services.scoring import calculate_resume_score
 from app.core.rate_limit import agent_rate_limit
+from app.core.config import get_settings
 from app.services.agent_errors import (
     INTERNAL_ERROR,
     MATCHES_NOT_COMPUTED,
@@ -593,3 +595,62 @@ async def list_agent_sessions(
         }
         for s in sessions
     ]
+
+
+@router.get("/health")
+async def agent_health(
+    user: User = Depends(get_current_user),
+):
+    """Ping the configured LLM provider and report whether it responds.
+
+    Does not expose the API key. Returns HTTP 200 with a diagnostic payload
+    so operators can verify their LLM_BASE_URL / LLM_API_KEY / LLM_MODEL
+    configuration by hitting one endpoint.
+    """
+    from app.services.agent import _is_llm_configured
+
+    if not _is_llm_configured():
+        return {
+            "configured": False,
+            "reachable": False,
+            "error": "LLM_API_KEY not configured",
+        }
+
+    settings = get_settings()
+    base_url = settings.resolved_llm_base_url.rstrip("/")
+    model = settings.resolved_llm_model
+
+    payload = {
+        "configured": True,
+        "base_url": base_url,
+        "model": model,
+        "reachable": False,
+        "provider_status": None,
+        "error": None,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                f"{base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {settings.resolved_llm_api_key}"},
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": "You are a health-check bot."},
+                        {"role": "user", "content": "Reply with exactly: ok"},
+                    ],
+                    "max_tokens": 10,
+                    "temperature": 0.0,
+                },
+            )
+            payload["provider_status"] = resp.status_code
+            if resp.status_code == 200:
+                payload["reachable"] = True
+            else:
+                body = resp.text[:200]
+                payload["error"] = f"HTTP {resp.status_code}: {body}"
+    except Exception as e:  # noqa: BLE001
+        payload["error"] = f"{type(e).__name__}: {str(e)[:200]}"
+
+    return payload

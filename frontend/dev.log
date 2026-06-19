@@ -1,0 +1,33 @@
+
+> scholarshipright-frontend@0.1.0 dev
+> next dev
+
+ ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of /home/alaiisah/Desktop/package-lock.json as the root directory.
+ To silence this warning, set `outputFileTracingRoot` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/output#caveats for more information.
+ Detected additional lockfiles: 
+   * /home/alaiisah/Desktop/Scholarshipright/frontend/package-lock.json
+
+   ▲ Next.js 15.5.19
+   - Local:        http://localhost:3000
+
+ ✓ Starting...
+   Disabled SWC as replacement for Babel because of custom Babel configuration ".babelrc" https://nextjs.org/docs/messages/swc-disabled
+   `compiler` options in `next.config.js` will be ignored while using Babel https://nextjs.org/docs/messages/ignored-compiler-options
+ ✓ Ready in 17.3s
+ ○ Compiling / ...
+   Using external babel configuration from /home/alaiisah/Desktop/Scholarshipright/frontend/.babelrc
+ ⚠ It looks like there is a custom Babel configuration that can be removed.
+ ✓ Compiled / in 19.5s (1512 modules)
+ GET / 200 in 21653ms
+ GET / 200 in 483ms
+ ○ Compiling /signup ...
+ ✓ Compiled /signup in 4.7s (1543 modules)
+ GET /signup 200 in 5264ms
+ GET /signup 200 in 186ms
+ ○ Compiling /login ...
+ ✓ Compiled /login in 1949ms (1547 modules)
+ GET /login 200 in 2427ms
+ GET / 200 in 1437ms
+[?25h

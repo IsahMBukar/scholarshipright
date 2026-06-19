@@ -7,18 +7,16 @@ settings = get_settings()
 
 
 def _llm_chat_url() -> str:
-    """Build the chat-completions URL from the configured base URL.
+    """Build the chat-completions URL from the configured LLM base URL.
 
-    The 0G router (and most OpenAI-compatible providers) serves chat at
-    /v1/chat/completions. The configured OPENAI_BASE_URL already includes /v1,
-    so we simply append /chat/completions to whatever the operator set — we
-    do NOT strip /v1, because the 0G router returns 404 on the bare path.
+    Works for any OpenAI-compatible endpoint. The configured LLM_BASE_URL
+    already includes /v1 (or /api/v1), so we simply append /chat/completions.
 
-    Examples (with the key in .env):
-      https://router-api.0g.ai/v1     -> https://router-api.0g.ai/v1/chat/completions   ✓
-      https://api.xiaomimimo.com/v1   -> https://api.xiaomimimo.com/v1/chat/completions ✓
+    Examples:
+      https://api.openai.com/v1      -> https://api.openai.com/v1/chat/completions
+      https://zenmux.ai/api/v1       -> https://zenmux.ai/api/v1/chat/completions
     """
-    base = settings.openai_base_url.rstrip("/")
+    base = settings.resolved_llm_base_url.rstrip("/")
     return f"{base}/chat/completions"
 
 
@@ -64,13 +62,12 @@ async def _vision_extract(b64_image: str, mime_type: str) -> str:
         # Use the configured model for vision. 0G router's minimax-m3
         # supports multimodal input; if it doesn't we fall through to
         # text-only and the caller (analyze_resume) skips this code path.
-        vision_model = settings.openai_model or "minimax-m3"
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
                 _llm_chat_url(),
-                headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+                headers={"Authorization": f"Bearer {settings.resolved_llm_api_key}"},
                 json={
-                    "model": vision_model,
+                    "model": settings.resolved_llm_model,
                     "messages": [
                         {
                             "role": "user",
@@ -305,9 +302,9 @@ Return ONLY valid JSON. No markdown, no code blocks."""
         async with httpx.AsyncClient(timeout=300) as client:
             resp = await client.post(
                 _llm_chat_url(),
-                headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+                headers={"Authorization": f"Bearer {settings.resolved_llm_api_key}"},
                 json={
-                    "model": settings.openai_model or "minimax-m3",
+                    "model": settings.resolved_llm_model,
                     "messages": [
                         {"role": "system", "content": "You are a resume analysis expert. Always return valid JSON only."},
                         {"role": "user", "content": prompt}
@@ -412,9 +409,9 @@ async def rewrite_field(field_name: str, current_value: str, context: str) -> st
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
                 _llm_chat_url(),
-                headers={"Authorization": f"Bearer {settings.openai_api_key}"},
+                headers={"Authorization": f"Bearer {settings.resolved_llm_api_key}"},
                 json={
-                    "model": settings.openai_model or "minimax-m3",
+                    "model": settings.resolved_llm_model,
                     "messages": [
                         {"role": "system", "content": "You are a professional resume writer for international scholarship applications. Improve the given text to be more impactful, specific, and scholarship-ready."},
                         {"role": "user", "content": f"Improve this resume field for a scholarship application.\n\nField: {field_name}\nCurrent content: {current_value}\nContext: {context}\n\nReturn ONLY the improved text, no explanations."}

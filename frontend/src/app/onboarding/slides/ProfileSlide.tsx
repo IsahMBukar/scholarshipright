@@ -223,7 +223,7 @@ export default function ProfileSlide({
           >
             <option value="">Select a field…</option>
             {FIELDS_OF_STUDY.map(f => (
-              <option key={f} value={f}>{f.label}</option>
+              <option key={f.value} value={f.value}>{f.label}</option>
             ))}
           </select>
         </div>
