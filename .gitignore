@@ -13,6 +13,9 @@ backend/uploads/
 backend/debug_output/
 backend/debug_resume.py
 
+# Runtime logs — noisy, not source
+*.log
+
 # Hermes internals (AI agent runtime data)
 .hermes/
 

@@ -20,6 +20,50 @@ def _llm_chat_url() -> str:
     return f"{base}/chat/completions"
 
 
+def _no_thinking_kwargs() -> dict:
+    """Extra body kwargs that disable reasoning/thinking for the LLM call.
+
+    Resume parsing is structured JSON extraction — reasoning just eats
+    output tokens without improving quality. The Scholara agent
+    (services/agent.py) intentionally keeps reasoning ON; this helper is
+    only used by the resume analyzer.
+    """
+    return {"extra_body": {"enable_thinking": False}}
+
+
+def _extract_message_content(data: dict) -> str:
+    """Safely pull the assistant text out of a chat-completions response.
+
+    Reasoning models sometimes return ``content: None`` when they exhaust
+    the token budget on internal thinking (and the JSON never gets
+    emitted). A few providers also surface the actual answer in
+    ``reasoning_content`` instead. This helper covers all three cases:
+
+      1. Normal: ``choices[0].message.content`` is a string.
+      2. Empty/null content + reasoning_content present → use that.
+      3. Both empty → raise with the finish_reason + raw payload so the
+         background task can log what happened instead of crashing on
+         ``None.strip()``.
+    """
+    try:
+        msg = data["choices"][0]["message"]
+        finish = data["choices"][0].get("finish_reason", "?")
+    except (KeyError, IndexError, TypeError) as e:
+        raise RuntimeError(f"Malformed LLM response: {data}") from e
+
+    content = msg.get("content")
+    reasoning = msg.get("reasoning_content")
+
+    if isinstance(content, str) and content.strip():
+        return content
+    if isinstance(reasoning, str) and reasoning.strip():
+        return reasoning
+    raise RuntimeError(
+        f"LLM returned no content (finish_reason={finish}, "
+        f"usage={data.get('usage')})"
+    )
+
+
 
 
 async def extract_text_from_file(file_content: bytes, mime_type: str, filename: str) -> str:
@@ -77,11 +121,12 @@ async def _vision_extract(b64_image: str, mime_type: str) -> str:
                             ]
                         }
                     ],
-                    "max_tokens": 8000
+                    "max_tokens": 8000,
+                    **_no_thinking_kwargs(),
                 }
             )
             data = resp.json()
-            return data["choices"][0]["message"]["content"]
+            return _extract_message_content(data)
     except Exception as e:
         print(f"Vision extraction error: {e}")
         return ""
@@ -310,11 +355,19 @@ Return ONLY valid JSON. No markdown, no code blocks."""
                         {"role": "user", "content": prompt}
                     ],
                     "temperature": 0.3,
-                    "max_tokens": 8000
+                    # Generous budget — the schema is huge (education,
+                    # experience, research_projects, awards, ref_list,
+                    # etc. all as nested arrays). With thinking disabled
+                    # the model can produce 8–15k tokens of structured
+                    # JSON on a long CV. 8000 was truncating mid-stream
+                    # (finish_reason=length) which made the response
+                    # unusable.
+                    "max_tokens": 16000,
+                    **_no_thinking_kwargs(),
                 }
             )
             data = resp.json()
-            content = data["choices"][0]["message"]["content"]
+            content = _extract_message_content(data)
 
             # Strip markdown code blocks if present
             content = content.strip()
@@ -417,11 +470,12 @@ async def rewrite_field(field_name: str, current_value: str, context: str) -> st
                         {"role": "user", "content": f"Improve this resume field for a scholarship application.\n\nField: {field_name}\nCurrent content: {current_value}\nContext: {context}\n\nReturn ONLY the improved text, no explanations."}
                     ],
                     "temperature": 0.5,
-                    "max_tokens": 1000
+                    "max_tokens": 1000,
+                    **_no_thinking_kwargs(),
                 }
             )
             data = resp.json()
-            return data["choices"][0]["message"]["content"].strip()
+            return _extract_message_content(data).strip()
     except Exception as e:
         print(f"AI rewrite error: {e}")
         raise RuntimeError("AI resume rewrite failed") from e
