@@ -27,6 +27,7 @@ class ScholarshipBase(BaseModel):
     requires_application_fee: bool = False
     min_cgpa: Optional[Decimal] = None
     language_of_instruction: str = "English"
+    accepted_english_tests: List[str] = []  # Pairs with Scholarship.accepted_english_tests
     open_date: Optional[date] = None
     deadline: date
     program_start_date: Optional[date] = None
