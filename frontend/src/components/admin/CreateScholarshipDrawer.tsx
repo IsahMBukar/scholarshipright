@@ -29,357 +29,22 @@ import { Plus, AlertTriangle, Info, ExternalLink, Link2 } from 'lucide-react';
 import Drawer from './ui/Drawer';
 import Button from './ui/Button';
 import type { AdminScholarshipCreate } from '@/lib/admin/types';
-
-// Funding options shown in the dropdown. Backend accepts any string, but
-// the canonical set (matching the seed file) is:
-const FUNDING_OPTIONS = [
-  { value: 'fully_funded', label: 'Fully funded' },
-  { value: 'partial', label: 'Partial funding' },
-  { value: 'stipend_only', label: 'Stipend only' },
-];
-
-// English tests offered as quick-checkboxes in the create/edit form. The
-// detail page shows these as pills; the public language_test filter uses
-// them to narrow search. The runtime migration backfills missing values
-// from `host_country`, so admins can leave all unchecked if they're not
-// sure — but ticking the right ones here is what prevents the detail page
-// from showing the wrong tests.
-const ENGLISH_TEST_OPTIONS = [
-  { value: 'IELTS', label: 'IELTS' },
-  { value: 'TOEFL', label: 'TOEFL' },
-  { value: 'PTE', label: 'PTE Academic' },
-  { value: 'Duolingo', label: 'Duolingo English Test' },
-  { value: 'Cambridge', label: 'Cambridge (C1/C2)' },
-];
-
-const DEFAULT_LANGUAGE = 'English';
-const DEFAULT_ACTIVE = true;
-
-// Auto-derive a slug from a name. Lowercase, dashes for spaces, strip
-// non-URL-safe characters.
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 120);
-}
-
-// Parse a comma-separated string into a trimmed, non-empty list. Used for
-// all the array fields (degree_levels, fields_of_study, etc.).
-function parseList(value: string): string[] {
-  return value
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-}
-
-// Empty-form factory. Keeps the field set explicit and easy to scan.
-function emptyForm(): {
-  // Identity
-  name: string;
-  slug: string;
-  slugDirty: boolean; // user has manually edited slug → stop auto-filling
-  host_country: string;
-  host_institution: string;
-  provider: string;
-  // Scope
-  degree_levels: string;
-  fields_of_study: string;
-  eligible_nationalities: string;
-  eligible_regions: string;
-  // Funding
-  funding_type: string;
-  covers_tuition: boolean;
-  covers_living: boolean;
-  covers_flight: boolean;
-  covers_health: boolean;
-  monthly_stipend_usd: string; // string so we can detect empty
-  // Requirements
-  requires_ielts: boolean;
-  min_ielts_score: string;
-  requires_gre: boolean;
-  requires_application_fee: boolean;
-  min_cgpa: string;
-  language_of_instruction: string;
-  // Dates
-  open_date: string;
-  deadline: string;
-  program_start_date: string;
-  duration_months: string;
-  // Content
-  official_url: string;
-  description: string;
-  benefits_summary: string;
-  how_to_apply: string;
-  logo_url: string;
-  // Status
-  is_active: boolean;
-  is_verified: boolean;
-  source: string;
-  // English tests accepted (array, displayed as pills on the detail page)
-  accepted_english_tests: string[];
-} {
-  return {
-    name: '',
-    slug: '',
-    slugDirty: false,
-    host_country: '',
-    host_institution: '',
-    provider: '',
-    degree_levels: '',
-    fields_of_study: '',
-    eligible_nationalities: '',
-    eligible_regions: '',
-    funding_type: 'fully_funded',
-    covers_tuition: true,
-    covers_living: false,
-    covers_flight: false,
-    covers_health: false,
-    monthly_stipend_usd: '',
-    requires_ielts: true,
-    min_ielts_score: '',
-    requires_gre: false,
-    requires_application_fee: false,
-    min_cgpa: '',
-    language_of_instruction: DEFAULT_LANGUAGE,
-    open_date: '',
-    deadline: '',
-    program_start_date: '',
-    duration_months: '',
-    official_url: '',
-    description: '',
-    benefits_summary: '',
-    how_to_apply: '',
-    logo_url: '',
-    is_active: DEFAULT_ACTIVE,
-    is_verified: false,
-    source: 'admin_panel',
-    // Sensible default for English-medium scholarships: IELTS + TOEFL.
-    // Admins can override per-scholarship.
-    accepted_english_tests: ['IELTS', 'TOEFL'],
-  };
-}
-
-// Client-side validation. Returns the first error message, or null.
-function validate(form: ReturnType<typeof emptyForm>): string | null {
-  if (!form.name.trim()) return 'Name is required.';
-  if (!form.slug.trim()) return 'Slug is required.';
-  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(form.slug))
-    return 'Slug must be lowercase letters, digits, and dashes only (e.g. "daad-development").';
-  if (!form.host_country.trim()) return 'Host country is required.';
-  if (!form.funding_type) return 'Funding type is required.';
-  if (!form.deadline) return 'Deadline is required.';
-  if (!form.official_url.trim()) return 'Official URL is required.';
-  if (!/^https?:\/\//i.test(form.official_url))
-    return 'Official URL must start with http:// or https://.';
-  if (form.monthly_stipend_usd && Number.isNaN(Number(form.monthly_stipend_usd)))
-    return 'Monthly stipend must be a number.';
-  if (form.min_ielts_score && Number.isNaN(Number(form.min_ielts_score)))
-    return 'Min IELTS score must be a number.';
-  if (form.min_cgpa && Number.isNaN(Number(form.min_cgpa)))
-    return 'Min CGPA must be a number.';
-  if (form.duration_months && Number.isNaN(Number(form.duration_months)))
-    return 'Duration must be a number of months.';
-  return null;
-}
-
-// Build the POST body from the form state, omitting empty optional fields
-// so the backend's Pydantic schema treats them as "not set" rather than "".
-function buildBody(form: ReturnType<typeof emptyForm>): AdminScholarshipCreate {
-  const body: AdminScholarshipCreate = {
-    name: form.name.trim(),
-    slug: form.slug.trim(),
-    host_country: form.host_country.trim(),
-    funding_type: form.funding_type,
-    deadline: form.deadline,
-    official_url: form.official_url.trim(),
-  };
-  const opt = (v: string) => v.trim() || undefined;
-  const optNum = (v: string) => (v.trim() ? Number(v) : undefined);
-
-  const host_institution = opt(form.host_institution);
-  if (host_institution) body.host_institution = host_institution;
-  const provider = opt(form.provider);
-  if (provider) body.provider = provider;
-  const degree_levels = parseList(form.degree_levels);
-  if (degree_levels.length) body.degree_levels = degree_levels;
-  const fields_of_study = parseList(form.fields_of_study);
-  if (fields_of_study.length) body.fields_of_study = fields_of_study;
-  const eligible_nationalities = parseList(form.eligible_nationalities);
-  if (eligible_nationalities.length)
-    body.eligible_nationalities = eligible_nationalities;
-  const eligible_regions = parseList(form.eligible_regions);
-  if (eligible_regions.length) body.eligible_regions = eligible_regions;
-
-  body.covers_tuition = form.covers_tuition;
-  body.covers_living = form.covers_living;
-  body.covers_flight = form.covers_flight;
-  body.covers_health = form.covers_health;
-  const stipend = optNum(form.monthly_stipend_usd);
-  if (stipend !== undefined) body.monthly_stipend_usd = stipend;
-
-  body.requires_ielts = form.requires_ielts;
-  const min_ielts = optNum(form.min_ielts_score);
-  if (min_ielts !== undefined) body.min_ielts_score = min_ielts;
-  body.requires_gre = form.requires_gre;
-  body.requires_application_fee = form.requires_application_fee;
-  const min_cgpa = optNum(form.min_cgpa);
-  if (min_cgpa !== undefined) body.min_cgpa = min_cgpa;
-  if (form.language_of_instruction)
-    body.language_of_instruction = form.language_of_instruction;
-
-  const open_date = opt(form.open_date);
-  if (open_date) body.open_date = open_date;
-  const program_start_date = opt(form.program_start_date);
-  if (program_start_date) body.program_start_date = program_start_date;
-  const duration_months = optNum(form.duration_months);
-  if (duration_months !== undefined) body.duration_months = duration_months;
-
-  const description = opt(form.description);
-  if (description) body.description = description;
-  const benefits_summary = opt(form.benefits_summary);
-  if (benefits_summary) body.benefits_summary = benefits_summary;
-  const how_to_apply = opt(form.how_to_apply);
-  if (how_to_apply) body.how_to_apply = how_to_apply;
-  const logo_url = opt(form.logo_url);
-  if (logo_url) body.logo_url = logo_url;
-
-  body.is_active = form.is_active;
-  body.is_verified = form.is_verified;
-  const source = opt(form.source);
-  if (source) body.source = source;
-
-  // Always send the array so the backend persists the admin's intent.
-  // Empty array (all unchecked) means "no English tests required" and
-  // overrides the host-country inference on the next migration.
-  body.accepted_english_tests = form.accepted_english_tests;
-
-  return body;
-}
-
-// ── Reusable input primitives ─────────────────────────────────────
-
-function FieldLabel({
-  children,
-  required,
-  hint,
-}: {
-  children: React.ReactNode;
-  required?: boolean;
-  hint?: string;
-}) {
-  return (
-    <div className="flex items-baseline justify-between mb-1">
-      <label className="text-xs uppercase tracking-wide text-text-secondary">
-        {children}
-        {required && <span className="text-red-600 ml-0.5">*</span>}
-      </label>
-      {hint && (
-        <span className="text-[10px] text-text-secondary opacity-70">{hint}</span>
-      )}
-    </div>
-  );
-}
-
-function TextInput({
-  value,
-  onChange,
-  placeholder,
-  type = 'text',
-  className,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  type?: 'text' | 'date' | 'number' | 'url';
-  className?: string;
-}) {
-  return (
-    <input
-      type={type}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      className={
-        'w-full h-10 px-3 text-sm bg-white border border-gray-200 rounded-btn ' +
-        'focus:outline-none focus:ring-1 focus:ring-primary ' +
-        (className ?? '')
-      }
-    />
-  );
-}
-
-function TextArea({
-  value,
-  onChange,
-  placeholder,
-  rows = 3,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  rows?: number;
-}) {
-  return (
-    <textarea
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      rows={rows}
-      className="w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary resize-y"
-    />
-  );
-}
-
-function SectionHeader({
-  children,
-  hint,
-}: {
-  children: React.ReactNode;
-  hint?: string;
-}) {
-  return (
-    <div className="pt-4 mt-2 border-t border-gray-200 first:pt-0 first:mt-0 first:border-t-0">
-      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary mb-3">
-        {children}
-      </h3>
-      {hint && <p className="text-[11px] text-text-secondary -mt-2 mb-3">{hint}</p>}
-    </div>
-  );
-}
-
-function CheckboxRow({
-  label,
-  checked,
-  onChange,
-  description,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  description?: string;
-}) {
-  return (
-    <label className="flex items-start gap-2 text-sm cursor-pointer py-1">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 rounded border-gray-300 text-primary focus:ring-primary"
-      />
-      <span>
-        {label}
-        {description && (
-          <span className="block text-[11px] text-text-secondary">{description}</span>
-        )}
-      </span>
-    </label>
-  );
-}
+import {
+  FUNDING_OPTIONS,
+  ENGLISH_TEST_OPTIONS,
+  emptyForm,
+  validateForm,
+  buildCreateBody,
+  slugify,
+  type ScholarshipForm,
+} from './scholarshipForm';
+import {
+  FieldLabel,
+  TextInput,
+  TextArea,
+  SectionHeader,
+  CheckboxRow,
+} from './FormPrimitives';
 
 // ── Main component ────────────────────────────────────────────────
 
@@ -435,9 +100,9 @@ export default function CreateScholarshipDrawer({
   }, []);
 
   const set = useCallback(
-    <K extends keyof ReturnType<typeof emptyForm>>(
+    <K extends keyof ScholarshipForm>(
       key: K,
-      value: ReturnType<typeof emptyForm>[K]
+      value: ScholarshipForm[K]
     ) => {
       setForm((f) => ({ ...f, [key]: value }));
     },
@@ -445,14 +110,14 @@ export default function CreateScholarshipDrawer({
   );
 
   const handleSave = useCallback(async () => {
-    const err = validate(form);
+    const err = validateForm(form);
     if (err) {
       setValidationError(err);
       return;
     }
     setValidationError(null);
     try {
-      await onCreate(buildBody(form));
+      await onCreate(buildCreateBody(form));
     } catch {
       // onCreate throws on failure; parent sets saveError. We don't
       // need to do anything here — the error renders in the footer.

@@ -4,13 +4,12 @@
 // - DataTable over /api/admin/scholarships (paginated, sortable, filterable).
 // - Top search + active/verified/funding filters.
 // - Primary CTA: "+ New scholarship" → CreateScholarshipDrawer (full form).
-// - Click row → drawer with edit form (is_active, is_verified, name, host_country,
-//   funding_type, deadline, official_url). Save → PATCH /api/admin/scholarships/{id}.
+// - Click row → ScholarshipDrawer (Edit) with all 34 fields, save → PATCH.
 // - Bulk-activate / bulk-deactivate via the DataTable toolbar.
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useMemo, useCallback } from 'react';
-import { Calendar, Globe, CheckCircle2, XCircle, ExternalLink, RotateCw, Plus } from 'lucide-react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { Calendar, Globe, CheckCircle2, XCircle, ExternalLink, RotateCw, Plus, AlertTriangle } from 'lucide-react';
 import AdminLayout from '@/components/admin/AdminLayout';
 import DataTable, { type Column } from '@/components/admin/ui/DataTable';
 import Badge, { type BadgeTone } from '@/components/admin/ui/Badge';
@@ -18,28 +17,38 @@ import Button from '@/components/admin/ui/Button';
 import Drawer from '@/components/admin/ui/Drawer';
 import { useToast } from '@/components/admin/ui/Toast';
 import CreateScholarshipDrawer from '@/components/admin/CreateScholarshipDrawer';
+import {
+  FUNDING_OPTIONS as FORM_FUNDING_OPTIONS,
+  ENGLISH_TEST_OPTIONS,
+  formFromScholarship,
+  buildPatchBody,
+  type ScholarshipForm,
+} from '@/components/admin/scholarshipForm';
+import {
+  FieldLabel,
+  TextInput,
+  TextArea,
+  SectionHeader,
+  CheckboxRow,
+} from '@/components/admin/FormPrimitives';
 import { adminApi, type ListScholarshipsParams } from '@/lib/admin/api';
-import type { AdminScholarshipCreate } from '@/lib/admin/types';
+import type { AdminScholarshipCreate, AdminScholarshipPatch } from '@/lib/admin/types';
 import { AdminApiError } from '@/lib/admin/client';
 import SearchInput from '@/components/admin/ui/SearchInput';
 import type { AdminScholarship } from '@/lib/admin/types';
 
-const FUNDING_OPTIONS = [
+// Page-level filter values for the funding_type dropdown above the table.
+// Note: these are the values admins can FILTER by, not the values in the
+// canonical form dropdown. Kept separate from FORM_FUNDING_OPTIONS (the
+// shared one in scholarshipForm.ts) because the filter UI is a separate
+// concern — admins searching for "partially_funded" should still find
+// rows even if the create/edit form doesn't expose that exact label.
+const PAGE_FUNDING_OPTIONS = [
   'fully_funded',
   'partially_funded',
   'tuition_only',
   'self_funded',
   'loan',
-];
-
-// Mirrors the options in CreateScholarshipDrawer so admins can fix the
-// accepted-test list on an existing row. DB values are uppercase tags.
-const ENGLISH_TEST_OPTIONS = [
-  'IELTS',
-  'TOEFL',
-  'PTE',
-  'Duolingo',
-  'Cambridge',
 ];
 
 function fmtDate(iso: string | null): string {
@@ -261,7 +270,7 @@ export default function AdminScholarshipsPage() {
         className="h-9 px-2 text-sm bg-white border border-gray-200 rounded-btn"
       >
         <option value="">All funding</option>
-        {FUNDING_OPTIONS.map((f) => (
+        {PAGE_FUNDING_OPTIONS.map((f) => (
           <option key={f} value={f}>
             {f.replace('_', ' ')}
           </option>
@@ -421,66 +430,64 @@ function ScholarshipDrawer({
 }: {
   scholarship: AdminScholarship | null;
   onClose: () => void;
-  onSave: (body: {
-    is_active?: boolean;
-    is_verified?: boolean;
-    name?: string;
-    host_country?: string;
-    funding_type?: string;
-    deadline?: string;
-    official_url?: string;
-    accepted_english_tests?: string[] | null;
-  }) => Promise<void>;
+  onSave: (body: AdminScholarshipPatch) => Promise<void>;
   saving: boolean;
   saveError: string | null;
 }) {
-  const [name, setName] = useState('');
-  const [hostCountry, setHostCountry] = useState('');
-  const [fundingType, setFundingType] = useState('');
-  const [deadline, setDeadline] = useState('');
-  const [officialUrl, setOfficialUrl] = useState('');
-  const [isActive, setIsActive] = useState(true);
-  const [isVerified, setIsVerified] = useState(false);
-  const [acceptedEnglishTests, setAcceptedEnglishTests] = useState<string[]>([]);
+  // Single source of truth for all 34 editable fields. The empty form is
+  // only used as a fallback before `formFromScholarship` populates it.
+  const [form, setForm] = useState<ScholarshipForm>(() =>
+    scholarship ? formFromScholarship(scholarship) : ({} as ScholarshipForm)
+  );
 
-  // Sync local form state when row changes
-  useMemo(() => {
-    if (!scholarship) return;
-    setName(scholarship.name);
-    setHostCountry(scholarship.host_country);
-    setFundingType(scholarship.funding_type);
-    setDeadline(scholarship.deadline ? scholarship.deadline.slice(0, 10) : '');
-    setOfficialUrl(scholarship.official_url);
-    setIsActive(scholarship.is_active);
-    setIsVerified(scholarship.is_verified);
-    setAcceptedEnglishTests(scholarship.accepted_english_tests ?? []);
-  }, [scholarship]);
+  // Re-populate whenever a different row is opened. The id is the right
+  // dependency — switching rows would otherwise keep the previous form
+  // until the user typed something.
+  useEffect(() => {
+    if (scholarship) {
+      setForm(formFromScholarship(scholarship));
+    }
+  }, [scholarship?.id, scholarship]);
 
-  const toggleTest = useCallback((test: string, checked: boolean) => {
-    setAcceptedEnglishTests((prev) =>
-      checked ? [...prev, test] : prev.filter((t) => t !== test)
-    );
-  }, []);
+  // Generic setter — type-safe, mirrors the Create drawer pattern.
+  const set = useCallback(
+    <K extends keyof ScholarshipForm>(key: K, value: ScholarshipForm[K]) => {
+      setForm((f) => ({ ...f, [key]: value }));
+    },
+    []
+  );
 
   const handleSave = useCallback(() => {
-    onSave({
-      is_active: isActive,
-      is_verified: isVerified,
-      name: name.trim() || undefined,
-      host_country: hostCountry.trim() || undefined,
-      funding_type: fundingType || undefined,
-      deadline: deadline || undefined,
-      official_url: officialUrl.trim() || undefined,
-      accepted_english_tests: acceptedEnglishTests,
-    });
-  }, [isActive, isVerified, name, hostCountry, fundingType, deadline, officialUrl, acceptedEnglishTests, onSave]);
+    if (!scholarship) return;
+    // buildPatchBody is diff-based: only changed fields hit the wire.
+    onSave(buildPatchBody(form, scholarship));
+  }, [form, scholarship, onSave]);
+
+  const toggleTest = useCallback(
+    (test: string, checked: boolean) => {
+      setForm((f) => {
+        const has = f.accepted_english_tests.includes(test);
+        if (checked && !has) {
+          return { ...f, accepted_english_tests: [...f.accepted_english_tests, test] };
+        }
+        if (!checked && has) {
+          return {
+            ...f,
+            accepted_english_tests: f.accepted_english_tests.filter((t) => t !== test),
+          };
+        }
+        return f;
+      });
+    },
+    []
+  );
 
   return (
     <Drawer
       open={!!scholarship}
       onClose={onClose}
       title={scholarship ? 'Edit scholarship' : ''}
-      widthClass="w-[520px]"
+      widthClass="w-[640px]"
       footer={
         scholarship ? (
           <div className="flex items-center justify-between gap-2">
@@ -506,72 +513,191 @@ function ScholarshipDrawer({
       }
     >
       {scholarship && (
-        <div className="space-y-5">
-          <div>
-            <label className="text-xs uppercase tracking-wide text-text-secondary mb-1 block">
-              Name
-            </label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full h-10 px-3 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          {/* ── Identity ─────────────────────────────────────── */}
+          <SectionHeader hint="Required by backend (PATCH keeps them required).">
+            Identity
+          </SectionHeader>
+          <div className="grid grid-cols-1 gap-3">
             <div>
-              <label className="text-xs uppercase tracking-wide text-text-secondary mb-1 block">
-                Host country
-              </label>
-              <input
-                value={hostCountry}
-                onChange={(e) => setHostCountry(e.target.value)}
-                className="w-full h-10 px-3 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary"
+              <FieldLabel required>Name</FieldLabel>
+              <TextInput
+                value={form.name}
+                onChange={(v) => set('name', v)}
+                placeholder="Chevening Scholarship"
               />
             </div>
             <div>
-              <label className="text-xs uppercase tracking-wide text-text-secondary mb-1 block">
-                Funding type
-              </label>
+              <FieldLabel>Slug</FieldLabel>
+              <TextInput value={form.slug} onChange={() => {}} className="opacity-60 cursor-not-allowed" />
+              <p className="text-[10px] text-text-secondary mt-1">
+                Slug is read-only here — changing it would break public links and match scores.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <FieldLabel required>Host country</FieldLabel>
+                <TextInput
+                  value={form.host_country}
+                  onChange={(v) => set('host_country', v)}
+                />
+              </div>
+              <div>
+                <FieldLabel>Host institution</FieldLabel>
+                <TextInput
+                  value={form.host_institution}
+                  onChange={(v) => set('host_institution', v)}
+                />
+              </div>
+            </div>
+            <div>
+              <FieldLabel>Provider</FieldLabel>
+              <TextInput
+                value={form.provider}
+                onChange={(v) => set('provider', v)}
+                placeholder="e.g. Chevening, DAAD, Fulbright"
+              />
+            </div>
+          </div>
+
+          {/* ── Scope ────────────────────────────────────────── */}
+          <SectionHeader hint="Comma-separated. Empty fields are treated as 'no restriction'.">
+            Scope
+          </SectionHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <FieldLabel>Degree levels</FieldLabel>
+              <TextInput
+                value={form.degree_levels}
+                onChange={(v) => set('degree_levels', v)}
+                placeholder="bachelor, master, phd"
+              />
+            </div>
+            <div>
+              <FieldLabel>Fields of study</FieldLabel>
+              <TextInput
+                value={form.fields_of_study}
+                onChange={(v) => set('fields_of_study', v)}
+                placeholder="computer science, economics"
+              />
+            </div>
+            <div>
+              <FieldLabel>Eligible nationalities</FieldLabel>
+              <TextInput
+                value={form.eligible_nationalities}
+                onChange={(v) => set('eligible_nationalities', v)}
+                placeholder="Nigerian, Kenyan, …"
+              />
+            </div>
+            <div>
+              <FieldLabel>Eligible regions</FieldLabel>
+              <TextInput
+                value={form.eligible_regions}
+                onChange={(v) => set('eligible_regions', v)}
+                placeholder="Sub-Saharan Africa, EU, …"
+              />
+            </div>
+          </div>
+
+          {/* ── Funding ──────────────────────────────────────── */}
+          <SectionHeader>Funding</SectionHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <FieldLabel required>Funding type</FieldLabel>
               <select
-                value={fundingType}
-                onChange={(e) => setFundingType(e.target.value)}
+                value={form.funding_type}
+                onChange={(e) => set('funding_type', e.target.value)}
                 className="w-full h-10 px-3 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary"
               >
-                {FUNDING_OPTIONS.map((f) => (
-                  <option key={f} value={f}>
-                    {f.replace('_', ' ')}
+                {FORM_FUNDING_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
                   </option>
                 ))}
               </select>
             </div>
+            <div>
+              <FieldLabel hint="USD / month">Monthly stipend</FieldLabel>
+              <TextInput
+                value={form.monthly_stipend_usd}
+                onChange={(v) => set('monthly_stipend_usd', v)}
+                type="number"
+                placeholder="1200"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1 mt-2">
+            <CheckboxRow
+              label="Covers tuition"
+              checked={form.covers_tuition}
+              onChange={(v) => set('covers_tuition', v)}
+            />
+            <CheckboxRow
+              label="Covers living"
+              checked={form.covers_living}
+              onChange={(v) => set('covers_living', v)}
+            />
+            <CheckboxRow
+              label="Covers flight"
+              checked={form.covers_flight}
+              onChange={(v) => set('covers_flight', v)}
+            />
+            <CheckboxRow
+              label="Covers health insurance"
+              checked={form.covers_health}
+              onChange={(v) => set('covers_health', v)}
+            />
           </div>
 
+          {/* ── Requirements ─────────────────────────────────── */}
+          <SectionHeader hint="Used by the match engine and shown as pills on the detail page.">
+            Requirements
+          </SectionHeader>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs uppercase tracking-wide text-text-secondary mb-1 block">
-                Deadline
-              </label>
-              <input
-                type="date"
-                value={deadline}
-                onChange={(e) => setDeadline(e.target.value)}
-                className="w-full h-10 px-3 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary"
+              <FieldLabel>Min CGPA</FieldLabel>
+              <TextInput
+                value={form.min_cgpa}
+                onChange={(v) => set('min_cgpa', v)}
+                placeholder="3.5"
               />
             </div>
             <div>
-              <label className="text-xs uppercase tracking-wide text-text-secondary mb-1 block">
-                Official URL
-              </label>
-              <input
-                value={officialUrl}
-                onChange={(e) => setOfficialUrl(e.target.value)}
-                className="w-full h-10 px-3 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary"
+              <FieldLabel>Language of instruction</FieldLabel>
+              <TextInput
+                value={form.language_of_instruction}
+                onChange={(v) => set('language_of_instruction', v)}
+                placeholder="English"
               />
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1 mt-3">
+            <CheckboxRow
+              label="Requires IELTS"
+              checked={form.requires_ielts}
+              onChange={(v) => set('requires_ielts', v)}
+            />
+            <div>
+              <FieldLabel>Min IELTS score</FieldLabel>
+              <TextInput
+                value={form.min_ielts_score}
+                onChange={(v) => set('min_ielts_score', v)}
+                placeholder="6.5"
+              />
+            </div>
+            <CheckboxRow
+              label="Requires GRE"
+              checked={form.requires_gre}
+              onChange={(v) => set('requires_gre', v)}
+            />
+            <CheckboxRow
+              label="Application fee"
+              checked={form.requires_application_fee}
+              onChange={(v) => set('requires_application_fee', v)}
+            />
+          </div>
 
-          <div className="pt-2 border-t border-gray-100">
+          <div className="pt-3 mt-3 border-t border-gray-100">
             <div className="flex items-baseline justify-between mb-2">
               <span className="text-xs uppercase tracking-wide text-text-secondary">
                 Accepted English tests
@@ -582,60 +708,146 @@ function ScholarshipDrawer({
             </div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-1">
               {ENGLISH_TEST_OPTIONS.map((opt) => {
-                const checked = acceptedEnglishTests.includes(opt);
+                const checked = form.accepted_english_tests.includes(opt.value);
                 return (
                   <label
-                    key={opt}
+                    key={opt.value}
                     className="flex items-center gap-2 text-sm cursor-pointer py-1"
                   >
                     <input
                       type="checkbox"
                       checked={checked}
-                      onChange={(e) => toggleTest(opt, e.target.checked)}
+                      onChange={(e) => toggleTest(opt.value, e.target.checked)}
                       className="rounded border-gray-300 text-primary focus:ring-primary"
                     />
-                    <span>{opt}</span>
+                    <span>{opt.label}</span>
                   </label>
                 );
               })}
             </div>
-            {acceptedEnglishTests.length === 0 && (
-              <p className="text-[11px] text-amber-700 mt-1">
-                ⚠ None selected — the detail page will hide the section.
+            {form.accepted_english_tests.length === 0 && (
+              <p className="text-[11px] text-amber-700 mt-1 flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" />
+                None selected — the detail page will hide the section.
               </p>
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-200">
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isActive}
-                onChange={(e) => setIsActive(e.target.checked)}
-                className="rounded border-gray-300"
+          {/* ── Dates ────────────────────────────────────────── */}
+          <SectionHeader>Dates</SectionHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <FieldLabel>Open date</FieldLabel>
+              <TextInput
+                value={form.open_date}
+                onChange={(v) => set('open_date', v)}
+                type="date"
               />
-              <span>Active (visible to users)</span>
-            </label>
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isVerified}
-                onChange={(e) => setIsVerified(e.target.checked)}
-                className="rounded border-gray-300"
+            </div>
+            <div>
+              <FieldLabel required>Deadline</FieldLabel>
+              <TextInput
+                value={form.deadline}
+                onChange={(v) => set('deadline', v)}
+                type="date"
               />
-              <span>Verified</span>
-            </label>
+            </div>
+            <div>
+              <FieldLabel>Program start date</FieldLabel>
+              <TextInput
+                value={form.program_start_date}
+                onChange={(v) => set('program_start_date', v)}
+                type="date"
+              />
+            </div>
+            <div>
+              <FieldLabel hint="months">Duration</FieldLabel>
+              <TextInput
+                value={form.duration_months}
+                onChange={(v) => set('duration_months', v)}
+                type="number"
+                placeholder="12"
+              />
+            </div>
           </div>
 
-          <div className="text-xs text-text-secondary pt-2 border-t border-gray-200">
+          {/* ── Content ──────────────────────────────────────── */}
+          <SectionHeader>Content</SectionHeader>
+          <div>
+            <FieldLabel required>Official URL</FieldLabel>
+            <TextInput
+              value={form.official_url}
+              onChange={(v) => set('official_url', v)}
+              placeholder="https://…"
+            />
+          </div>
+          <div className="mt-3">
+            <FieldLabel>Description</FieldLabel>
+            <TextArea
+              value={form.description}
+              onChange={(v) => set('description', v)}
+              rows={4}
+            />
+          </div>
+          <div className="mt-3">
+            <FieldLabel>Benefits summary</FieldLabel>
+            <TextArea
+              value={form.benefits_summary}
+              onChange={(v) => set('benefits_summary', v)}
+              rows={3}
+            />
+          </div>
+          <div className="mt-3">
+            <FieldLabel>How to apply</FieldLabel>
+            <TextArea
+              value={form.how_to_apply}
+              onChange={(v) => set('how_to_apply', v)}
+              rows={3}
+            />
+          </div>
+          <div className="mt-3">
+            <FieldLabel>Logo URL</FieldLabel>
+            <TextInput
+              value={form.logo_url}
+              onChange={(v) => set('logo_url', v)}
+              placeholder="https://…"
+            />
+          </div>
+
+          {/* ── Status ───────────────────────────────────────── */}
+          <SectionHeader>Status</SectionHeader>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+            <CheckboxRow
+              label="Active (visible to users)"
+              checked={form.is_active}
+              onChange={(v) => set('is_active', v)}
+            />
+            <CheckboxRow
+              label="Verified"
+              checked={form.is_verified}
+              onChange={(v) => set('is_verified', v)}
+            />
+          </div>
+          <div className="mt-3">
+            <FieldLabel>Source</FieldLabel>
+            <TextInput
+              value={form.source}
+              onChange={(v) => set('source', v)}
+              placeholder="admin_panel, seed, external"
+            />
+          </div>
+
+          {/* ── Read-only counters (set by the platform) ──────── */}
+          <div className="text-xs text-text-secondary pt-4 mt-4 border-t border-gray-200">
             <div className="grid grid-cols-2 gap-y-1">
               <span>Views:</span>
               <span className="font-mono">{scholarship.view_count.toLocaleString()}</span>
               <span>Applications:</span>
               <span className="font-mono">{scholarship.application_count.toLocaleString()}</span>
-              <span>Source:</span>
-              <span className="truncate">{scholarship.source ?? '—'}</span>
             </div>
+            <p className="mt-2 text-[10px] text-text-secondary/70">
+              These are platform counters — not editable here.
+            </p>
           </div>
 
           {saveError && (

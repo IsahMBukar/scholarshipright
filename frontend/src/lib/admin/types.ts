@@ -124,18 +124,52 @@ export interface AdminScholarship {
 
 export type ScholarshipsListResponse = PaginatedResponse<AdminScholarship>;
 
-// AdminScholarshipPatch: name, host_country, host_institution, provider,
-// funding_type, deadline, official_url, is_active, is_verified, plus the
-// various list/bool/numeric fields. We only type the fields we use in UI.
+// AdminScholarshipPatch: matches the backend `AdminScholarshipPatch` in
+// backend/app/schemas/admin.py — every field the API can update. We
+// type the full set (not just the ones we use in UI) so the shared
+// `buildPatchBody()` in scholarshipForm.ts compiles. The diff-based
+// PATCH builder only includes fields that actually changed.
 export interface AdminScholarshipPatch {
-  is_active?: boolean;
-  is_verified?: boolean;
+  // Identity
   name?: string;
   host_country?: string;
+  host_institution?: string | null;
+  provider?: string | null;
+  // Scope
+  degree_levels?: string[] | null;
+  fields_of_study?: string[] | null;
+  eligible_nationalities?: string[] | null;
+  eligible_regions?: string[] | null;
+  // Funding
   funding_type?: string;
-  deadline?: string;
+  covers_tuition?: boolean | null;
+  covers_living?: boolean | null;
+  covers_flight?: boolean | null;
+  covers_health?: boolean | null;
+  monthly_stipend_usd?: number | null;
+  // Requirements
+  requires_ielts?: boolean | null;
+  min_ielts_score?: number | string | null;
+  requires_gre?: boolean | null;
+  requires_application_fee?: boolean | null;
+  min_cgpa?: number | string | null;
+  language_of_instruction?: string | null;
+  // Dates
+  open_date?: string | null;
+  deadline?: string | null;
+  program_start_date?: string | null;
+  duration_months?: number | null;
+  // Content
+  description?: string | null;
+  benefits_summary?: string | null;
+  how_to_apply?: string | null;
   official_url?: string;
+  logo_url?: string | null;
   accepted_english_tests?: string[] | null;
+  // Status
+  is_active?: boolean | null;
+  is_verified?: boolean | null;
+  source?: string | null;
 }
 
 // AdminScholarshipCreate: all fields the backend POST /api/admin/scholarships
