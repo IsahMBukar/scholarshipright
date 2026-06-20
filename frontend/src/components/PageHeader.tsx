@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { usePathname } from 'next/navigation';
 import NotificationBell from './NotificationBell';
 import { logoutAndRedirect } from '@/hooks/useLogout';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
@@ -17,6 +18,7 @@ const NAV_ITEMS = [
 export default function PageHeader({ title, children }: { title: string; children?: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const showConfirm = useConfirm();
+  const pathname = usePathname();
 
   return (
     <>
@@ -51,16 +53,22 @@ export default function PageHeader({ title, children }: { title: string; childre
               </button>
             </div>
             <nav className="flex flex-col p-4 gap-1">
-              {NAV_ITEMS.map((item) => (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  className="flex items-center gap-3 px-4 py-3 rounded-xl text-[15px] font-medium text-text-secondary hover:bg-gray-100 hover:text-text-primary transition-colors"
-                >
-                  <span className="material-symbols-outlined text-[22px]">{item.icon}</span>
-                  {item.label}
-                </a>
-              ))}
+              {NAV_ITEMS.map((item) => {
+                const active = pathname === item.href || pathname?.startsWith(item.href + '/');
+                return (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl text-[15px] font-medium transition-colors
+                      ${active
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-text-secondary hover:bg-gray-100 hover:text-text-primary'}`}
+                  >
+                    <span className="material-symbols-outlined text-[22px]">{item.icon}</span>
+                    {item.label}
+                  </a>
+                );
+              })}
             </nav>
             <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 space-y-1">
               <a href="/profile" className="flex items-center gap-3 px-4 py-3 rounded-xl text-[15px] font-medium text-text-secondary hover:bg-gray-100">
