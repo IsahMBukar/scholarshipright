@@ -32,6 +32,16 @@ const FUNDING_OPTIONS = [
   'loan',
 ];
 
+// Mirrors the options in CreateScholarshipDrawer so admins can fix the
+// accepted-test list on an existing row. DB values are uppercase tags.
+const ENGLISH_TEST_OPTIONS = [
+  'IELTS',
+  'TOEFL',
+  'PTE',
+  'Duolingo',
+  'Cambridge',
+];
+
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -419,6 +429,7 @@ function ScholarshipDrawer({
     funding_type?: string;
     deadline?: string;
     official_url?: string;
+    accepted_english_tests?: string[] | null;
   }) => Promise<void>;
   saving: boolean;
   saveError: string | null;
@@ -430,6 +441,7 @@ function ScholarshipDrawer({
   const [officialUrl, setOfficialUrl] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [isVerified, setIsVerified] = useState(false);
+  const [acceptedEnglishTests, setAcceptedEnglishTests] = useState<string[]>([]);
 
   // Sync local form state when row changes
   useMemo(() => {
@@ -441,7 +453,14 @@ function ScholarshipDrawer({
     setOfficialUrl(scholarship.official_url);
     setIsActive(scholarship.is_active);
     setIsVerified(scholarship.is_verified);
+    setAcceptedEnglishTests(scholarship.accepted_english_tests ?? []);
   }, [scholarship]);
+
+  const toggleTest = useCallback((test: string, checked: boolean) => {
+    setAcceptedEnglishTests((prev) =>
+      checked ? [...prev, test] : prev.filter((t) => t !== test)
+    );
+  }, []);
 
   const handleSave = useCallback(() => {
     onSave({
@@ -452,8 +471,9 @@ function ScholarshipDrawer({
       funding_type: fundingType || undefined,
       deadline: deadline || undefined,
       official_url: officialUrl.trim() || undefined,
+      accepted_english_tests: acceptedEnglishTests,
     });
-  }, [isActive, isVerified, name, hostCountry, fundingType, deadline, officialUrl, onSave]);
+  }, [isActive, isVerified, name, hostCountry, fundingType, deadline, officialUrl, acceptedEnglishTests, onSave]);
 
   return (
     <Drawer
@@ -549,6 +569,41 @@ function ScholarshipDrawer({
                 className="w-full h-10 px-3 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
+          </div>
+
+          <div className="pt-2 border-t border-gray-100">
+            <div className="flex items-baseline justify-between mb-2">
+              <span className="text-xs uppercase tracking-wide text-text-secondary">
+                Accepted English tests
+              </span>
+              <span className="text-[10px] text-text-secondary opacity-70">
+                shown as pills on the detail page
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+              {ENGLISH_TEST_OPTIONS.map((opt) => {
+                const checked = acceptedEnglishTests.includes(opt);
+                return (
+                  <label
+                    key={opt}
+                    className="flex items-center gap-2 text-sm cursor-pointer py-1"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => toggleTest(opt, e.target.checked)}
+                      className="rounded border-gray-300 text-primary focus:ring-primary"
+                    />
+                    <span>{opt}</span>
+                  </label>
+                );
+              })}
+            </div>
+            {acceptedEnglishTests.length === 0 && (
+              <p className="text-[11px] text-amber-700 mt-1">
+                ⚠ None selected — the detail page will hide the section.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-200">

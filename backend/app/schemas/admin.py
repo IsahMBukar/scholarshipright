@@ -148,6 +148,10 @@ class AdminScholarshipResponse(BaseModel):
     how_to_apply: Optional[str] = None
     official_url: str
     logo_url: Optional[str] = None
+    # English tests the scholarship accepts (e.g. ["IELTS", "TOEFL", "PTE"]).
+    # Mirrors the public detail-page pill list; admins can override the
+    # host-country inference by setting this explicitly.
+    accepted_english_tests: List[str] = []
     is_active: bool = True
     is_verified: bool = False
     source: Optional[str] = None
@@ -196,6 +200,9 @@ class AdminScholarshipCreate(BaseModel):
     benefits_summary: Optional[str] = None
     how_to_apply: Optional[str] = None
     logo_url: Optional[str] = None
+    # English tests accepted (e.g. ["IELTS", "TOEFL"]). When omitted/empty
+    # the runtime migration backfills via _infer_english_tests(host_country).
+    accepted_english_tests: Optional[List[str]] = None
     is_active: Optional[bool] = None
     is_verified: Optional[bool] = None
     source: Optional[str] = None
@@ -232,6 +239,7 @@ class AdminScholarshipPatch(BaseModel):
     how_to_apply: Optional[str] = None
     official_url: Optional[str] = None
     logo_url: Optional[str] = None
+    accepted_english_tests: Optional[List[str]] = None
     is_active: Optional[bool] = None
     is_verified: Optional[bool] = None
     source: Optional[str] = None

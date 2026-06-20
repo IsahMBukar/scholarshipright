@@ -112,6 +112,7 @@ export interface AdminScholarship {
   how_to_apply: string | null;
   official_url: string;
   logo_url: string | null;
+  accepted_english_tests: string[];
   is_active: boolean;
   is_verified: boolean;
   source: string | null;
@@ -134,6 +135,7 @@ export interface AdminScholarshipPatch {
   funding_type?: string;
   deadline?: string;
   official_url?: string;
+  accepted_english_tests?: string[] | null;
 }
 
 // AdminScholarshipCreate: all fields the backend POST /api/admin/scholarships
@@ -180,6 +182,9 @@ export interface AdminScholarshipCreate {
   benefits_summary?: string | null;
   how_to_apply?: string | null;
   logo_url?: string | null;
+  // English tests accepted (e.g. ["IELTS", "TOEFL"]). When omitted/null
+  // the backend's runtime migration backfills via host-country inference.
+  accepted_english_tests?: string[] | null;
   // Optional — status
   is_active?: boolean | null;
   is_verified?: boolean | null;

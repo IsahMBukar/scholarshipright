@@ -38,6 +38,20 @@ const FUNDING_OPTIONS = [
   { value: 'stipend_only', label: 'Stipend only' },
 ];
 
+// English tests offered as quick-checkboxes in the create/edit form. The
+// detail page shows these as pills; the public language_test filter uses
+// them to narrow search. The runtime migration backfills missing values
+// from `host_country`, so admins can leave all unchecked if they're not
+// sure — but ticking the right ones here is what prevents the detail page
+// from showing the wrong tests.
+const ENGLISH_TEST_OPTIONS = [
+  { value: 'IELTS', label: 'IELTS' },
+  { value: 'TOEFL', label: 'TOEFL' },
+  { value: 'PTE', label: 'PTE Academic' },
+  { value: 'Duolingo', label: 'Duolingo English Test' },
+  { value: 'Cambridge', label: 'Cambridge (C1/C2)' },
+];
+
 const DEFAULT_LANGUAGE = 'English';
 const DEFAULT_ACTIVE = true;
 
@@ -106,6 +120,8 @@ function emptyForm(): {
   is_active: boolean;
   is_verified: boolean;
   source: string;
+  // English tests accepted (array, displayed as pills on the detail page)
+  accepted_english_tests: string[];
 } {
   return {
     name: '',
@@ -142,6 +158,9 @@ function emptyForm(): {
     is_active: DEFAULT_ACTIVE,
     is_verified: false,
     source: 'admin_panel',
+    // Sensible default for English-medium scholarships: IELTS + TOEFL.
+    // Admins can override per-scholarship.
+    accepted_english_tests: ['IELTS', 'TOEFL'],
   };
 }
 
@@ -233,6 +252,11 @@ function buildBody(form: ReturnType<typeof emptyForm>): AdminScholarshipCreate {
   body.is_verified = form.is_verified;
   const source = opt(form.source);
   if (source) body.source = source;
+
+  // Always send the array so the backend persists the admin's intent.
+  // Empty array (all unchecked) means "no English tests required" and
+  // overrides the host-country inference on the next migration.
+  body.accepted_english_tests = form.accepted_english_tests;
 
   return body;
 }
@@ -681,6 +705,45 @@ export default function CreateScholarshipDrawer({
               placeholder="English"
             />
           </div>
+        </div>
+        <div className="pt-2 border-t border-gray-100">
+          <div className="flex items-baseline justify-between mb-2">
+            <span className="text-xs uppercase tracking-wide text-text-secondary">
+              Accepted English tests
+            </span>
+            <span className="text-[10px] text-text-secondary opacity-70">
+              shown as pills on the detail page
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+            {ENGLISH_TEST_OPTIONS.map((opt) => {
+              const checked = form.accepted_english_tests.includes(opt.value);
+              return (
+                <label
+                  key={opt.value}
+                  className="flex items-center gap-2 text-sm cursor-pointer py-1"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => {
+                      set('accepted_english_tests', e.target.checked
+                        ? [...form.accepted_english_tests, opt.value]
+                        : form.accepted_english_tests.filter((t) => t !== opt.value));
+                    }}
+                    className="rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span>{opt.label}</span>
+                </label>
+              );
+            })}
+          </div>
+          {form.accepted_english_tests.length === 0 && (
+            <p className="text-[11px] text-amber-700 mt-1">
+              ⚠ None selected — the detail page will hide the "Accepted English
+              Tests" section for this scholarship.
+            </p>
+          )}
         </div>
       </div>
 
