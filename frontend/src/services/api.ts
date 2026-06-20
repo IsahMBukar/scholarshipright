@@ -4,8 +4,34 @@ import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+export interface MatchBreakdown {
+  // Numeric criterion scores
+  semantic?: number;          // max 30 (cosine sim × 30)
+  field?: number;             // max 15, min 0
+  country?: number;           // max 10, min -25
+  degree?: number;            // max 12, min -25
+  academic?: number;          // max 10, min -12
+  language?: number;          // max 8, min -8
+  resume_keywords?: number;   // max 15, min 0
+  research_experience?: number; // max 10, min 0
+  funding_fit?: number;       // max 6, min 0
+  target_country?: number;    // max 4, min 0
+  start_date?: number;        // max 4, min 0
+  fee?: number;               // max 3, min -5
+  // Diagnostics
+  resume_keyword_details?: {
+    overlap: string[];
+    coverage: number;
+    message?: string;
+  };
+  research_experience_details?: {
+    signals: string[];
+    research_or_grad_program: boolean;
+  };
+  hard_flags?: string[];
+  scoring_version?: string;
+}
 
-// Types
 export interface Scholarship {
   id: string;
   name: string;
@@ -40,7 +66,7 @@ export interface Scholarship {
   is_verified: boolean;
   source?: string;
   match_score?: number;
-  match_breakdown?: Record<string, number>;
+  match_breakdown?: MatchBreakdown;
 }
 
 export interface ScholarshipListResponse {

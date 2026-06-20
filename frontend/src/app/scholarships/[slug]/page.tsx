@@ -7,7 +7,7 @@ import AppLayout from '@/components/AppLayout';
 import GlobalNavDrawer from '@/components/GlobalNavDrawer';
 import { ScholarshipDetailSkeleton } from '@/components/Skeletons';
 import { fetchScholarship, saveScholarship, removeSavedScholarship, fetchSavedScholarships, updateSavedScholarship } from '@/services/api';
-import type { Scholarship } from '@/services/api';
+import type { Scholarship, MatchBreakdown } from '@/services/api';
 
 function deterministicScore(id: string): number {
   let hash = 0;
@@ -105,12 +105,61 @@ export default function ScholarshipDetailPage() {
   ].filter(Boolean) as string[];
 
   const baseScore = score;
-  const matchMetrics = [
-    { label: 'Field Match', value: Math.min(100, baseScore + 5) },
-    { label: 'Degree Match', value: Math.min(100, baseScore + 12) },
-    { label: 'Country Eligibility', value: Math.min(100, baseScore + 18) },
-    { label: 'Language Match', value: Math.min(100, baseScore + 22) },
+  const breakdown: MatchBreakdown | undefined = scholarship.match_breakdown;
+  const hasRealBreakdown = !!breakdown && (
+    breakdown.field != null ||
+    breakdown.degree != null ||
+    breakdown.country != null ||
+    breakdown.academic != null ||
+    breakdown.language != null ||
+    breakdown.research_experience != null ||
+    breakdown.semantic != null
+  );
+
+  // Hard-fail flags from the match engine. Each maps to a user-friendly
+  // warning shown above the breakdown.
+  const HARD_FLAG_LABELS: Record<string, string> = {
+    nationality_not_listed: 'Your nationality is not on the eligible list',
+    degree_level_mismatch: 'Your target degree does not match what this scholarship accepts',
+    below_min_cgpa: 'Your CGPA is below the minimum requirement',
+    ielts_requirement_not_met: 'Your IELTS score does not meet the minimum',
+  };
+  const hardFlags = (breakdown?.hard_flags || []).filter((f) => f in HARD_FLAG_LABELS);
+
+  // Per-criterion metrics. We display the 6 most decision-relevant signals
+  // (eligibility + academics + research) instead of all 12 to keep the card
+  // compact. Each criterion has known (min, max) from the match engine.
+  const CRITERIA: Array<{ key: keyof MatchBreakdown; label: string; max: number; min: number; icon: string }> = [
+    { key: 'country', label: 'Country Eligibility', max: 10, min: -25, icon: 'public' },
+    { key: 'degree', label: 'Degree Match', max: 12, min: -25, icon: 'workspace_premium' },
+    { key: 'field', label: 'Field Match', max: 15, min: 0, icon: 'school' },
+    { key: 'academic', label: 'Academic Standing', max: 10, min: -12, icon: 'grade' },
+    { key: 'language', label: 'Language Match', max: 8, min: -8, icon: 'translate' },
+    { key: 'research_experience', label: 'Research Evidence', max: 10, min: 0, icon: 'science' },
   ];
+
+  const matchMetrics = CRITERIA.map((c) => {
+    const raw = breakdown?.[c.key] as number | undefined;
+    if (typeof raw !== 'number') {
+      return { ...c, raw: null as number | null, percent: 0, state: 'unknown' as const };
+    }
+    const range = c.max - c.min;
+    const percent = range > 0
+      ? Math.max(0, Math.min(100, ((raw - c.min) / range) * 100))
+      : 0;
+    let state: 'good' | 'neutral' | 'bad' = 'neutral';
+    if (raw < 0) state = 'bad';
+    else if (raw >= c.max * 0.5) state = 'good';
+    else if (raw > 0) state = 'neutral';
+    else state = 'bad'; // zero on a positive-only criterion = missing signal
+    return { ...c, raw, percent, state };
+  });
+
+  const formatValue = (v: number | null): string => {
+    if (v == null) return '—';
+    if (v > 0) return `+${v}`;
+    return `${v}`;
+  };
 
   return (
     <AppLayout>
@@ -298,13 +347,65 @@ export default function ScholarshipDetailPage() {
                     {matchLabel}
                   </span>
                 </div>
-                <div className="space-y-2 border-t border-gray-100 pt-3">
-                  {matchMetrics.map((metric, idx) => (
-                    <div key={idx} className="flex justify-between text-xs">
-                      <span className="text-text-secondary">{metric.label}</span>
-                      <span className="font-semibold text-text-primary">{metric.value}%</span>
+                <div className="space-y-2.5 border-t border-gray-100 pt-3">
+                  {/* Hard-fail warnings from the match engine */}
+                  {hardFlags.length > 0 && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-2.5 space-y-1">
+                      {hardFlags.map((flag) => (
+                        <div key={flag} className="flex items-start gap-1.5 text-[11px] text-red-700 leading-snug">
+                          <span className="material-symbols-outlined text-[14px] flex-shrink-0 mt-0.5">error</span>
+                          <span className="font-medium">{HARD_FLAG_LABELS[flag]}</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
+
+                  {!hasRealBreakdown ? (
+                    <div className="text-center py-2 px-1">
+                      <p className="text-[11px] text-text-secondary leading-snug">
+                        {score === baseScore
+                          ? 'Sign in and compute your match to see per-criterion breakdown.'
+                          : 'Match breakdown is being computed — check back shortly.'}
+                      </p>
+                    </div>
+                  ) : (
+                    matchMetrics.map((metric) => {
+                      const barColor = {
+                        good: 'bg-emerald-500',
+                        neutral: 'bg-amber-400',
+                        bad: 'bg-red-500',
+                        unknown: 'bg-gray-200',
+                      }[metric.state];
+                      const valueColor = {
+                        good: 'text-emerald-700',
+                        neutral: 'text-text-primary',
+                        bad: 'text-red-600',
+                        unknown: 'text-text-secondary',
+                      }[metric.state];
+                      return (
+                        <div key={metric.key}>
+                          <div className="flex justify-between items-center text-[11px] mb-1">
+                            <span className="text-text-secondary font-medium flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[13px]">{metric.icon}</span>
+                              {metric.label}
+                            </span>
+                            <span className={`font-semibold ${valueColor}`}>
+                              {formatValue(metric.raw)}
+                              {metric.raw != null && (
+                                <span className="text-text-secondary font-normal"> / {metric.max}</span>
+                              )}
+                            </span>
+                          </div>
+                          <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full ${barColor} transition-all`}
+                              style={{ width: `${metric.percent}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
                 {scholarship.monthly_stipend_usd && scholarship.monthly_stipend_usd > 0 && (
                   <div className="border-t border-gray-100 pt-3">
