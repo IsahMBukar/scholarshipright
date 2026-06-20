@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import AppLayout from '@/components/AppLayout';
-import GlobalNavDrawer from '@/components/GlobalNavDrawer';
 import { ScholarshipDetailSkeleton } from '@/components/Skeletons';
 import { fetchScholarship, saveScholarship, removeSavedScholarship, fetchSavedScholarships, updateSavedScholarship } from '@/services/api';
 import type { Scholarship, MatchBreakdown } from '@/services/api';
@@ -25,7 +24,6 @@ export default function ScholarshipDetailPage() {
   const [isSaved, setIsSaved] = useState(false);
   const [savedStatus, setSavedStatus] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'overview' | 'provider'>('overview');
-  const [navOpen, setNavOpen] = useState(false);
 
   useEffect(() => {
     if (params.slug) {
@@ -168,18 +166,9 @@ export default function ScholarshipDetailPage() {
         {/* 1. STICKY TOP ACTION & META-BAR */}
         <div className="sticky top-0 z-40 bg-white border-b border-gray-100">
           <div className="flex justify-between items-center px-4 md:px-8 py-3">
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setNavOpen(true)}
-                className="md:hidden w-10 h-10 flex items-center justify-center rounded-full hover:bg-gray-100 transition"
-                aria-label="Open navigation menu"
-              >
-                <span className="material-symbols-outlined text-[22px] text-text-secondary">menu</span>
-              </button>
-              <Link href="/scholarships" className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-100 transition">
-                <span className="material-symbols-outlined text-[22px] text-text-secondary">arrow_back</span>
-              </Link>
-            </div>
+            <Link href="/scholarships" className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-100 transition">
+              <span className="material-symbols-outlined text-[22px] text-text-secondary">arrow_back</span>
+            </Link>
             <div className="flex items-center gap-2">
               {/* Status badge if saved */}
               {isSaved && savedStatus && savedStatus !== 'saved' && (
@@ -912,7 +901,6 @@ export default function ScholarshipDetailPage() {
         )}
         </div>
       </div>
-      <GlobalNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
     </AppLayout>
   );
 }
