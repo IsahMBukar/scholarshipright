@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import AppLayout from '@/components/AppLayout';
+import MobileNav from '@/components/MobileNav';
 import { ScholarshipListSkeleton } from '@/components/Skeletons';
 import {
   fetchSavedScholarships,
@@ -103,6 +104,7 @@ export default function SavedPage() {
 
   return (
     <AppLayout>
+      <MobileNav />
       <div className="px-4 md:px-6 py-6">
         {/* Header */}
         <div className="mb-6">

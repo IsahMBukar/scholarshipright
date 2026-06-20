@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
+import MobileNav from '@/components/MobileNav';
 import { EligibilityCard, ReadinessCard, RoadmapCard, DiscoverCard, DocumentCard } from '@/components/AgentCards';
 import OnboardingGate from '@/components/OnboardingGate';
 import {
@@ -465,6 +466,7 @@ export default function AgentPage() {
 
   return (
     <AppLayout showRightPanel={false}>
+      <MobileNav />
       {chatLocked ? (
         <OnboardingGate
           requires="resume"
