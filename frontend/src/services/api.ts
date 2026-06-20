@@ -24,6 +24,7 @@ export interface Scholarship {
   monthly_stipend_usd?: number;
   requires_ielts: boolean;
   min_ielts_score?: number;
+  accepted_english_tests?: string[];
   requires_application_fee: boolean;
   min_cgpa?: number;
   language_of_instruction?: string;

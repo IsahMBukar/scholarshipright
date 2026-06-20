@@ -216,18 +216,67 @@ export default function ScholarshipDetailPage() {
                     <span className="material-symbols-outlined text-primary text-[18px]">public</span>
                     {scholarship.eligible_nationalities?.join(', ') || 'Open'}
                   </div>
+                  {scholarship.open_date && (
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-primary text-[18px]">event_available</span>
+                      <span>
+                        Apps open {new Date(scholarship.open_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </span>
+                    </div>
+                  )}
+                  {scholarship.program_start_date && (
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-primary text-[18px]">flight_takeoff</span>
+                      <span>
+                        Starts {new Date(scholarship.program_start_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
-                {/* Deadline bar */}
-                <div className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm ${daysUntilDeadline <= 30 ? 'bg-red-50 text-red-500' : 'bg-primary-light/20 text-text-primary'}`}>
-                  <span className="material-symbols-outlined text-[18px]">schedule</span>
-                  <span className="font-medium">
-                    {daysUntilDeadline <= 0 ? 'Deadline passed' : `${daysUntilDeadline} days until deadline`}
-                  </span>
-                  <span className="text-xs ml-auto">
-                    {new Date(scholarship.deadline).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                  </span>
-                </div>
+                {/* Deadline bar — prominent urgency indicator */}
+                {(() => {
+                  const isPassed = daysUntilDeadline <= 0;
+                  const isUrgent = !isPassed && daysUntilDeadline <= 7;
+                  const isSoon = !isPassed && daysUntilDeadline <= 30;
+                  const wrapperClass = isPassed
+                    ? 'bg-gray-100 text-text-secondary'
+                    : isUrgent
+                    ? 'bg-red-50 text-red-600 ring-1 ring-red-200'
+                    : isSoon
+                    ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+                    : 'bg-primary-light/20 text-text-primary';
+                  return (
+                    <div className={`flex items-center gap-3 px-4 py-3 rounded-xl ${wrapperClass}`}>
+                      {!isPassed && (
+                        <span className="relative flex w-2.5 h-2.5 flex-shrink-0">
+                          {(isUrgent || isSoon) && (
+                            <span className={`absolute inset-0 rounded-full animate-ping opacity-75 ${isUrgent ? 'bg-red-500' : 'bg-amber-500'}`} />
+                          )}
+                          <span className={`relative inline-flex rounded-full w-2.5 h-2.5 ${isUrgent ? 'bg-red-500' : isSoon ? 'bg-amber-500' : 'bg-primary'}`} />
+                        </span>
+                      )}
+                      <span className="material-symbols-outlined text-[20px]">{isPassed ? 'event_busy' : 'event'}</span>
+                      <div className="flex-1 min-w-0">
+                        {isPassed ? (
+                          <span className="font-semibold text-[15px]">Applications closed</span>
+                        ) : (
+                          <>
+                            <span className="font-bold text-[18px] leading-none">
+                              {daysUntilDeadline} day{daysUntilDeadline === 1 ? '' : 's'} left
+                            </span>
+                            <span className="block text-xs opacity-80 mt-0.5">
+                              {isUrgent ? 'Apply now — closing soon' : isSoon ? 'Don\'t miss the deadline' : 'Time remaining to apply'}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      <span className="text-[13px] font-medium opacity-80 whitespace-nowrap">
+                        {new Date(scholarship.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Right: Match Score Card */}
@@ -277,16 +326,126 @@ export default function ScholarshipDetailPage() {
               </div>
             )}
 
-            {/* 6. BENEFITS */}
-            {scholarship.benefits_summary && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
-                  <div className="w-2 h-6 bg-primary rounded-full" />
-                  <h2 className="text-lg font-bold text-text-primary">Benefits & Coverage</h2>
-                </div>
-                <p className="text-sm text-text-secondary leading-relaxed">{scholarship.benefits_summary}</p>
+            {/* 6. BENEFITS — structured card grid */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
+                <div className="w-2 h-6 bg-primary rounded-full" />
+                <h2 className="text-lg font-bold text-text-primary">Benefits & Coverage</h2>
               </div>
-            )}
+
+              {(() => {
+                const stipend = scholarship.monthly_stipend_usd && scholarship.monthly_stipend_usd > 0
+                  ? `$${scholarship.monthly_stipend_usd}/mo`
+                  : null;
+                // Annual package = stipend × 12 if we have one (rough estimate).
+                const annualPackage = scholarship.monthly_stipend_usd && scholarship.monthly_stipend_usd > 0
+                  ? `~$${(scholarship.monthly_stipend_usd * 12).toLocaleString()}/yr`
+                  : null;
+                const cards: Array<{
+                  key: string;
+                  icon: string;
+                  label: string;
+                  value: string;
+                  state: 'covered' | 'partial' | 'none' | 'info';
+                }> = [];
+                cards.push({
+                  key: 'tuition',
+                  icon: 'school',
+                  label: 'Tuition',
+                  value: scholarship.covers_tuition ? 'Full tuition waiver' : 'Not covered',
+                  state: scholarship.covers_tuition ? 'covered' : 'none',
+                });
+                if (stipend) {
+                  cards.push({
+                    key: 'stipend',
+                    icon: 'payments',
+                    label: 'Monthly Stipend',
+                    value: stipend,
+                    state: 'info',
+                  });
+                }
+                if (annualPackage) {
+                  cards.push({
+                    key: 'package',
+                    icon: 'savings',
+                    label: 'Annual Package',
+                    value: annualPackage,
+                    state: 'info',
+                  });
+                }
+                cards.push({
+                  key: 'living',
+                  icon: 'home',
+                  label: 'Living Allowance',
+                  value: scholarship.covers_living ? 'Included' : 'Not included',
+                  state: scholarship.covers_living ? 'covered' : 'none',
+                });
+                cards.push({
+                  key: 'flight',
+                  icon: 'flight',
+                  label: 'Flight',
+                  value: scholarship.covers_flight ? 'Round-trip covered' : 'Not covered',
+                  state: scholarship.covers_flight ? 'covered' : 'none',
+                });
+                cards.push({
+                  key: 'health',
+                  icon: 'health_and_safety',
+                  label: 'Health Insurance',
+                  value: scholarship.covers_health ? 'Full coverage' : 'Not included',
+                  state: scholarship.covers_health ? 'covered' : 'none',
+                });
+
+                return (
+                  <>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {cards.map((card) => {
+                        const stateClasses =
+                          card.state === 'covered'
+                            ? 'border-green-200 bg-green-50'
+                            : card.state === 'none'
+                            ? 'border-gray-200 bg-gray-50'
+                            : 'border-primary-light bg-primary-light/10';
+                        const iconColor =
+                          card.state === 'covered'
+                            ? 'text-green-600'
+                            : card.state === 'none'
+                            ? 'text-gray-400'
+                            : 'text-primary';
+                        const valueColor =
+                          card.state === 'covered'
+                            ? 'text-green-700'
+                            : card.state === 'none'
+                            ? 'text-text-secondary'
+                            : 'text-text-primary';
+                        return (
+                          <div
+                            key={card.key}
+                            className={`flex items-start gap-3 p-3.5 rounded-xl border ${stateClasses}`}
+                          >
+                            <span className={`material-symbols-outlined text-[22px] mt-0.5 ${iconColor}`}>
+                              {card.icon}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-[11px] uppercase tracking-wider font-semibold text-text-secondary">
+                                {card.label}
+                              </p>
+                              <p className={`text-[14px] font-bold mt-0.5 ${valueColor}`}>
+                                {card.value}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {scholarship.benefits_summary && (
+                      <p className="text-sm text-text-secondary leading-relaxed whitespace-pre-line pt-2">
+                        {scholarship.benefits_summary}
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
 
             {/* 7. ELIGIBILITY & REQUIREMENTS */}
             <div className="space-y-4">
@@ -354,9 +513,94 @@ export default function ScholarshipDetailPage() {
                   <p className="text-sm text-text-secondary">{scholarship.eligible_nationalities.join(', ')}</p>
                 </div>
               )}
+
+              {/* Accepted English Tests — pills */}
+              {((scholarship.accepted_english_tests ?? []).length > 0) && (
+                <div className="pt-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-text-primary mb-2">Accepted English Tests</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {(scholarship.accepted_english_tests ?? []).map((test) => (
+                      <span
+                        key={test}
+                        className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-primary bg-primary/8 border border-primary/20 px-3 py-1.5 rounded-lg"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">verified</span>
+                        {test}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-text-secondary mt-1.5">
+                    Any one of these tests will be accepted as proof of English proficiency.
+                  </p>
+                </div>
+              )}
             </div>
 
-            {/* 8. FIELDS OF STUDY */}
+            {/* 8. REQUIRED DOCUMENTS — static checklist */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
+                <div className="w-2 h-6 bg-primary rounded-full" />
+                <h2 className="text-lg font-bold text-text-primary">Required Documents</h2>
+              </div>
+
+              {(() => {
+                const includesPhd = scholarship.degree_levels?.some((l) => l.toLowerCase().includes('phd') || l.toLowerCase().includes('doctoral'));
+                const includesMaster = scholarship.degree_levels?.some((l) => l.toLowerCase().includes('master'));
+                const docs: Array<{ name: string; note?: string; optional?: boolean }> = [
+                  { name: 'Completed online application form' },
+                  { name: 'Academic transcripts', note: 'Official, sealed copies' },
+                  { name: 'CV / Resume' },
+                  { name: 'Statement of Purpose / Motivation Letter' },
+                  { name: 'Letters of Recommendation', note: 'Typically 2 academic references' },
+                  {
+                    name: 'English proficiency test score',
+                    note: scholarship.accepted_english_tests?.length
+                      ? `Accepted: ${scholarship.accepted_english_tests.join(', ')}`
+                      : undefined,
+                  },
+                  { name: 'Passport or national ID copy', note: 'Valid for at least 6 months' },
+                  { name: 'Financial statement / bank letter', note: 'Proof of funds or sponsorship' },
+                  ...(includesPhd
+                    ? [{ name: 'Research proposal', note: '2-5 page outline of intended research' }]
+                    : []),
+                  ...(includesMaster
+                    ? [{ name: 'Bachelor\'s degree certificate', optional: true, note: 'Final-year students: expected graduation letter' }]
+                    : [{ name: 'High school diploma', optional: true }]),
+                  { name: 'Passport-size photo', optional: true },
+                ];
+
+                return (
+                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
+                    {docs.map((doc) => (
+                      <li key={doc.name} className="flex items-start gap-2.5">
+                        <span className="material-symbols-outlined text-[20px] text-primary mt-0.5 flex-shrink-0">
+                          {doc.optional ? 'circle' : 'check_box'}
+                        </span>
+                        <div className="min-w-0">
+                          <p className={`text-[14px] leading-snug ${doc.optional ? 'text-text-secondary' : 'text-text-primary font-medium'}`}>
+                            {doc.name}
+                            {doc.optional && (
+                              <span className="ml-1.5 text-[10px] uppercase tracking-wider font-bold text-text-secondary/70">
+                                Optional
+                              </span>
+                            )}
+                          </p>
+                          {doc.note && (
+                            <p className="text-[12px] text-text-secondary mt-0.5">{doc.note}</p>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                );
+              })()}
+
+              <p className="text-[11px] text-text-secondary pt-1">
+                Always confirm the exact document list on the scholarship's official page before submitting.
+              </p>
+            </div>
+
+            {/* 9. FIELDS OF STUDY */}
             {scholarship.fields_of_study?.length > 0 && (
               <div className="space-y-4">
                 <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
@@ -384,7 +628,87 @@ export default function ScholarshipDetailPage() {
               </div>
             )}
 
-            {/* 10. PROVIDER */}
+            {/* 11. APPLICATION TIMELINE */}
+            {(scholarship.open_date || scholarship.deadline || scholarship.program_start_date) && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
+                  <div className="w-2 h-6 bg-primary rounded-full" />
+                  <h2 className="text-lg font-bold text-text-primary">Application Timeline</h2>
+                </div>
+
+                {(() => {
+                  const rawPoints: Array<{ key: string; label: string; date: Date | null; icon: string }> = [
+                    { key: 'open', label: 'Applications Open', date: scholarship.open_date ? new Date(scholarship.open_date) : null, icon: 'event_available' },
+                    { key: 'deadline', label: 'Deadline', date: new Date(scholarship.deadline), icon: 'event' },
+                    { key: 'start', label: 'Program Starts', date: scholarship.program_start_date ? new Date(scholarship.program_start_date) : null, icon: 'flight_takeoff' },
+                  ];
+                  const points = rawPoints.filter((p): p is { key: string; label: string; date: Date; icon: string } => p.date !== null);
+
+                  if (points.length < 2) return null;
+
+                  const fmtFull = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                  const fmtMonth = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                  const fmtFullLong = (d: Date) => d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+                  // Calculate days between points for connector labels
+                  const dayDiff = (a: Date, b: Date) => Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
+
+                  return (
+                    <div className="relative bg-gradient-to-br from-primary/5 via-white to-primary-light/10 rounded-2xl border border-primary/15 p-6 md:p-8">
+                      {/* Timeline track */}
+                      <div className="relative flex justify-between items-start">
+                        {/* Connecting line behind the dots */}
+                        <div className="absolute top-[14px] left-[14px] right-[14px] h-[2px] bg-gradient-to-r from-primary/30 via-primary to-primary/30" />
+
+                        {points.map((point, idx) => {
+                          const isDeadline = point.key === 'deadline';
+                          const isPast = point.date.getTime() < Date.now();
+                          const dotColor = isDeadline
+                            ? isPast ? 'bg-gray-400 ring-gray-200' : 'bg-primary ring-primary-light/40'
+                            : isPast ? 'bg-gray-300 ring-gray-100' : 'bg-white border-2 border-primary ring-primary-light/30';
+                          const labelColor = isPast ? 'text-text-secondary' : 'text-text-primary';
+                          const showFullDate = points.length > 0 && (point.key === 'deadline' || (point.date.getDate() !== 1 && point.key === 'start'));
+
+                          return (
+                            <div key={point.key} className="relative z-10 flex flex-col items-center text-center flex-1 px-1">
+                              <div className={`w-7 h-7 rounded-full ring-4 flex items-center justify-center ${dotColor}`}>
+                                <span className={`material-symbols-outlined text-[14px] ${isPast ? 'text-gray-500' : 'text-primary'}`}>
+                                  {point.icon}
+                                </span>
+                              </div>
+                              <p className={`mt-3 text-[11px] uppercase tracking-wider font-bold ${labelColor}`}>
+                                {point.label}
+                              </p>
+                              <p className={`mt-1 text-[14px] font-bold leading-tight ${labelColor}`}>
+                                {showFullDate ? fmtFull(point.date) : fmtMonth(point.date)}
+                              </p>
+                              {idx < points.length - 1 && (
+                                <p className="mt-1 text-[10px] text-text-secondary">
+                                  {dayDiff(point.date, points[idx + 1].date)} days
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Sub-text with full deadline date and countdown */}
+                      <div className="mt-6 pt-4 border-t border-primary/10 text-center">
+                        <p className="text-[12px] text-text-secondary">
+                          Deadline: <span className="font-semibold text-text-primary">{fmtFullLong(new Date(scholarship.deadline))}</span>
+                          {' · '}
+                          {daysUntilDeadline > 0
+                            ? <span className="font-semibold text-primary">{daysUntilDeadline} days from today</span>
+                            : <span className="text-text-secondary">Applications closed</span>}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* 12. PROVIDER */}
             <div className="space-y-4">
               <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
                 <div className="w-2 h-6 bg-primary rounded-full" />
