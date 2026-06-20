@@ -276,6 +276,15 @@ export default function ScholarshipDetailPage() {
                     <span className="material-symbols-outlined text-primary text-[18px]">public</span>
                     {scholarship.eligible_nationalities?.join(', ') || 'Open'}
                   </div>
+                  {typeof scholarship.view_count === 'number' && scholarship.view_count > 0 && (
+                    <div className="flex items-center gap-2" title={`${scholarship.view_count} students have viewed this scholarship`}>
+                      <span className="material-symbols-outlined text-primary text-[18px]">visibility</span>
+                      <span>
+                        <span className="font-semibold text-text-primary">{scholarship.view_count.toLocaleString()}</span>{' '}
+                        {scholarship.view_count === 1 ? 'student' : 'students'} viewed
+                      </span>
+                    </div>
+                  )}
                   {scholarship.open_date && (
                     <div className="flex items-center gap-2">
                       <span className="material-symbols-outlined text-primary text-[18px]">event_available</span>

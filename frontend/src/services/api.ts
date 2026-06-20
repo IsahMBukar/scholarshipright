@@ -65,6 +65,8 @@ export interface Scholarship {
   logo_url?: string;
   is_verified: boolean;
   source?: string;
+  view_count?: number;
+  application_count?: number;
   match_score?: number;
   match_breakdown?: MatchBreakdown;
 }
