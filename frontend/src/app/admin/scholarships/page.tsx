@@ -22,6 +22,7 @@ import {
   ENGLISH_TEST_OPTIONS,
   formFromScholarship,
   buildPatchBody,
+  emptyForm,
   type ScholarshipForm,
 } from '@/components/admin/scholarshipForm';
 import {
@@ -434,10 +435,14 @@ function ScholarshipDrawer({
   saving: boolean;
   saveError: string | null;
 }) {
-  // Single source of truth for all 34 editable fields. The empty form is
-  // only used as a fallback before `formFromScholarship` populates it.
+  // Single source of truth for all 34 editable fields. We seed from
+  // emptyForm() (not `{}`) so array fields like accepted_english_tests are
+  // always defined — otherwise the very first render after the parent sets
+  // `scholarship` would see form.accepted_english_tests === undefined and
+  // crash, since useState's lazy initializer only runs on mount and the
+  // useEffect below only runs AFTER that render.
   const [form, setForm] = useState<ScholarshipForm>(() =>
-    scholarship ? formFromScholarship(scholarship) : ({} as ScholarshipForm)
+    scholarship ? formFromScholarship(scholarship) : emptyForm()
   );
 
   // Re-populate whenever a different row is opened. The id is the right
@@ -468,12 +473,12 @@ function ScholarshipDrawer({
       setForm((f) => {
         const has = f.accepted_english_tests.includes(test);
         if (checked && !has) {
-          return { ...f, accepted_english_tests: [...f.accepted_english_tests, test] };
+          return { ...f, accepted_english_tests: [...(f.accepted_english_tests ?? []), test] };
         }
         if (!checked && has) {
           return {
             ...f,
-            accepted_english_tests: f.accepted_english_tests.filter((t) => t !== test),
+            accepted_english_tests: (f.accepted_english_tests ?? []).filter((t) => t !== test),
           };
         }
         return f;
@@ -708,7 +713,7 @@ function ScholarshipDrawer({
             </div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-1">
               {ENGLISH_TEST_OPTIONS.map((opt) => {
-                const checked = form.accepted_english_tests.includes(opt.value);
+                const checked = (form.accepted_english_tests ?? []).includes(opt.value);
                 return (
                   <label
                     key={opt.value}
