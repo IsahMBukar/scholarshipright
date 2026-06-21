@@ -1,0 +1,41 @@
+[
+  {
+    "name": "Gates Cambridge Scholarship",
+    "slug": "gates-cambridge-scholarship",
+    "host_country": "United Kingdom",
+    "host_institution": "University of Cambridge",
+    "provider": "Bill & Melinda Gates Foundation",
+    "degree_levels": [
+      "master",
+      "phd"
+    ],
+    "fields_of_study": [
+      "all_fields"
+    ],
+    "eligible_nationalities": [
+      "All countries except UK"
+    ],
+    "eligible_regions": [
+      "All regions"
+    ],
+    "funding_type": "fully_funded",
+    "covers_tuition": true,
+    "covers_living": true,
+    "covers_flight": true,
+    "covers_health": true,
+    "monthly_stipend_usd": 2100,
+    "requires_ielts": true,
+    "min_ielts_score": 7.5,
+    "requires_gre": false,
+    "requires_application_fee": false,
+    "min_cgpa": 3.7,
+    "language_of_instruction": "English",
+    "deadline": "2026-12-15",
+    "program_start_date": "2027-09-30",
+    "duration_months": 12,
+    "description": "Gates Cambridge Scholarships are awarded to outstanding applicants from outside the UK to pursue a full-time postgraduate degree at the University of Cambridge.",
+    "official_url": "https://www.gatescambridge.org/",
+    "is_verified": true,
+    "source": "gatescambridge.org"
+  }
+]

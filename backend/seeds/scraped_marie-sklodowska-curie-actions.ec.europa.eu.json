@@ -1,0 +1,40 @@
+[
+  {
+    "name": "Marie Skłodowska-Curie Postdoctoral Fellowship",
+    "slug": "marie-curie-postdoc-fellowship",
+    "host_country": "Multiple EU countries + global mobility",
+    "host_institution": "Any European or international research institution",
+    "provider": "European Commission (Marie Skłodowska-Curie Actions)",
+    "degree_levels": [
+      "postdoc"
+    ],
+    "fields_of_study": [
+      "all_fields"
+    ],
+    "eligible_nationalities": [
+      "All countries"
+    ],
+    "eligible_regions": [
+      "All regions"
+    ],
+    "funding_type": "fully_funded",
+    "covers_tuition": true,
+    "covers_living": true,
+    "covers_flight": true,
+    "covers_health": true,
+    "monthly_stipend_usd": 2600,
+    "requires_ielts": true,
+    "min_ielts_score": 6.5,
+    "requires_gre": false,
+    "requires_application_fee": false,
+    "min_cgpa": 3.7,
+    "language_of_instruction": "English",
+    "deadline": "2026-09-09",
+    "program_start_date": "2027-03-01",
+    "duration_months": 24,
+    "description": "MSCA Postdoctoral Fellowships support researchers holding a PhD who wish to carry out research abroad.",
+    "official_url": "https://marie-sklodowska-curie-actions.ec.europa.eu/actions/postdoctoral-fellowships",
+    "is_verified": true,
+    "source": "marie-sklodowska-curie-actions.ec.europa.eu"
+  }
+]

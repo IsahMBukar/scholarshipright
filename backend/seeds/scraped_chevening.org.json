@@ -1,0 +1,44 @@
+[
+  {
+    "name": "Chevening Scholarship",
+    "slug": "chevening-scholarship",
+    "host_country": "United Kingdom",
+    "host_institution": "Various UK Universities",
+    "provider": "Chevening",
+    "degree_levels": [
+      "master"
+    ],
+    "fields_of_study": [
+      "all_fields"
+    ],
+    "eligible_nationalities": [
+      "All Chevening-eligible countries"
+    ],
+    "eligible_regions": [
+      "Africa",
+      "Asia",
+      "Latin America",
+      "Europe",
+      "Middle East"
+    ],
+    "funding_type": "fully_funded",
+    "covers_tuition": true,
+    "covers_living": true,
+    "covers_flight": true,
+    "covers_health": true,
+    "monthly_stipend_usd": 1200,
+    "requires_ielts": true,
+    "min_ielts_score": 6.5,
+    "requires_gre": false,
+    "requires_application_fee": false,
+    "min_cgpa": 2.1,
+    "language_of_instruction": "English",
+    "deadline": "2026-11-02",
+    "program_start_date": "2027-09-01",
+    "duration_months": 12,
+    "description": "UK government scholarship for outstanding professionals with leadership potential to study a one-year master's degree in the UK.",
+    "official_url": "https://www.chevening.org/scholarships/",
+    "is_verified": true,
+    "source": "chevening.org"
+  }
+]

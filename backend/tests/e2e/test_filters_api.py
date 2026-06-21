@@ -125,11 +125,40 @@ expect(
     f"got {meta.get('funding_labels')}",
 )
 
-# 7. combined filters — IELTS + min_stipend=1500 should be 4 (Gates/ETH/Fulbright/Australia)
+# 7. combined filters — IELTS + min_stipend=1500
+#    Originally this returned 4 rows (Gates Cambridge / ETH Zurich
+#    / Fulbright / Australia Awards). With the seed expansion
+#    (17 → 46 scholarships across 6 transition paths), the result
+#    set now contains all high-stipend IELTS-accepting scholarships.
+#    Lock in that the original 4 are STILL present (regression check)
+#    AND that the count has grown (≥4, the original baseline).
 data = fetch("/api/scholarships?language_test=IELTS&min_stipend=1500&limit=100")
+items = data.get("items", [])
+names = [s.get("name", "") for s in items]
+# All returned rows must satisfy both filter conditions
+all_match = all(
+    "IELTS" in (s.get("accepted_english_tests") or [])
+    and (s.get("monthly_stipend_usd") or 0) >= 1500
+    for s in items
+)
 expect(
-    "combined language_test=IELTS & min_stipend=1500 returns 4 rows",
-    data.get("total") == 4,
+    "combined language_test=IELTS & min_stipend=1500 returns only rows matching both",
+    all_match,
+    f"one or more rows violate filter: {[(s.get('name'), s.get('accepted_english_tests'), s.get('monthly_stipend_usd')) for s in items if not ('IELTS' in (s.get('accepted_english_tests') or []) and (s.get('monthly_stipend_usd') or 0) >= 1500)]}",
+)
+expect(
+    "combined filter still includes the 4 original scholarships (Gates, ETH, Fulbright, Australia Awards)",
+    # The 4 original are still in the set; we check substrings since naming
+    # varies slightly across the seed (e.g. "Gates Cambridge" / "Gates").
+    any("Gates" in n for n in names)
+    and any("ETH" in n or "Zurich" in n for n in names)
+    and any("Fulbright" in n for n in names)
+    and any("Australia" in n or "Australia Awards" in n for n in names),
+    f"missing original: gates={any('Gates' in n for n in names)}, eth={any('ETH' in n or 'Zurich' in n for n in names)}, fulbright={any('Fulbright' in n for n in names)}, australia={any('Australia' in n for n in names)}, total={data.get('total')}",
+)
+expect(
+    "combined filter has ≥4 rows (original baseline — seed expansion should only grow this)",
+    data.get("total", 0) >= 4,
     f"got total={data.get('total')}",
 )
 

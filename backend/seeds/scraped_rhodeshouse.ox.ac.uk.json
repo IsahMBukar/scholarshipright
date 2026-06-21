@@ -1,0 +1,40 @@
+[
+  {
+    "name": "Rhodes Scholarship (Oxford Master's)",
+    "slug": "rhodes-scholarship",
+    "host_country": "United Kingdom",
+    "host_institution": "University of Oxford",
+    "provider": "Rhodes Trust",
+    "degree_levels": [
+      "master"
+    ],
+    "fields_of_study": [
+      "all_fields"
+    ],
+    "eligible_nationalities": [
+      "All Rhodes-eligible countries"
+    ],
+    "eligible_regions": [
+      "All regions"
+    ],
+    "funding_type": "fully_funded",
+    "covers_tuition": true,
+    "covers_living": true,
+    "covers_flight": true,
+    "covers_health": true,
+    "monthly_stipend_usd": 2200,
+    "requires_ielts": true,
+    "min_ielts_score": 7.5,
+    "requires_gre": false,
+    "requires_application_fee": false,
+    "min_cgpa": 3.7,
+    "language_of_instruction": "English",
+    "deadline": "2026-10-04",
+    "program_start_date": "2027-09-25",
+    "duration_months": 24,
+    "description": "The Rhodes Scholarship is the oldest and one of the most prestigious international scholarship programs in the world.",
+    "official_url": "https://www.rhodeshouse.ox.ac.uk/scholarships/the-rhodes-scholarship/",
+    "is_verified": true,
+    "source": "rhodeshouse.ox.ac.uk"
+  }
+]

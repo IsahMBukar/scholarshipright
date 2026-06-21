@@ -1,0 +1,46 @@
+[
+  {
+    "name": "DAAD Development-Related Postgraduate Courses",
+    "slug": "daad-development-postgraduate",
+    "host_country": "Germany",
+    "host_institution": "Various German Universities",
+    "provider": "DAAD",
+    "degree_levels": [
+      "master"
+    ],
+    "fields_of_study": [
+      "engineering",
+      "agriculture",
+      "public_health",
+      "economics",
+      "natural_sciences"
+    ],
+    "eligible_nationalities": [
+      "All developing countries"
+    ],
+    "eligible_regions": [
+      "Africa",
+      "Asia",
+      "Latin America"
+    ],
+    "funding_type": "fully_funded",
+    "covers_tuition": true,
+    "covers_living": true,
+    "covers_flight": true,
+    "covers_health": true,
+    "monthly_stipend_usd": 934,
+    "requires_ielts": false,
+    "requires_gre": false,
+    "requires_application_fee": false,
+    "min_cgpa": 2.5,
+    "language_of_instruction": "English/German",
+    "deadline": "2026-10-31",
+    "program_start_date": "2027-10-01",
+    "duration_months": 24,
+    "description": "Scholarships for graduates from developing countries to pursue postgraduate degrees in Germany in development-related fields.",
+    "official_url": "https://www.daad.de/en/study-and-research-in-germany/scholarships/",
+    "is_verified": true,
+    "source": "daad.de",
+    "min_ielts_score": null
+  }
+]

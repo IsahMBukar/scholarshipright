@@ -1,0 +1,40 @@
+[
+  {
+    "name": "Fulbright Foreign Student Program (Master's)",
+    "slug": "fulbright-us-master",
+    "host_country": "United States",
+    "host_institution": "Various US universities",
+    "provider": "US Department of State / IIE",
+    "degree_levels": [
+      "master"
+    ],
+    "fields_of_study": [
+      "all_fields"
+    ],
+    "eligible_nationalities": [
+      "All Fulbright-eligible countries"
+    ],
+    "eligible_regions": [
+      "All regions"
+    ],
+    "funding_type": "fully_funded",
+    "covers_tuition": true,
+    "covers_living": true,
+    "covers_flight": true,
+    "covers_health": true,
+    "monthly_stipend_usd": 1500,
+    "requires_ielts": true,
+    "min_ielts_score": 7.0,
+    "requires_gre": true,
+    "requires_application_fee": false,
+    "min_cgpa": 3.0,
+    "language_of_instruction": "English",
+    "deadline": "2026-10-15",
+    "program_start_date": "2027-08-15",
+    "duration_months": 24,
+    "description": "Fulbright Foreign Student Program sends outstanding international students to the United States for a Master's degree.",
+    "official_url": "https://foreign.fulbrightonline.org/",
+    "is_verified": true,
+    "source": "fulbrightonline.org"
+  }
+]
