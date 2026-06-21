@@ -17,6 +17,7 @@ from app.core.admin import ensure_admin_schema_columns
 from app.models.admin_audit import ensure_audit_schema_columns
 from app.models.admin_invite import ensure_invites_schema_columns
 from app.models.password_reset import ensure_password_reset_schema_columns
+from app.models.profile import ensure_profile_schema_columns
 from app.models.scholarship import (
     ensure_scholarship_schema_columns,
     ensure_required_documents_schema_columns,
@@ -58,6 +59,14 @@ async def lifespan(app: FastAPI):
         await ensure_scholarship_schema_columns()
     except Exception as e:  # noqa: BLE001
         print(f"ensure_scholarship_schema_columns failed: {e}")
+
+    # Startup: ensure the prior_studies_in_english column exists on
+    # profiles (idempotent). Pairs with the Profile model. Pairs with
+    # the English-language waiver logic in match_engine.english_test_score.
+    try:
+        await ensure_profile_schema_columns()
+    except Exception as e:  # noqa: BLE001
+        print(f"ensure_profile_schema_columns failed: {e}")
 
     # Startup: ensure the 14 required-documents columns exist on
     # scholarships (idempotent). Pairs with the Scholarship model.

@@ -381,6 +381,14 @@ function ProfilePageInner() {
                   <StatCard icon="work" label="Experience" value={profile.work_experience_years ? `${profile.work_experience_years} yrs` : undefined} />
                   <StatCard icon="translate" label="IELTS" value={profile.has_ielts ? profile.ielts_score : undefined} />
                 </div>
+                {profile.prior_studies_in_english && (
+                  <div className="mt-3 flex items-center gap-2 text-[12px] text-text-secondary bg-primary/5 border border-primary/20 rounded-btn px-3 py-2">
+                    <span className="material-symbols-outlined text-[16px] text-primary">school</span>
+                    <span>
+                      Prior degree taught in English — English-test waiver is active on your matches.
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="p-5 md:p-6">
@@ -616,6 +624,24 @@ function ProfilePageInner() {
                   <label htmlFor="has_ielts_edit" className="text-[14px] text-text-primary cursor-pointer">I have an IELTS score</label>
                 </div>
                 {editForm.has_ielts && <Field label="IELTS Score"><Input value={editForm.ielts_score?.toString() || ''} onChange={v => setEditForm({ ...editForm, ielts_score: v })} type="number" placeholder="e.g. 7.0" /></Field>}
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="prior_english_edit"
+                    checked={editForm.prior_studies_in_english || false}
+                    onChange={e => setEditForm({ ...editForm, prior_studies_in_english: e.target.checked })}
+                    className="w-4 h-4 accent-primary"
+                  />
+                  <label htmlFor="prior_english_edit" className="text-[14px] text-text-primary cursor-pointer">
+                    My prior degree was taught in English
+                  </label>
+                </div>
+                {editForm.prior_studies_in_english && (
+                  <p className="text-[12px] text-text-secondary leading-relaxed -mt-2">
+                    We&apos;ll treat this as a waiver for English-test requirements on
+                    scholarships that accept prior-English study.
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -631,6 +657,7 @@ function ProfilePageInner() {
             work_experience_years: editForm.work_experience_years ? parseInt(editForm.work_experience_years) : undefined,
             has_ielts: editForm.has_ielts,
             ielts_score: editForm.ielts_score ? parseFloat(editForm.ielts_score) : undefined,
+            prior_studies_in_english: editForm.prior_studies_in_english,
           })} />
         </Modal>
       )}

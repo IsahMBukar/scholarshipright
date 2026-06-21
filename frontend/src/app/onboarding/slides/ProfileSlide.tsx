@@ -105,6 +105,13 @@ export default function ProfileSlide({
   const [ieltsScore, setIeltsScore] = useState<string>(
     initialProfile?.ielts_score != null ? String(initialProfile.ielts_score) : ''
   );
+  // English-language study waiver — toggled when the user attests their
+  // prior degree was taught in English. Most universities accept a
+  // Medium-of-Instruction letter as proof of English proficiency, so
+  // the matching engine grants partial/full credit on this signal.
+  const [priorEnglish, setPriorEnglish] = useState<boolean>(
+    initialProfile?.prior_studies_in_english || false
+  );
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -140,6 +147,7 @@ export default function ProfileSlide({
     if (workYears) payload.work_experience_years = parseInt(workYears, 10);
     payload.has_ielts = hasIelts;
     if (hasIelts && ieltsScore) payload.ielts_score = parseFloat(ieltsScore);
+    payload.prior_studies_in_english = priorEnglish;
 
     const result = await onSave(payload);
     setSaving(false);
@@ -367,6 +375,32 @@ export default function ProfileSlide({
               placeholder="Overall band (e.g. 7.0)"
               className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-btn text-[14px] text-text-primary focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
             />
+          )}
+        </div>
+
+        {/* Prior degree in English — soft waiver for English-test reqs.
+            Shown right under the IELTS toggle so it's discoverable when
+            the user is thinking about language proficiency. */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setPriorEnglish(!priorEnglish)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-btn text-[13px] font-semibold transition-all ${
+              priorEnglish
+                ? 'bg-primary text-text-inverse shadow-sm'
+                : 'bg-white border border-gray-200 text-text-primary hover:border-primary'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[16px]">
+              {priorEnglish ? 'check_box' : 'check_box_outline_blank'}
+            </span>
+            My prior degree was taught in English
+          </button>
+          {priorEnglish && (
+            <p className="mt-1.5 text-[11px] text-text-secondary leading-relaxed">
+              We'll treat this as a waiver for English-test requirements on
+              scholarships that accept prior-English study.
+            </p>
           )}
         </div>
 

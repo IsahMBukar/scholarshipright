@@ -22,6 +22,11 @@ class ProfileBase(BaseModel):
     target_countries: Optional[List[str]] = []
     has_ielts: bool = False
     ielts_score: Optional[Decimal] = None
+    # English-language study waiver signal. When True, the matching
+    # engine treats the user as having satisfied (or partially satisfied)
+    # any English-test requirement, because their prior degree was taught
+    # in English. See backend/app/services/match_engine.english_test_score.
+    prior_studies_in_english: bool = False
 
     @field_validator('research_interests', 'target_fields', 'target_countries', mode='before')
     @classmethod

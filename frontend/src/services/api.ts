@@ -120,6 +120,11 @@ export interface Profile {
   target_countries: string[];
   has_ielts: boolean;
   ielts_score?: number;
+  // English-language study waiver — true when the user's prior degree
+  // was taught in English. The matching engine treats this as a soft
+  // waiver for English-test requirements. See backend
+  // app/services/match_engine.english_test_score.
+  prior_studies_in_english: boolean;
 }
 
 // API client
@@ -414,6 +419,7 @@ export interface AgentContext {
     target_degree: string | null;
     has_ielts: boolean;
     ielts_score: number | null;
+    prior_studies_in_english: boolean;
   };
   resume: {
     has_resume: boolean;

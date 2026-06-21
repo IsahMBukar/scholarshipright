@@ -257,7 +257,12 @@ def start_date_score(user_target_date: Any, program_start_date: Any) -> float:
 
 
 def no_ielts_bonus(user_has_ielts: bool, user_ielts_score: Any, scholarship_requires_ielts: bool, min_ielts_score: Any) -> float:
-    """Language requirement score: rewards meeting IELTS/no-IELTS, penalizes missing required IELTS."""
+    """Legacy English-requirement scoring, kept for direct callers/tests.
+
+    New code should call `english_test_score(profile, scholarship)` instead
+    so the `prior_studies_in_english` waiver and the `accepted_english_tests`
+    list are honored.
+    """
     min_score = _to_float(min_ielts_score)
     user_score = _to_float(user_ielts_score)
 
@@ -267,6 +272,69 @@ def no_ielts_bonus(user_has_ielts: bool, user_ielts_score: Any, scholarship_requ
         return 8 if user_score >= min_score else -8
     if user_has_ielts:
         return 6
+    return -8
+
+
+def english_test_score(profile: Any, scholarship: Any) -> float:
+    """Score the English-language test requirement.
+
+    Replaces `no_ielts_bonus`. Considers THREE signals:
+
+    1. `scholarship.requires_ielts` (legacy boolean) OR
+       `scholarship.accepted_english_tests` (new list, auto-derived from
+       host country when empty). The requirement is "any test from this
+       list" — no test is needed if both are empty.
+    2. `profile.has_ielts` + `profile.ielts_score` (user's actual test).
+    3. `profile.prior_studies_in_english` (waiver signal — user attests
+       that their prior degree was taught in English). Most universities
+       accept a Medium-of-Instruction letter as proof of proficiency, so
+       this grants partial or full credit depending on context.
+
+    Score ranges from -8 (hard fail) to +8 (full credit).
+
+    Decision table:
+      | requires_any | has_ielts | in_accepted | prior_eng | score | why                              |
+      | ------------ | --------- | ----------- | --------- | ----- | -------------------------------- |
+      | False        | *         | *           | *         |  +6   | no English test required         |
+      | True         | True      | True/None   | *         |  +8   | has accepted test, ≥ min (or n/a) |
+      | True         | True      | True/None   | *         |  -8   | has accepted test, < min         |
+      | True         | True      | False       | True      |  +4   | wrong test, but prior English    |
+      | True         | True      | False       | False     |  -8   | wrong test, no fallback          |
+      | True         | False     | *           | True      |  +5   | no test, prior English (waiver)  |
+      | True         | False     | *           | False     |  -8   | no test, no fallback             |
+    """
+    accepted_raw = getattr(scholarship, "accepted_english_tests", None) or []
+    accepted = {str(t).upper() for t in accepted_raw}
+    requires_ielts = bool(getattr(scholarship, "requires_ielts", False))
+    requires_any = requires_ielts or bool(accepted)
+
+    if not requires_any:
+        # No English test required — small reward (encourages filling profile)
+        return 6
+
+    user_has_ielts = bool(getattr(profile, "has_ielts", False))
+    user_score = _to_float(getattr(profile, "ielts_score", None))
+    min_score = _to_float(getattr(scholarship, "min_ielts_score", None))
+    prior_english = bool(getattr(profile, "prior_studies_in_english", False))
+
+    # Case: user has IELTS
+    if user_has_ielts:
+        # If the scholarship has an explicit accepted list and IELTS isn't
+        # on it (e.g. wants TOEFL), the user's IELTS doesn't count on its
+        # own — but prior English study gives a partial waiver.
+        if accepted and "IELTS" not in accepted:
+            return 4 if prior_english else -8
+
+        # IELTS is accepted (or no specific list). Apply standard scoring.
+        if min_score is not None and user_score is not None:
+            return 8 if user_score >= min_score else -8
+        return 6
+
+    # Case: user has no IELTS. Prior English study acts as a full waiver.
+    if prior_english:
+        return 5
+
+    # No test, no waiver, requirement active → hard fail.
     return -8
 
 
@@ -429,12 +497,7 @@ def compute_match_score(profile: Any, scholarship: Any, resume: Any = None) -> d
             _as_list(getattr(scholarship, "degree_levels", None)),
         ),
         "academic": academic_requirement_score(profile, resume, scholarship),
-        "language": no_ielts_bonus(
-            bool(getattr(profile, "has_ielts", False)),
-            getattr(profile, "ielts_score", None),
-            bool(getattr(scholarship, "requires_ielts", False)),
-            getattr(scholarship, "min_ielts_score", None),
-        ),
+        "language": english_test_score(profile, scholarship),
         "resume_keywords": keyword_score,
         "research_experience": research_score,
         "funding_fit": funding_fit_score(scholarship),
