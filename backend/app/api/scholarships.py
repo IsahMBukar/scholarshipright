@@ -9,6 +9,7 @@ from app.db.session import get_db
 from app.models.scholarship import Scholarship
 from app.models.match_score import MatchScore
 from app.schemas.scholarship import ScholarshipResponse, ScholarshipListResponse
+from app.services.document_defaults import apply_auto_defaults
 from app.api.users import COOKIE_NAME
 from app.api.auth import decode_token
 
@@ -30,6 +31,12 @@ async def _optional_user_id(request: Request) -> Optional[UUID]:
 
 
 def _scholarship_response(scholarship: Scholarship, match_score: Optional[float] = None, match_breakdown: Optional[dict] = None) -> ScholarshipResponse:
+    # Materialise the 5 "cement + flexible" doc-defaults fields +
+    # accepted_english_tests before validation. Without this, legacy
+    # rows (or freshly-created rows from the admin POST path that
+    # skipped the lazy backfill) would surface as NULL and fail
+    # ScholarshipResponse's strict pydantic schema with 500s.
+    apply_auto_defaults(scholarship)
     data = ScholarshipResponse.model_validate(scholarship).model_dump()
     data["match_score"] = float(match_score) if match_score is not None else None
     data["match_breakdown"] = match_breakdown
@@ -147,7 +154,11 @@ async def list_scholarships(
     if user_id:
         items = [_scholarship_response(s, score, breakdown) for s, score, breakdown in rows]
     else:
-        items = [ScholarshipResponse.model_validate(row[0]) for row in rows]
+        items = []
+        for row in rows:
+            sch = row[0]
+            apply_auto_defaults(sch)
+            items.append(ScholarshipResponse.model_validate(sch))
 
     return ScholarshipListResponse(
         items=items,
@@ -278,4 +289,7 @@ async def get_scholarship(slug: str, request: Request, db: AsyncSession = Depend
         if match:
             return _scholarship_response(scholarship, match.score, match.breakdown)
 
+    # Materialise the 5 "cement + flexible" fields from degree_levels
+    # so the public response never has nulls for those.
+    apply_auto_defaults(scholarship)
     return ScholarshipResponse.model_validate(scholarship)
