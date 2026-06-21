@@ -256,6 +256,22 @@ export async function fetchApplicationStats(): Promise<ApplicationStats> {
 }
 
 // Resume API
+export interface LevelAwareCompleteness {
+  level: 'high_school' | 'bachelor' | 'master' | 'phd' | string;
+  level_label: string;
+  base_score: number;
+  bonus_score: number;
+  total_score: number;
+  display_score: number;
+  grade: 'Excellent' | 'Strong' | 'Fair' | 'Incomplete' | string;
+  present_required: string[];
+  missing_required: string[];
+  present_bonus: string[];
+  present_bonus_count: number;
+  required_count: number;
+  hint: string;
+}
+
 export interface Resume {
   id: string;
   user_id: string;
@@ -287,6 +303,7 @@ export interface Resume {
   issues: any[];
   ai_suggestions: string | null;
   overall_score: number | null;
+  level_aware_completeness: LevelAwareCompleteness | null;
   created_at: string;
   updated_at: string;
 }

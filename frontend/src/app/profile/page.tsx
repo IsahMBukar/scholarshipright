@@ -7,7 +7,7 @@ import PageHeader from '@/components/PageHeader';
 import { ProfileSkeleton } from '@/components/Skeletons';
 import OnboardingProgress from '@/components/OnboardingProgress';
 import { fetchResumes, fetchProfile, createOrUpdateProfile, updateResume, createManualResume } from '@/services/api';
-import type { Profile } from '@/services/api';
+import type { Profile, Resume } from '@/services/api';
 import { useLogout } from '@/hooks/useLogout';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import {
@@ -89,6 +89,135 @@ function StatCard({ icon, label, value }: { icon: string; label: string; value: 
       <span className="material-symbols-outlined text-[18px] text-primary">{icon}</span>
       <p className="text-[11px] text-text-secondary mt-1 font-medium">{label}</p>
       <p className="text-[16px] font-bold text-text-primary mt-0.5">{value || '—'}</p>
+    </div>
+  );
+}
+
+/* ─── Resume Strength Card ─── */
+const SECTION_LABELS: Record<string, string> = {
+  full_name: 'Full name',
+  email: 'Email',
+  phone: 'Phone',
+  location: 'Location',
+  linkedin_url: 'LinkedIn URL',
+  portfolio_url: 'Portfolio URL',
+  summary: 'Professional summary',
+  education: 'Education',
+  experience: 'Experience',
+  skills: 'Skills',
+  languages: 'Languages',
+  projects: 'Projects',
+  research_projects: 'Research projects',
+  publications: 'Publications',
+  awards: 'Awards',
+  certifications: 'Certifications',
+  ref_list: 'References',
+};
+
+const GRADE_STYLES: Record<string, { bg: string; text: string; bar: string }> = {
+  Excellent: { bg: 'bg-emerald-50', text: 'text-emerald-700', bar: 'bg-emerald-500' },
+  Strong:    { bg: 'bg-sky-50',     text: 'text-sky-700',     bar: 'bg-sky-500' },
+  Fair:      { bg: 'bg-amber-50',   text: 'text-amber-700',   bar: 'bg-amber-500' },
+  Incomplete:{ bg: 'bg-rose-50',    text: 'text-rose-700',    bar: 'bg-rose-500' },
+};
+
+function ResumeStrengthCard({ data }: { data: NonNullable<Resume['level_aware_completeness']> | null }) {
+  if (!data) return null;
+  const { base_score, bonus_score, total_score, display_score, grade, missing_required, present_bonus, level_label, hint, present_required, required_count } = data;
+  const style = GRADE_STYLES[grade] ?? GRADE_STYLES.Fair;
+  // Widths: required section gets a bar up to 100%, bonus adds extra on top
+  // (uncapped). For the visual, we cap the bar at 100% and use a small
+  // "+5% bonus" tag when there's bonus content.
+  const cappedBase = Math.min(base_score, 100);
+  return (
+    <div className="mt-4 border border-primary/20 rounded-xl bg-gradient-to-br from-primary/5 to-transparent p-4">
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div className="flex items-center gap-2">
+          <span className="material-symbols-outlined text-[20px] text-primary">workspace_premium</span>
+          <h3 className="text-[14px] font-bold text-text-primary">Resume Strength</h3>
+        </div>
+        <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded-full ${style.bg} ${style.text}`}>
+          {grade}
+        </span>
+      </div>
+      <p className="text-[11px] text-text-secondary -mt-1 mb-3">
+        Scored for: <span className="font-semibold text-text-primary">{level_label}</span>
+      </p>
+
+      {/* Score bar — required (up to 100%) + bonus (overflow) */}
+      <div className="space-y-2 mb-3">
+        <div>
+          <div className="flex items-center justify-between text-[11px] mb-1">
+            <span className="font-medium text-text-secondary">
+              Base completeness ({present_required.length} / {required_count} required)
+            </span>
+            <span className="font-bold text-text-primary">{cappedBase.toFixed(0)}%</span>
+          </div>
+          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div className={`h-full ${style.bar} transition-all`} style={{ width: `${cappedBase}%` }} />
+          </div>
+        </div>
+        {bonus_score > 0 && (
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="font-medium text-text-secondary">
+              Bonus sections ({present_bonus.length} non-standard for this level)
+            </span>
+            <span className="font-bold text-emerald-700">+{bonus_score.toFixed(0)}%</span>
+          </div>
+        )}
+      </div>
+
+      {/* Total summary line */}
+      <p className="text-[12px] text-text-secondary leading-relaxed mb-2">
+        Total: <span className="font-bold text-text-primary">{display_score.toFixed(0)}%</span>
+        {total_score > 100 && (
+          <span className="text-emerald-700 font-semibold">
+            {' '}(raw {total_score.toFixed(0)}%)
+          </span>
+        )}
+        {' '}— {grade === 'Excellent' ? 'your resume is highly competitive for this level.' :
+                grade === 'Strong' ? 'solid foundation, a few additions would push you into the top tier.' :
+                grade === 'Fair' ? 'good progress — focus on the missing required sections below.' :
+                'a strong start — fill in the required sections to be considered.'}
+      </p>
+
+      {/* Missing required sections */}
+      {missing_required.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-primary/10">
+          <p className="text-[11px] font-semibold text-text-primary mb-1.5">
+            Missing for {level_label} ({missing_required.length}):
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {missing_required.map(s => (
+              <span key={s} className="text-[11px] bg-rose-50 text-rose-700 border border-rose-200 rounded-full px-2 py-0.5">
+                {SECTION_LABELS[s] ?? s}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Present bonus sections */}
+      {present_bonus.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-primary/10">
+          <p className="text-[11px] font-semibold text-text-primary mb-1.5">
+            Bonus sections you have ({present_bonus.length}):
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {present_bonus.map(s => (
+              <span key={s} className="text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5">
+                {SECTION_LABELS[s] ?? s}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Per-level hint */}
+      <div className="mt-3 pt-3 border-t border-primary/10 flex gap-2">
+        <span className="material-symbols-outlined text-[16px] text-primary mt-0.5 flex-shrink-0">tips_and_updates</span>
+        <p className="text-[12px] text-text-secondary leading-relaxed italic">{hint}</p>
+      </div>
     </div>
   );
 }
@@ -389,6 +518,7 @@ function ProfilePageInner() {
                     </span>
                   </div>
                 )}
+                <ResumeStrengthCard data={resume?.level_aware_completeness ?? null} />
               </div>
 
               <div className="p-5 md:p-6">

@@ -73,6 +73,11 @@ class ResumeOut(BaseModel):
     ai_suggestions: Optional[str]
     overall_score: Optional[int] = None
     section_scores: Optional[dict] = None
+    # Level-aware completeness is computed at response time using the
+    # user's profile.degree_level — see `attach_level_aware_completeness`
+    # in `app.api.resumes`. It's optional so existing callers that don't
+    # go through that helper still get a valid `None` instead of crashing.
+    level_aware_completeness: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
 

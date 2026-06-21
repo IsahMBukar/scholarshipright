@@ -1,5 +1,7 @@
 import os
 import uuid as uuid_lib
+from uuid import UUID
+from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,9 +13,10 @@ import asyncio
 from app.db.session import get_db, AsyncSessionLocal
 from app.models.resume import Resume
 from app.models.user import User
+from app.models.profile import Profile
 from app.schemas.resume import ResumeOut, ResumeUpdate
 from app.services.resume_analyzer import extract_text_from_file, analyze_resume, rewrite_field
-from app.services.scoring import calculate_resume_score
+from app.services.scoring import calculate_resume_score, calculate_level_aware_completeness
 from app.services.notifications import emit_resume_failed
 from app.api.users import get_current_user
 from app.core.rate_limit import resume_analysis_rate_limit, resume_rewrite_rate_limit, resume_upload_rate_limit
@@ -33,12 +36,63 @@ UPLOAD_DIR = "/home/alaiisah/Desktop/Scholarshipright/backend/uploads/resumes"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
+# ─── Level-aware completeness helpers ──────────────────────────────────────
+#
+# `level_aware_completeness` is NOT a column on the Resume model — it's
+# computed at response time from the resume's section data combined with
+# the user's profile.degree_level (which lives in the Profile table).
+# These two helpers keep the wiring out of every endpoint body.
+
+async def _get_user_degree_level(db: AsyncSession, user_id: Any) -> str | None:
+    """Fetch the user's profile.degree_level (or None if no profile yet)."""
+    result = await db.execute(
+        select(Profile.degree_level).where(Profile.user_id == user_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def _user_degree_level(db: AsyncSession, user: User) -> str | None:
+    """Convenience wrapper for the common `user.id` case."""
+    return await _get_user_degree_level(db, user.id)
+
+
+def _resume_to_dict(resume: Resume) -> dict:
+    """Flatten the Resume ORM's columns into a dict for the scorer."""
+    return {c.name: getattr(resume, c.name, None) for c in Resume.__table__.columns}
+
+
+def _attach_level_aware_completeness(
+    out: ResumeOut, resume: Resume, degree_level: str | None
+) -> ResumeOut:
+    """Mutate `out` to include the level_aware_completeness payload."""
+    out.level_aware_completeness = calculate_level_aware_completeness(
+        _resume_to_dict(resume), degree_level
+    )
+    return out
+
+
+async def _serialize_resume(resume: Resume, user: Any, db: AsyncSession) -> ResumeOut:
+    """Build a `ResumeOut` from an ORM model, attaching the
+    level-aware completeness computed from the user's profile.degree_level.
+
+    Use this in every endpoint that returns a single ResumeOut.
+    """
+    out = ResumeOut.model_validate(resume)
+    degree_level = await _user_degree_level(db, user)
+    return _attach_level_aware_completeness(out, resume, degree_level)
+
+
 @router.get("", response_model=List[ResumeOut])
 async def list_resumes(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Resume).where(Resume.user_id == user.id).order_by(Resume.is_primary.desc(), Resume.updated_at.desc())
     )
-    return result.scalars().all()
+    resumes = result.scalars().all()
+    degree_level = await _user_degree_level(db, user)
+    return [
+        _attach_level_aware_completeness(ResumeOut.model_validate(r), r, degree_level)
+        for r in resumes
+    ]
 
 
 @router.get("/{resume_id}", response_model=ResumeOut)
@@ -49,7 +103,7 @@ async def get_resume(resume_id: str, user: User = Depends(get_current_user), db:
     resume = result.scalar_one_or_none()
     if not resume:
         raise HTTPException(404, "Resume not found")
-    return resume
+    return await _serialize_resume(resume, user, db)
 
 
 @router.post("", response_model=ResumeOut, dependencies=[Depends(resume_upload_rate_limit)])
@@ -114,7 +168,7 @@ async def create_resume(
     # Recompute in the background; the next /api/matches call will wait if needed.
     trigger_recompute(user.id, REASON_RESUME_CREATED, background_tasks)
 
-    return resume
+    return await _serialize_resume(resume, user, db)
 
 
 # ── Manual path: create a stub resume with no file ──────────────
@@ -173,7 +227,7 @@ async def create_manual_resume(
     # in by hand will be the source of truth until they upload a real CV).
     trigger_recompute(user.id, REASON_RESUME_CREATED, BackgroundTasks())
 
-    return resume
+    return await _serialize_resume(resume, user, db)
 
 
 async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename: str, fields_list: list, target_degree: str):
@@ -343,7 +397,7 @@ async def update_resume(resume_id: str, data: ResumeUpdate, background_tasks: Ba
     reason = REASON_RESUME_PRIMARY_CHANGED if is_becoming_primary else REASON_RESUME_UPDATED
     trigger_recompute(user.id, reason, background_tasks)
 
-    return resume
+    return await _serialize_resume(resume, user, db)
 
 
 @router.delete("/{resume_id}")
@@ -387,7 +441,7 @@ async def set_primary(resume_id: str, background_tasks: BackgroundTasks, user: U
     # here must trigger a recompute.
     trigger_recompute(user.id, REASON_RESUME_PRIMARY_CHANGED, background_tasks)
 
-    return resume
+    return await _serialize_resume(resume, user, db)
 
 
 @router.post("/{resume_id}/rewrite", dependencies=[Depends(resume_rewrite_rate_limit)])
