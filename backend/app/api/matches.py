@@ -11,6 +11,7 @@ from app.schemas.scholarship import ScholarshipResponse
 from app.api.users import get_current_user
 from app.models.user import User
 from app.services.match_engine import compute_match_score
+from app.services.document_defaults import apply_auto_defaults
 from app.services.match_auto import (
     REASON_MANUAL,
     recompute_matches_for_user,
@@ -52,7 +53,9 @@ async def get_matches(
 
     return [
         {
-            "scholarship": ScholarshipResponse.model_validate(scholarship).model_dump(),
+            "scholarship": ScholarshipResponse.model_validate(
+                apply_auto_defaults(scholarship)
+            ).model_dump(),
             "score": float(ms.score),
             "breakdown": ms.breakdown,
         }
