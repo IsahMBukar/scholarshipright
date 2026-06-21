@@ -20,6 +20,8 @@ import type {
   AdminScholarship,
   AdminScholarshipCreate,
   AdminScholarshipPatch,
+  PreviousDegree,
+  StandardizedTest,
 } from '@/lib/admin/types';
 
 // ── Form state ────────────────────────────────────────────────────
@@ -70,6 +72,27 @@ export interface ScholarshipForm {
   source: string;
   // English tests accepted (array, displayed as pills on the detail page)
   accepted_english_tests: string[];
+  // Required documents — per-scholarship admin override on top of the
+  // backend's auto-derived defaults. 8 booleans for the universal
+  // standard docs, then 5 "cement + flexible" fields. The "auto"
+  // option in the dropdown signals "let the backend decide" — sending
+  // the literal value is also fine (admin override).
+  req_transcripts: boolean;
+  req_cv_resume: boolean;
+  req_sop_motivation_letter: boolean;
+  req_recommendation_letters: boolean;
+  req_english_test: boolean;
+  req_passport_or_id: boolean;
+  req_financial_proof: boolean;
+  req_photo: boolean;
+  // 'auto' sentinel means "use the backend's apply_auto_defaults()".
+  // Admins can also pick a concrete value (admin override).
+  previous_degree_required: PreviousDegree | 'auto';
+  recommendation_letters_count: string;   // number-as-string, parsed at build
+  research_proposal_required: boolean | 'auto';
+  writing_sample_required: boolean;
+  standardized_test: StandardizedTest | 'auto';
+  additional_required_documents: string;
 }
 
 // ── Option lists ──────────────────────────────────────────────────
@@ -99,6 +122,40 @@ export const DEFAULT_LANGUAGE = 'English';
 export const DEFAULT_SOURCE = 'admin_panel';
 // Sensible default for English-medium scholarships; admins can override.
 export const DEFAULT_ENGLISH_TESTS = ['IELTS', 'TOEFL'];
+
+// Required documents — option lists used by the dropdowns.
+
+// Cement ("previous degree certificate required"). The 'auto' sentinel
+// is sent as null in the body and tells the backend to derive from
+// degree_levels (see backend/app/services/document_defaults.py).
+export const PREVIOUS_DEGREE_OPTIONS: ReadonlyArray<{ value: PreviousDegree | 'auto'; label: string }> = [
+  { value: 'auto',                  label: 'Auto (from target degree)' },
+  { value: 'high_school_diploma',   label: 'High school diploma (for Bachelor scholarships)' },
+  { value: 'bachelor_degree',       label: "Bachelor's degree (for Master's scholarships)" },
+  { value: 'master_degree',         label: "Master's degree (for PhD/Doctoral scholarships)" },
+  { value: 'none',                  label: 'No previous degree required' },
+];
+
+// Standardized test requirement. Same 'auto' sentinel pattern.
+export const STANDARDIZED_TEST_OPTIONS: ReadonlyArray<{ value: StandardizedTest | 'auto'; label: string }> = [
+  { value: 'auto',     label: 'Auto (from target degree)' },
+  { value: 'none',     label: 'No standardized test required' },
+  { value: 'sat_act',  label: 'SAT or ACT (typically Undergraduate)' },
+  { value: 'gre_gmat', label: 'GRE or GMAT (typically Master\u2019s)' },
+  { value: 'gre',      label: 'GRE (typically PhD)' },
+  { value: 'gmat',     label: 'GMAT (typically business Master\u2019s)' },
+];
+
+// Recommendation letter count option list (1\u20135 plus auto).
+// The 'auto' sentinel is sent as null in the body.
+export const RECOMMENDATION_COUNT_OPTIONS: ReadonlyArray<{ value: number | 'auto'; label: string }> = [
+  { value: 'auto', label: 'Auto (2 for Bachelor/Master\u2019s, 3 for PhD)' },
+  { value: 1,      label: '1 letter' },
+  { value: 2,      label: '2 letters' },
+  { value: 3,      label: '3 letters' },
+  { value: 4,      label: '4 letters' },
+  { value: 5,      label: '5 letters' },
+];
 
 // ── Form factories ────────────────────────────────────────────────
 
@@ -139,6 +196,22 @@ export function emptyForm(): ScholarshipForm {
     is_verified: false,
     source: DEFAULT_SOURCE,
     accepted_english_tests: [...DEFAULT_ENGLISH_TESTS],
+    // Required documents — all start on the default ('auto' = let the
+    // backend derive, or sensible boolean defaults for the booleans).
+    req_transcripts: true,
+    req_cv_resume: true,
+    req_sop_motivation_letter: true,
+    req_recommendation_letters: true,
+    req_english_test: true,
+    req_passport_or_id: true,
+    req_financial_proof: false,
+    req_photo: false,
+    previous_degree_required: 'auto',
+    recommendation_letters_count: 'auto',
+    research_proposal_required: 'auto',
+    writing_sample_required: false,
+    standardized_test: 'auto',
+    additional_required_documents: '',
   };
 }
 
@@ -183,6 +256,23 @@ export function formFromScholarship(s: AdminScholarship): ScholarshipForm {
     is_verified: s.is_verified,
     source: s.source ?? '',
     accepted_english_tests: [...(s.accepted_english_tests ?? [])],
+    // Required documents — pre-populate from the scholarship's stored
+    // values. Backend always materialises these on the read side, so
+    // s.* is guaranteed non-null for the cement/flexible fields.
+    req_transcripts: s.req_transcripts ?? true,
+    req_cv_resume: s.req_cv_resume ?? true,
+    req_sop_motivation_letter: s.req_sop_motivation_letter ?? true,
+    req_recommendation_letters: s.req_recommendation_letters ?? true,
+    req_english_test: s.req_english_test ?? true,
+    req_passport_or_id: s.req_passport_or_id ?? true,
+    req_financial_proof: s.req_financial_proof ?? false,
+    req_photo: s.req_photo ?? false,
+    previous_degree_required: s.previous_degree_required ?? 'high_school_diploma',
+    recommendation_letters_count: s.recommendation_letters_count != null ? String(s.recommendation_letters_count) : '2',
+    research_proposal_required: s.research_proposal_required ?? false,
+    writing_sample_required: s.writing_sample_required ?? false,
+    standardized_test: s.standardized_test ?? 'none',
+    additional_required_documents: s.additional_required_documents ?? '',
   };
 }
 
@@ -319,6 +409,31 @@ export function buildCreateBody(form: ScholarshipForm): AdminScholarshipCreate {
   // overrides the host-country inference on the next migration.
   body.accepted_english_tests = form.accepted_english_tests;
 
+  // Required documents. Booleans: always send so admin intent is
+  // explicit. Cement/flexible: convert 'auto' → null (backend will
+  // derive from degree_levels); convert the value → its concrete form.
+  body.req_transcripts = form.req_transcripts;
+  body.req_cv_resume = form.req_cv_resume;
+  body.req_sop_motivation_letter = form.req_sop_motivation_letter;
+  body.req_recommendation_letters = form.req_recommendation_letters;
+  body.req_english_test = form.req_english_test;
+  body.req_passport_or_id = form.req_passport_or_id;
+  body.req_financial_proof = form.req_financial_proof;
+  body.req_photo = form.req_photo;
+  body.previous_degree_required =
+    form.previous_degree_required === 'auto' ? null : form.previous_degree_required;
+  body.recommendation_letters_count =
+    form.recommendation_letters_count === 'auto'
+      ? null
+      : Number(form.recommendation_letters_count);
+  body.research_proposal_required =
+    form.research_proposal_required === 'auto' ? null : form.research_proposal_required;
+  body.writing_sample_required = form.writing_sample_required;
+  body.standardized_test =
+    form.standardized_test === 'auto' ? null : form.standardized_test;
+  const additional = opt(form.additional_required_documents);
+  if (additional) body.additional_required_documents = additional;
+
   return body;
 }
 
@@ -409,6 +524,63 @@ export function buildPatchBody(
   const aetOrig = [...(original.accepted_english_tests ?? [])].sort();
   if (aet.length !== aetOrig.length || aet.some((v, i) => v !== aetOrig[i])) {
     body.accepted_english_tests = form.accepted_english_tests;
+  }
+
+  // Required documents. Booleans diff. Cement/flexible:
+  //   'auto'  → null in body
+  //   value   → that value in body
+  // Compare against the original (always non-null thanks to
+  // apply_auto_defaults on the backend read side).
+  const docBool = (formVal: boolean, orig: boolean, key: keyof AdminScholarshipPatch) => {
+    if (formVal !== orig) (body as Record<string, unknown>)[key] = formVal;
+  };
+  docBool(form.req_transcripts, original.req_transcripts ?? true, 'req_transcripts');
+  docBool(form.req_cv_resume, original.req_cv_resume ?? true, 'req_cv_resume');
+  docBool(form.req_sop_motivation_letter, original.req_sop_motivation_letter ?? true, 'req_sop_motivation_letter');
+  docBool(form.req_recommendation_letters, original.req_recommendation_letters ?? true, 'req_recommendation_letters');
+  docBool(form.req_english_test, original.req_english_test ?? true, 'req_english_test');
+  docBool(form.req_passport_or_id, original.req_passport_or_id ?? true, 'req_passport_or_id');
+  docBool(form.req_financial_proof, original.req_financial_proof ?? false, 'req_financial_proof');
+  docBool(form.req_photo, original.req_photo ?? false, 'req_photo');
+  docBool(form.writing_sample_required, original.writing_sample_required ?? false, 'writing_sample_required');
+
+  // Cement — original is always a concrete string (apply_auto_defaults
+  // materialises it). If form says 'auto', send null. Otherwise send
+  // the concrete value.
+  const formCement = form.previous_degree_required;
+  const origCement = original.previous_degree_required ?? 'high_school_diploma';
+  if (formCement !== origCement) {
+    body.previous_degree_required = formCement === 'auto' ? null : formCement;
+  }
+
+  // Recommendation count
+  const formRecs = form.recommendation_letters_count;
+  const formRecsNum = formRecs === 'auto' ? null : Number(formRecs);
+  const origRecs = original.recommendation_letters_count ?? 2;
+  if (formRecsNum !== origRecs) {
+    body.recommendation_letters_count = formRecsNum;
+  }
+
+  // Research proposal — 'auto' → null
+  const formResearch = form.research_proposal_required;
+  const origResearch = original.research_proposal_required ?? false;
+  const formResearchBool = formResearch === 'auto' ? null : formResearch;
+  if (formResearchBool !== origResearch) {
+    body.research_proposal_required = formResearchBool;
+  }
+
+  // Standardized test — 'auto' → null
+  const formTest = form.standardized_test;
+  const origTest = original.standardized_test ?? 'none';
+  if (formTest !== origTest) {
+    body.standardized_test = formTest === 'auto' ? null : formTest;
+  }
+
+  // Additional (long tail) — string diff, empty string means "clear it"
+  const formAdd = (form.additional_required_documents ?? '').trim();
+  const origAdd = (original.additional_required_documents ?? '').trim();
+  if (formAdd !== origAdd) {
+    body.additional_required_documents = formAdd || null;
   }
 
   return body;

@@ -3,6 +3,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
+// Re-export the admin required-documents type aliases so the public
+// `Scholarship` shape uses the exact same vocabulary as the admin
+// side. Single source of truth in @/lib/admin/types.
+import type { PreviousDegree, StandardizedTest } from '@/lib/admin/types';
+export type { PreviousDegree, StandardizedTest };
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 export interface MatchBreakdown {
   // Numeric criterion scores
@@ -69,6 +75,22 @@ export interface Scholarship {
   application_count?: number;
   match_score?: number;
   match_breakdown?: MatchBreakdown;
+  // Required documents — always materialised on the backend read side
+  // (see apply_auto_defaults) so all fields are guaranteed non-null.
+  req_transcripts: boolean;
+  req_cv_resume: boolean;
+  req_sop_motivation_letter: boolean;
+  req_recommendation_letters: boolean;
+  req_english_test: boolean;
+  req_passport_or_id: boolean;
+  req_financial_proof: boolean;
+  req_photo: boolean;
+  previous_degree_required: PreviousDegree;
+  recommendation_letters_count: number;
+  research_proposal_required: boolean;
+  writing_sample_required: boolean;
+  standardized_test: StandardizedTest;
+  additional_required_documents: string | null;
 }
 
 export interface ScholarshipListResponse {

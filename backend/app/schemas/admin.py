@@ -152,6 +152,24 @@ class AdminScholarshipResponse(BaseModel):
     # Mirrors the public detail-page pill list; admins can override the
     # host-country inference by setting this explicitly.
     accepted_english_tests: List[str] = []
+    # Required documents — admin override on top of auto-derived defaults.
+    # 8 booleans (true/false), then the 5 "cement + flexible" fields
+    # (always materialised by apply_auto_defaults on the read side, so
+    # they're guaranteed non-null in API responses), then the long-tail.
+    req_transcripts: bool = True
+    req_cv_resume: bool = True
+    req_sop_motivation_letter: bool = True
+    req_recommendation_letters: bool = True
+    req_english_test: bool = True
+    req_passport_or_id: bool = True
+    req_financial_proof: bool = False
+    req_photo: bool = False
+    previous_degree_required: str = "high_school_diploma"
+    recommendation_letters_count: int = 2
+    research_proposal_required: bool = False
+    writing_sample_required: bool = False
+    standardized_test: str = "none"
+    additional_required_documents: Optional[str] = None
     is_active: bool = True
     is_verified: bool = False
     source: Optional[str] = None
@@ -203,6 +221,24 @@ class AdminScholarshipCreate(BaseModel):
     # English tests accepted (e.g. ["IELTS", "TOEFL"]). When omitted/empty
     # the runtime migration backfills via _infer_english_tests(host_country).
     accepted_english_tests: Optional[List[str]] = None
+    # Required documents. Each nullable: None means "use the auto default
+    # derived from degree_levels at read time". On Create the API
+    # materialises them via apply_auto_defaults() before persisting, so
+    # the saved row holds a real value, not a null.
+    req_transcripts: Optional[bool] = None
+    req_cv_resume: Optional[bool] = None
+    req_sop_motivation_letter: Optional[bool] = None
+    req_recommendation_letters: Optional[bool] = None
+    req_english_test: Optional[bool] = None
+    req_passport_or_id: Optional[bool] = None
+    req_financial_proof: Optional[bool] = None
+    req_photo: Optional[bool] = None
+    previous_degree_required: Optional[str] = None
+    recommendation_letters_count: Optional[int] = None
+    research_proposal_required: Optional[bool] = None
+    writing_sample_required: Optional[bool] = None
+    standardized_test: Optional[str] = None
+    additional_required_documents: Optional[str] = None
     is_active: Optional[bool] = None
     is_verified: Optional[bool] = None
     source: Optional[str] = None
@@ -240,6 +276,23 @@ class AdminScholarshipPatch(BaseModel):
     official_url: Optional[str] = None
     logo_url: Optional[str] = None
     accepted_english_tests: Optional[List[str]] = None
+    # Required documents — admin can override any of these. None means
+    # "don't change" on PATCH (and the field stays at whatever the DB
+    # has, which itself may be null → auto-defaulted at read time).
+    req_transcripts: Optional[bool] = None
+    req_cv_resume: Optional[bool] = None
+    req_sop_motivation_letter: Optional[bool] = None
+    req_recommendation_letters: Optional[bool] = None
+    req_english_test: Optional[bool] = None
+    req_passport_or_id: Optional[bool] = None
+    req_financial_proof: Optional[bool] = None
+    req_photo: Optional[bool] = None
+    previous_degree_required: Optional[str] = None
+    recommendation_letters_count: Optional[int] = None
+    research_proposal_required: Optional[bool] = None
+    writing_sample_required: Optional[bool] = None
+    standardized_test: Optional[str] = None
+    additional_required_documents: Optional[str] = None
     is_active: Optional[bool] = None
     is_verified: Optional[bool] = None
     source: Optional[str] = None

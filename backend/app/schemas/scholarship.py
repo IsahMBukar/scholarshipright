@@ -28,6 +28,23 @@ class ScholarshipBase(BaseModel):
     min_cgpa: Optional[Decimal] = None
     language_of_instruction: str = "English"
     accepted_english_tests: List[str] = []  # Pairs with Scholarship.accepted_english_tests
+    # Required documents (public-facing — these power the detail-page
+    # checklist). The "cement + flexible" fields are guaranteed non-null
+    # because apply_auto_defaults() runs on every read.
+    req_transcripts: bool = True
+    req_cv_resume: bool = True
+    req_sop_motivation_letter: bool = True
+    req_recommendation_letters: bool = True
+    req_english_test: bool = True
+    req_passport_or_id: bool = True
+    req_financial_proof: bool = False
+    req_photo: bool = False
+    previous_degree_required: str = "high_school_diploma"
+    recommendation_letters_count: int = 2
+    research_proposal_required: bool = False
+    writing_sample_required: bool = False
+    standardized_test: str = "none"
+    additional_required_documents: Optional[str] = None
     open_date: Optional[date] = None
     deadline: date
     program_start_date: Optional[date] = None

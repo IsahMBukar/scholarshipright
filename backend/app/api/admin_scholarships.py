@@ -37,6 +37,7 @@ from app.schemas.admin import (
     PaginatedResponse,
 )
 from app.services.admin_audit import log_admin_action
+from app.services.document_defaults import apply_auto_defaults
 from app.services.match_auto import (
     REASON_SCHOLARSHIP_DATA_CHANGED,
     mark_all_users_dirty,
@@ -129,7 +130,7 @@ async def list_scholarships(
     pages = (total + limit - 1) // limit if limit else 0
 
     return PaginatedResponse(
-        items=[AdminScholarshipResponse.model_validate(s).model_dump(mode="json") for s in rows],
+        items=[AdminScholarshipResponse.model_validate(apply_auto_defaults(s)).model_dump(mode="json") for s in rows],
         total=int(total),
         page=page,
         limit=limit,
@@ -152,7 +153,7 @@ async def get_scholarship(
             status_code=404,
             detail={"code": "scholarship_not_found", "user_message": "Scholarship not found."},
         )
-    return AdminScholarshipResponse.model_validate(s)
+    return AdminScholarshipResponse.model_validate(apply_auto_defaults(s))
 
 
 # ── create ────────────────────────────────────────────────────────
@@ -191,6 +192,11 @@ async def create_scholarship(
     s = Scholarship(**coerced)
     if s.is_active is None:
         s.is_active = True  # model default
+    # Materialise the 5 "cement + flexible" fields from degree_levels
+    # before insert, so the DB stores real values (not nulls) and the
+    # read-side stays consistent. Admin's explicit override (if any)
+    # is preserved by apply_auto_defaults' None-check logic.
+    apply_auto_defaults(s)
     db.add(s)
     try:
         await db.commit()
@@ -227,7 +233,7 @@ async def create_scholarship(
             marked, s.id, s.slug,
         )
 
-    return AdminScholarshipResponse.model_validate(s)
+    return AdminScholarshipResponse.model_validate(apply_auto_defaults(s))
 
 
 # ── patch ──────────────────────────────────────────────────────────
@@ -250,7 +256,7 @@ async def patch_scholarship(
     # Apply the patch (only fields that were set)
     raw = patch.model_dump(exclude_unset=True)
     if not raw:
-        return AdminScholarshipResponse.model_validate(s)
+        return AdminScholarshipResponse.model_validate(apply_auto_defaults(s))
 
     coerced, errors = _coerce_patch(raw)
     if errors:
@@ -302,7 +308,7 @@ async def patch_scholarship(
             marked, s.id,
         )
 
-    return AdminScholarshipResponse.model_validate(s)
+    return AdminScholarshipResponse.model_validate(apply_auto_defaults(s))
 
 
 # ── delete (hard) — super_admin only ───────────────────────────────

@@ -17,7 +17,10 @@ from app.core.admin import ensure_admin_schema_columns
 from app.models.admin_audit import ensure_audit_schema_columns
 from app.models.admin_invite import ensure_invites_schema_columns
 from app.models.password_reset import ensure_password_reset_schema_columns
-from app.models.scholarship import ensure_scholarship_schema_columns
+from app.models.scholarship import (
+    ensure_scholarship_schema_columns,
+    ensure_required_documents_schema_columns,
+)
 
 settings = get_settings()
 
@@ -55,6 +58,14 @@ async def lifespan(app: FastAPI):
         await ensure_scholarship_schema_columns()
     except Exception as e:  # noqa: BLE001
         print(f"ensure_scholarship_schema_columns failed: {e}")
+
+    # Startup: ensure the 14 required-documents columns exist on
+    # scholarships (idempotent). Pairs with the Scholarship model.
+    # See app/models/scholarship.py::_REQUIRED_DOC_COLUMNS.
+    try:
+        await ensure_required_documents_schema_columns()
+    except Exception as e:  # noqa: BLE001
+        print(f"ensure_required_documents_schema_columns failed: {e}")
 
     # Startup: ensure the password_reset_tokens table exists (idempotent).
     try:

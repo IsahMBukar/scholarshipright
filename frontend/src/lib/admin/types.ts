@@ -80,6 +80,24 @@ export interface AdminUserPatch {
 }
 
 // ── Scholarships ──────────────────────────────────────────────────
+
+// Values for the "cement" (previous-degree certificate) field. Keep in
+// sync with backend/app/services/document_defaults.py::PREVIOUS_DEGREE_OPTIONS.
+export type PreviousDegree =
+  | 'high_school_diploma'
+  | 'bachelor_degree'
+  | 'master_degree'
+  | 'none';
+
+// Values for the standardized test field. Keep in sync with
+// backend/app/services/document_defaults.py::STANDARDIZED_TEST_OPTIONS.
+export type StandardizedTest =
+  | 'none'
+  | 'sat_act'
+  | 'gre_gmat'
+  | 'gre'
+  | 'gmat';
+
 export interface AdminScholarship {
   id: string; // UUID
   name: string;
@@ -113,6 +131,24 @@ export interface AdminScholarship {
   official_url: string;
   logo_url: string | null;
   accepted_english_tests: string[];
+  // Required documents — admin override on top of auto-derived defaults.
+  // 8 booleans (true/false), then the 5 "cement + flexible" fields
+  // (always materialised by apply_auto_defaults on the backend read
+  // side, so they're guaranteed non-null in API responses).
+  req_transcripts: boolean;
+  req_cv_resume: boolean;
+  req_sop_motivation_letter: boolean;
+  req_recommendation_letters: boolean;
+  req_english_test: boolean;
+  req_passport_or_id: boolean;
+  req_financial_proof: boolean;
+  req_photo: boolean;
+  previous_degree_required: PreviousDegree;
+  recommendation_letters_count: number;
+  research_proposal_required: boolean;
+  writing_sample_required: boolean;
+  standardized_test: StandardizedTest;
+  additional_required_documents: string | null;
   is_active: boolean;
   is_verified: boolean;
   source: string | null;
@@ -166,6 +202,23 @@ export interface AdminScholarshipPatch {
   official_url?: string;
   logo_url?: string | null;
   accepted_english_tests?: string[] | null;
+  // Required documents — admin can override any of these. null means
+  // "don't change" on PATCH. Backend's apply_auto_defaults() will
+  // materialise null fields at read time using degree_levels.
+  req_transcripts?: boolean | null;
+  req_cv_resume?: boolean | null;
+  req_sop_motivation_letter?: boolean | null;
+  req_recommendation_letters?: boolean | null;
+  req_english_test?: boolean | null;
+  req_passport_or_id?: boolean | null;
+  req_financial_proof?: boolean | null;
+  req_photo?: boolean | null;
+  previous_degree_required?: PreviousDegree | null;
+  recommendation_letters_count?: number | null;
+  research_proposal_required?: boolean | null;
+  writing_sample_required?: boolean | null;
+  standardized_test?: StandardizedTest | null;
+  additional_required_documents?: string | null;
   // Status
   is_active?: boolean | null;
   is_verified?: boolean | null;
@@ -219,6 +272,23 @@ export interface AdminScholarshipCreate {
   // English tests accepted (e.g. ["IELTS", "TOEFL"]). When omitted/null
   // the backend's runtime migration backfills via host-country inference.
   accepted_english_tests?: string[] | null;
+  // Required documents — null means "use the auto default derived from
+  // degree_levels". On Create the API materialises nulls via
+  // apply_auto_defaults() before persisting.
+  req_transcripts?: boolean | null;
+  req_cv_resume?: boolean | null;
+  req_sop_motivation_letter?: boolean | null;
+  req_recommendation_letters?: boolean | null;
+  req_english_test?: boolean | null;
+  req_passport_or_id?: boolean | null;
+  req_financial_proof?: boolean | null;
+  req_photo?: boolean | null;
+  previous_degree_required?: PreviousDegree | null;
+  recommendation_letters_count?: number | null;
+  research_proposal_required?: boolean | null;
+  writing_sample_required?: boolean | null;
+  standardized_test?: StandardizedTest | null;
+  additional_required_documents?: string | null;
   // Optional — status
   is_active?: boolean | null;
   is_verified?: boolean | null;

@@ -176,9 +176,16 @@ OPTIONAL_FIELDS = [
     "Active (visible to users)",
     "Verified",
     "Source",
+    # New required-documents section (accepted_english_tests + 5 doc-defaults)
+    "Accepted English tests",
+    "Previous degree required",
+    "Recommendation letters",
+    "Research proposal",
+    "Writing sample",
+    "Standardized test",
 ]
 missing = [f for f in OPTIONAL_FIELDS if f not in drawer]
-check("all 27 optional fields rendered in the form",
+check("all 33 optional fields rendered in the form",
       not missing,
       f"(missing: {missing})" if missing else "")
 
@@ -192,18 +199,24 @@ check("'Cancel' button rendered",
 check("slug auto-fills from name (slugify call)",
       "slugify(name)" in drawer and "slugDirty" in drawer,
       "(stop auto-fill once user manually edits)")
-check("client-side validation function defined",
-      "function validate(" in drawer)
+# Validation was extracted from the drawer into scholarshipForm.ts
+# (validateForm) — test the shared module, not the drawer's internals.
+form_ts = src(os.path.join(ROOT, "frontend", "src", "components", "admin", "scholarshipForm.ts"))
+check("client-side validation function defined (scholarshipForm.validateForm)",
+      "export function validateForm(" in form_ts)
+check("drawer imports + calls validateForm from scholarshipForm",
+      "validateForm," in drawer and "validateForm(form)" in drawer)
 check("validation covers required fields",
-      "Name is required" in drawer
-      and "Slug is required" in drawer
-      and "Host country is required" in drawer
-      and "Deadline is required" in drawer
-      and "Official URL is required" in drawer)
+      "Name is required" in form_ts
+      and "Slug is required" in form_ts
+      and "Host country is required" in form_ts
+      and "Funding type is required" in form_ts
+      and "Deadline is required" in form_ts
+      and "Official URL is required" in form_ts)
 check("validation enforces URL format on official_url",
-      "must start with http:// or https://" in drawer)
+      "must start with http:// or https://" in form_ts)
 check("validation enforces slug kebab-case format",
-      "lowercase letters, digits, and dashes only" in drawer)
+      "lowercase letters, digits, and dashes only" in form_ts)
 check("'Fields marked * are required.' hint in footer",
       "Fields marked * are required." in drawer)
 

@@ -20,6 +20,9 @@ import CreateScholarshipDrawer from '@/components/admin/CreateScholarshipDrawer'
 import {
   FUNDING_OPTIONS as FORM_FUNDING_OPTIONS,
   ENGLISH_TEST_OPTIONS,
+  PREVIOUS_DEGREE_OPTIONS,
+  STANDARDIZED_TEST_OPTIONS,
+  RECOMMENDATION_COUNT_OPTIONS,
   formFromScholarship,
   buildPatchBody,
   emptyForm,
@@ -736,6 +739,164 @@ function ScholarshipDrawer({
                 None selected — the detail page will hide the section.
               </p>
             )}
+          </div>
+
+          {/* ── Required Documents ──────────────────────────── */}
+          <SectionHeader hint="What's needed to apply. Defaults are smart for the target degree — override if this scholarship is unusual.">
+            Required Documents
+          </SectionHeader>
+          <div className="space-y-3">
+            {/* 8 standard doc booleans — 2-col grid */}
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+              <CheckboxRow
+                label="Transcripts"
+                checked={form.req_transcripts}
+                onChange={(v) => set('req_transcripts', v)}
+              />
+              <CheckboxRow
+                label="CV / Resume"
+                checked={form.req_cv_resume}
+                onChange={(v) => set('req_cv_resume', v)}
+              />
+              <CheckboxRow
+                label="Statement of Purpose"
+                checked={form.req_sop_motivation_letter}
+                onChange={(v) => set('req_sop_motivation_letter', v)}
+              />
+              <CheckboxRow
+                label="Recommendation letters"
+                checked={form.req_recommendation_letters}
+                onChange={(v) => set('req_recommendation_letters', v)}
+              />
+              <CheckboxRow
+                label="English test"
+                checked={form.req_english_test}
+                onChange={(v) => set('req_english_test', v)}
+                description="Uses the accepted English tests above."
+              />
+              <CheckboxRow
+                label="Passport or ID"
+                checked={form.req_passport_or_id}
+                onChange={(v) => set('req_passport_or_id', v)}
+              />
+              <CheckboxRow
+                label="Financial proof"
+                checked={form.req_financial_proof}
+                onChange={(v) => set('req_financial_proof', v)}
+                description="Usually only needed for visa, not application."
+              />
+              <CheckboxRow
+                label="Passport-size photo"
+                checked={form.req_photo}
+                onChange={(v) => set('req_photo', v)}
+              />
+            </div>
+
+            {/* Cement + flexible fields */}
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-100">
+              <div>
+                <FieldLabel hint="The previous-degree cert you must already hold.">
+                  Previous degree required
+                </FieldLabel>
+                <select
+                  value={form.previous_degree_required}
+                  onChange={(e) =>
+                    set(
+                      'previous_degree_required',
+                      e.target.value as ScholarshipForm['previous_degree_required']
+                    )
+                  }
+                  className="w-full h-10 px-2 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  {PREVIOUS_DEGREE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <FieldLabel>Recommendation letters</FieldLabel>
+                <select
+                  value={String(form.recommendation_letters_count)}
+                  onChange={(e) =>
+                    set(
+                      'recommendation_letters_count',
+                      e.target.value === 'auto' ? 'auto' : e.target.value
+                    )
+                  }
+                  className="w-full h-10 px-2 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  {RECOMMENDATION_COUNT_OPTIONS.map((opt) => (
+                    <option key={String(opt.value)} value={String(opt.value)}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <FieldLabel>Research proposal</FieldLabel>
+                <select
+                  value={String(form.research_proposal_required)}
+                  onChange={(e) =>
+                    set(
+                      'research_proposal_required',
+                      e.target.value === 'auto' ? 'auto' : e.target.value === 'true'
+                    )
+                  }
+                  className="w-full h-10 px-2 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="auto">Auto (true for PhD)</option>
+                  <option value="true">Required</option>
+                  <option value="false">Not required</option>
+                </select>
+              </div>
+              <div>
+                <FieldLabel>Writing sample</FieldLabel>
+                <select
+                  value={String(form.writing_sample_required)}
+                  onChange={(e) =>
+                    set('writing_sample_required', e.target.value === 'true')
+                  }
+                  className="w-full h-10 px-2 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="false">Not required</option>
+                  <option value="true">Required</option>
+                </select>
+              </div>
+              <div className="col-span-2">
+                <FieldLabel>Standardized test</FieldLabel>
+                <select
+                  value={form.standardized_test}
+                  onChange={(e) =>
+                    set(
+                      'standardized_test',
+                      e.target.value as ScholarshipForm['standardized_test']
+                    )
+                  }
+                  className="w-full h-10 px-2 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  {STANDARDIZED_TEST_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Long tail */}
+            <div className="pt-2 border-t border-gray-100">
+              <FieldLabel hint="Anything that doesn't fit a toggle — e.g. portfolio, video essay, scholarship-specific form.">
+                Additional required documents
+              </FieldLabel>
+              <TextArea
+                value={form.additional_required_documents}
+                onChange={(v) => set('additional_required_documents', v)}
+                placeholder="e.g. '2-min video essay' · 'portfolio of 5 design pieces' · 'DS-260 form filled'"
+                rows={2}
+              />
+            </div>
           </div>
 
           {/* ── Dates ────────────────────────────────────────── */}

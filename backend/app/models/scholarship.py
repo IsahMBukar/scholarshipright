@@ -43,6 +43,44 @@ class Scholarship(Base):
     # migration below; new scholarships should set this explicitly.
     accepted_english_tests = Column(ARRAY(String), default=list)
 
+    # Required documents (per-scholarship admin override on top of the
+    # auto-derived defaults — see backend/app/services/document_defaults.py).
+    # All 8 booleans default to True for the universal items, False for
+    # the conditional ones. Admin can flip any of them on Create/Edit.
+    # The detail page renders this section; nothing in the model is
+    # used in matching yet (that's a future feature).
+    req_transcripts = Column(Boolean, default=True, nullable=False)
+    req_cv_resume = Column(Boolean, default=True, nullable=False)
+    req_sop_motivation_letter = Column(Boolean, default=True, nullable=False)
+    req_recommendation_letters = Column(Boolean, default=True, nullable=False)
+    req_english_test = Column(Boolean, default=True, nullable=False)
+    req_passport_or_id = Column(Boolean, default=True, nullable=False)
+    req_financial_proof = Column(Boolean, default=False, nullable=False)
+    req_photo = Column(Boolean, default=False, nullable=False)
+
+    # "Cement" — the previous-degree certificate required to apply.
+    # Auto-derived from degree_levels when null (see document_defaults.py):
+    #   bachelor-only     -> 'high_school_diploma'
+    #   master-only       -> 'bachelor_degree'
+    #   phd/doctoral-only -> 'master_degree'
+    # Admin can override with: 'high_school_diploma' | 'bachelor_degree'
+    # | 'master_degree' | 'none'. The read-side (apply_auto_defaults)
+    # always materialises this field, so the API/UI never sees null.
+    previous_degree_required = Column(String, nullable=True)
+
+    # Flexible fields that auto-default from degree_levels but admin can
+    # override. The read-side (apply_auto_defaults) materialises these
+    # so the UI never has to handle the auto-vs-explicit distinction.
+    recommendation_letters_count = Column(Integer, nullable=True)
+    research_proposal_required = Column(Boolean, nullable=True)
+    writing_sample_required = Column(Boolean, nullable=True)
+    # Enum: 'none' | 'sat_act' | 'gre_gmat' | 'gre' | 'gmat'
+    standardized_test = Column(String, nullable=True)
+
+    # Long-tail — anything that doesn't fit a toggle (e.g. "2-min video
+    # essay", "portfolio of 5 design pieces", "DS-260 form filled").
+    additional_required_documents = Column(Text, nullable=True)
+
     # Dates
     open_date = Column(Date, nullable=True)
     deadline = Column(Date, nullable=False)
@@ -194,3 +232,70 @@ async def ensure_scholarship_schema_columns() -> None:
     except Exception as e:  # noqa: BLE001
         import logging
         logging.getLogger(__name__).exception("scholarship english-tests backfill failed: %s", e)
+
+
+# ── Required-documents runtime migration ─────────────────────────────
+#
+# All 14 new columns are added via ALTER TABLE IF NOT EXISTS, mirroring
+# the pattern above. No Alembic file — we keep dev self-healing. The
+# columns are split into three groups:
+#
+#   1. Eight required-doc booleans — default values come from the model
+#      definition itself (True for the universal docs, False for the
+#      conditional ones), so we don't need to backfill.
+#   2. Five "cement + flexible" fields — nullable, so existing rows
+#      simply get NULL. The read-side (apply_auto_defaults) materialises
+#      them from degree_levels at query time, so the API/UI never sees
+#      nulls and we don't need to backfill here either.
+#   3. additional_required_documents — nullable Text, no backfill.
+
+_REQUIRED_DOC_COLUMNS: list[tuple[str, str]] = [
+    # 8 booleans (NOT NULL with sane defaults)
+    ("req_transcripts",              "BOOLEAN NOT NULL DEFAULT TRUE"),
+    ("req_cv_resume",                "BOOLEAN NOT NULL DEFAULT TRUE"),
+    ("req_sop_motivation_letter",    "BOOLEAN NOT NULL DEFAULT TRUE"),
+    ("req_recommendation_letters",   "BOOLEAN NOT NULL DEFAULT TRUE"),
+    ("req_english_test",             "BOOLEAN NOT NULL DEFAULT TRUE"),
+    ("req_passport_or_id",           "BOOLEAN NOT NULL DEFAULT TRUE"),
+    ("req_financial_proof",          "BOOLEAN NOT NULL DEFAULT FALSE"),
+    ("req_photo",                    "BOOLEAN NOT NULL DEFAULT FALSE"),
+    # Cement + flexible (nullable — auto-defaults filled in at read time)
+    ("previous_degree_required",     "VARCHAR(32)"),
+    ("recommendation_letters_count", "INTEGER"),
+    ("research_proposal_required",   "BOOLEAN"),
+    ("writing_sample_required",      "BOOLEAN"),
+    ("standardized_test",            "VARCHAR(32)"),
+    # Long tail
+    ("additional_required_documents", "TEXT"),
+]
+
+
+async def ensure_required_documents_schema_columns() -> None:
+    """Idempotent runtime migration for the required-documents columns.
+
+    Adds all 14 columns from ``_REQUIRED_DOC_COLUMNS`` to the
+    ``scholarships`` table if they don't already exist. Safe to call on
+    every startup — Postgres short-circuits the ADD COLUMN.
+
+    No backfill needed: the 8 booleans get the model defaults from
+    PostgreSQL, and the 6 nullable fields are computed at read time
+    by ``apply_auto_defaults`` in app/services/document_defaults.py.
+    """
+    from sqlalchemy import text
+
+    try:
+        async with engine.begin() as conn:
+            for col_name, col_def in _REQUIRED_DOC_COLUMNS:
+                await conn.execute(
+                    text(
+                        f"ALTER TABLE scholarships "
+                        f"ADD COLUMN IF NOT EXISTS {col_name} {col_def}"
+                    )
+                )
+    except Exception as e:  # noqa: BLE001
+        # Never crash startup — the detail page will just render the
+        # legacy static list until the migration succeeds. Log loudly.
+        import logging
+        logging.getLogger(__name__).exception(
+            "ensure_required_documents_schema_columns failed: %s", e
+        )
