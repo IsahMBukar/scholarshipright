@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import AppLayout from '@/components/AppLayout';
 import { ScholarshipDetailSkeleton } from '@/components/Skeletons';
-import { fetchScholarship, saveScholarship, removeSavedScholarship, fetchSavedScholarships, updateSavedScholarship } from '@/services/api';
+import { fetchScholarship, saveScholarship, removeSavedScholarship, fetchSavedScholarships, updateSavedScholarship, incrementScholarshipView } from '@/services/api';
 import type { Scholarship, MatchBreakdown } from '@/services/api';
 
 export default function ScholarshipDetailPage() {
@@ -15,11 +15,13 @@ export default function ScholarshipDetailPage() {
   const [isSaved, setIsSaved] = useState(false);
   const [savedStatus, setSavedStatus] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'overview' | 'provider'>('overview');
+  const viewedRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (params.slug) {
+      const slug = params.slug as string;
       Promise.all([
-        fetchScholarship(params.slug as string),
+        fetchScholarship(slug),
         fetchSavedScholarships().catch(() => []),
       ]).then(([sch, saved]) => {
         setScholarship(sch);
@@ -28,6 +30,12 @@ export default function ScholarshipDetailPage() {
         if (found) setSavedStatus((found as any).status || 'saved');
       }).catch(console.error)
         .finally(() => setLoading(false));
+
+      // Track view once per slug (guards against double-mount in dev)
+      if (viewedRef.current !== slug) {
+        viewedRef.current = slug;
+        incrementScholarshipView(slug);
+      }
     }
   }, [params.slug]);
 

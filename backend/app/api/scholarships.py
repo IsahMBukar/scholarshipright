@@ -287,10 +287,6 @@ async def get_scholarship(slug: str, request: Request, db: AsyncSession = Depend
     if not scholarship:
         raise HTTPException(status_code=404, detail="Scholarship not found")
 
-    # Increment view count
-    scholarship.view_count = (scholarship.view_count or 0) + 1
-    await db.commit()
-
     user_id = await _optional_user_id(request)
     if user_id:
         # Safety net: recompute if user has 0 match_scores
@@ -316,3 +312,17 @@ async def get_scholarship(slug: str, request: Request, db: AsyncSession = Depend
     # so the public response never has nulls for those.
     apply_auto_defaults(scholarship)
     return ScholarshipResponse.model_validate(scholarship)
+
+
+@router.post("/{slug}/view")
+async def increment_view(slug: str, db: AsyncSession = Depends(get_db)):
+    """Increment view count for a scholarship. Idempotent-safe POST."""
+    query = select(Scholarship).where(Scholarship.slug == slug)
+    result = await db.execute(query)
+    scholarship = result.scalar_one_or_none()
+    if not scholarship:
+        raise HTTPException(status_code=404, detail="Scholarship not found")
+
+    scholarship.view_count = (scholarship.view_count or 0) + 1
+    await db.commit()
+    return {"view_count": scholarship.view_count}

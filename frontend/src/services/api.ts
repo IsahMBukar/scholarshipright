@@ -173,6 +173,10 @@ export async function fetchScholarship(slug: string): Promise<Scholarship> {
   return data;
 }
 
+export async function incrementScholarshipView(slug: string): Promise<void> {
+  await api.post(`/api/scholarships/${slug}/view`).catch(() => {});
+}
+
 export async function fetchFeaturedScholarships(): Promise<Scholarship[]> {
   const { data } = await api.get('/api/scholarships/featured');
   return data;
@@ -205,6 +209,13 @@ export interface MeUser {
 export async function fetchMe(): Promise<MeUser> {
   const { data } = await api.get('/api/auth/me');
   return data;
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  await api.post('/api/auth/set-password', {
+    current_password: currentPassword,
+    new_password: newPassword,
+  });
 }
 
 export async function createOrUpdateProfile(profile: Partial<Profile>): Promise<Profile> {

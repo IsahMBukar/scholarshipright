@@ -3,8 +3,6 @@
 import { useState } from 'react';
 import { usePathname } from 'next/navigation';
 import NotificationBell from './NotificationBell';
-import { logoutAndRedirect } from '@/hooks/useLogout';
-import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 const NAV_ITEMS = [
   { label: 'Scholarships', icon: 'school', href: '/scholarships' },
@@ -17,7 +15,6 @@ const NAV_ITEMS = [
 
 export default function PageHeader({ title, children }: { title: string; children?: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const showConfirm = useConfirm();
   const pathname = usePathname();
 
   return (
@@ -70,29 +67,17 @@ export default function PageHeader({ title, children }: { title: string; childre
                 );
               })}
             </nav>
-            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 space-y-1">
-              <a href="/profile" className="flex items-center gap-3 px-4 py-3 rounded-xl text-[15px] font-medium text-text-secondary hover:bg-gray-100">
+            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
+              <a
+                href="/settings"
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-[15px] font-medium transition-colors
+                  ${pathname === '/settings'
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-text-secondary hover:bg-gray-100 hover:text-text-primary'}`}
+              >
                 <span className="material-symbols-outlined text-[22px]">settings</span>
                 Settings
               </a>
-              <button
-                type="button"
-                onClick={async () => {
-                  setMenuOpen(false);
-                  const ok = await showConfirm({
-                    title: 'Sign out of ScholarshipRight?',
-                    description: 'You will be returned to the login page. Any unsaved changes will be lost.',
-                    confirmLabel: 'Sign out',
-                    cancelLabel: 'Cancel',
-                    tone: 'danger',
-                  });
-                  if (ok) logoutAndRedirect();
-                }}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[15px] font-medium text-red-600 hover:bg-red-50 text-left"
-              >
-                <span className="material-symbols-outlined text-[22px]">logout</span>
-                Sign out
-              </button>
             </div>
           </div>
         </div>

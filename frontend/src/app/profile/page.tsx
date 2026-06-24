@@ -8,8 +8,7 @@ import { ProfileSkeleton } from '@/components/Skeletons';
 import OnboardingProgress from '@/components/OnboardingProgress';
 import { fetchResumes, fetchProfile, createOrUpdateProfile, updateResume, createManualResume } from '@/services/api';
 import type { Profile, Resume } from '@/services/api';
-import { useLogout } from '@/hooks/useLogout';
-import { useConfirm } from '@/components/ui/ConfirmDialog';
+
 import {
   getMissingCriticalFields,
   getMissingBoostFields,
@@ -322,8 +321,6 @@ function ProfilePageInner() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const { logout, loggingOut } = useLogout();
-  const showConfirm = useConfirm();
 
   // `?focus=matching` makes the page highlight the 3 fields the match
   // engine needs (country of origin, target degree, target countries).
@@ -993,39 +990,6 @@ function ProfilePageInner() {
         </Modal>
       )}
 
-      {/* ═══════════════ ACCOUNT / SIGN OUT ═══════════════ */}
-      <div className="px-4 md:px-6 pb-10 max-w-[860px]">
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 md:p-6 mt-2">
-          <div className="flex items-start gap-3 mb-4">
-            <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
-              <span className="material-symbols-outlined text-[18px] text-text-secondary">account_circle</span>
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="text-[15px] font-bold text-text-primary">Account</h3>
-              <p className="text-[12px] text-text-secondary">
-                Signed in as <span className="font-mono text-text-primary">{(resume as any)?.email || (profile as any).email || '—'}</span>
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={async () => {
-              const ok = await showConfirm({
-                title: 'Sign out of ScholarshipRight?',
-                description: 'You will be returned to the login page. Any unsaved changes will be lost.',
-                confirmLabel: 'Sign out',
-                cancelLabel: 'Cancel',
-                tone: 'danger',
-              });
-              if (ok) logout();
-            }}
-            disabled={loggingOut}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg border border-red-200 bg-red-50 text-red-700 text-[13px] font-bold hover:bg-red-100 hover:border-red-300 transition-colors disabled:opacity-50"
-          >
-            <span className="material-symbols-outlined text-[16px]">logout</span>
-            {loggingOut ? 'Signing out…' : 'Sign out'}
-          </button>
-        </div>
-      </div>
     </AppLayout>
   );
 }
