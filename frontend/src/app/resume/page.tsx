@@ -269,13 +269,13 @@ function ResumePageInner() {
         {/* ===== LIST VIEW ===== */}
         {view === 'list' && (
           <>
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
               <div>
                 <p className="text-[14px] text-text-secondary mt-1">Manage your CVs for scholarship applications</p>
               </div>
               <button
                 onClick={() => setView('upload')}
-                className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white text-[14px] font-semibold rounded-btn hover:brightness-110 transition-all"
+                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-white text-[14px] font-semibold rounded-btn hover:brightness-110 transition-all w-full sm:w-auto"
               >
                 <span className="material-symbols-outlined text-[18px]">add</span>
                 Add Resume
@@ -285,9 +285,9 @@ function ResumePageInner() {
             <div className="flex flex-col gap-3">
               {resumes.map((resume) => (
                 <div key={resume.id} className="bg-white rounded-card border border-gray-200 p-4 md:p-5 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <h3 className="text-[16px] font-bold text-text-primary truncate">{resume.title}</h3>
                         {resume.is_primary && (
                           <span className="px-2 py-0.5 rounded-[6px] bg-primary-light text-[11px] font-bold text-primary">PRIMARY</span>
@@ -302,12 +302,12 @@ function ResumePageInner() {
                       <p className="text-[13px] text-text-secondary">
                         {resume.full_name || 'No name'} · {resume.target_degree?.toUpperCase() || 'Any degree'} · {resume.target_fields?.join(', ') || 'General'}
                       </p>
-                      {resume.overall_score != null && (
+                      {resume.level_aware_completeness?.display_score != null && (
                         <div className="flex items-center gap-2 mt-2">
                           <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full ${resume.overall_score >= 70 ? 'bg-green-500' : resume.overall_score >= 50 ? 'bg-primary' : 'bg-red-400'}`} style={{ width: `${resume.overall_score}%` }} />
+                            <div className={`h-full rounded-full ${resume.level_aware_completeness.base_score >= 70 ? 'bg-green-500' : resume.level_aware_completeness.base_score >= 50 ? 'bg-primary' : 'bg-red-400'}`} style={{ width: `${Math.min(resume.level_aware_completeness.base_score, 100)}%` }} />
                           </div>
-                          <span className="text-[12px] font-semibold text-text-secondary">{resume.overall_score}%</span>
+                          <span className="text-[12px] font-semibold text-text-secondary">{Math.round(resume.level_aware_completeness.base_score)}%</span>
                         </div>
                       )}
                       {(resume.issues || []).length > 0 && (
@@ -325,16 +325,16 @@ function ResumePageInner() {
                         </div>
                       )}
                     </div>
-                    <div className="flex flex-col gap-2 flex-shrink-0">
-                      <button onClick={() => openEditor(resume)} className="px-3 py-1.5 bg-gray-100 text-text-primary text-[12px] font-medium rounded-btn hover:bg-gray-200 transition-colors">
+                    <div className="flex flex-row sm:flex-col gap-2 flex-shrink-0">
+                      <button onClick={() => openEditor(resume)} className="flex-1 sm:flex-none px-3 py-1.5 bg-gray-100 text-text-primary text-[12px] font-medium rounded-btn hover:bg-gray-200 transition-colors text-center sm:text-left">
                         Edit
                       </button>
                       {!resume.is_primary && (
-                        <button onClick={() => handleSetPrimary(resume.id)} className="px-3 py-1.5 border border-gray-200 text-text-secondary text-[12px] font-medium rounded-btn hover:border-primary hover:text-primary transition-colors">
+                        <button onClick={() => handleSetPrimary(resume.id)} className="flex-1 sm:flex-none px-3 py-1.5 border border-gray-200 text-text-secondary text-[12px] font-medium rounded-btn hover:border-primary hover:text-primary transition-colors text-center sm:text-left">
                           Set Primary
                         </button>
                       )}
-                      <button onClick={() => handleDelete(resume.id)} className="px-3 py-1.5 text-red-500 text-[12px] font-medium rounded-btn hover:bg-red-50 transition-colors">
+                      <button onClick={() => handleDelete(resume.id)} className="flex-1 sm:flex-none px-3 py-1.5 text-red-500 text-[12px] font-medium rounded-btn hover:bg-red-50 transition-colors text-center sm:text-left">
                         Delete
                       </button>
                     </div>
@@ -457,22 +457,33 @@ function ResumePageInner() {
             </button>
 
             {/* Editor header */}
-            <div className="flex items-start justify-between gap-4 mb-6">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-[22px] font-bold text-text-primary">{selectedResume.title}</h1>
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-[20px] sm:text-[22px] font-bold text-text-primary">{selectedResume.title}</h1>
                   {selectedResume.is_primary && (
                     <span className="px-2 py-0.5 rounded-[6px] bg-primary-light text-[11px] font-bold text-primary">PRIMARY</span>
                   )}
                 </div>
-                {selectedResume.overall_score != null && (
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-[14px] font-bold text-primary">{selectedResume.overall_score}%</span>
-                    <span className="text-[13px] text-text-secondary">Resume Score</span>
+                {selectedResume.level_aware_completeness?.display_score != null && (
+                  <div className="flex items-center gap-2 sm:gap-3 mt-1 flex-wrap">
+                    <span className="text-[14px] font-bold text-primary">{Math.round(selectedResume.level_aware_completeness.display_score)}%</span>
+                    <span className="text-[12px] text-text-secondary">
+                      {selectedResume.level_aware_completeness.base_score}% base
+                      {selectedResume.level_aware_completeness.bonus_score > 0 && (
+                        <span className="text-primary font-semibold"> + {selectedResume.level_aware_completeness.bonus_score}% bonus</span>
+                      )}
+                    </span>
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${
+                      selectedResume.level_aware_completeness.grade === 'Excellent' ? 'bg-green-50 text-green-700' :
+                      selectedResume.level_aware_completeness.grade === 'Strong' ? 'bg-blue-50 text-blue-700' :
+                      selectedResume.level_aware_completeness.grade === 'Fair' ? 'bg-amber-50 text-amber-700' :
+                      'bg-red-50 text-red-700'
+                    }`}>{selectedResume.level_aware_completeness.grade}</span>
                   </div>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2 sm:flex-nowrap">
                 <div className="relative group">
                   <button disabled={exporting} className="px-3 py-2 border border-gray-200 text-text-secondary text-[12px] font-medium rounded-btn hover:border-primary hover:text-primary transition-colors disabled:opacity-50 flex items-center gap-1">
                     <span className="material-symbols-outlined text-[16px]">download</span>

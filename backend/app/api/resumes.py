@@ -16,7 +16,7 @@ from app.models.user import User
 from app.models.profile import Profile
 from app.schemas.resume import ResumeOut, ResumeUpdate
 from app.services.resume_analyzer import extract_text_from_file, analyze_resume, rewrite_field
-from app.services.scoring import calculate_resume_score, calculate_level_aware_completeness
+from app.services.scoring import calculate_level_aware_completeness
 from app.services.notifications import emit_resume_failed
 from app.api.users import get_current_user
 from app.core.rate_limit import resume_analysis_rate_limit, resume_rewrite_rate_limit, resume_upload_rate_limit
@@ -59,6 +59,42 @@ async def _user_degree_level(db: AsyncSession, user: User) -> str | None:
 def _resume_to_dict(resume: Resume) -> dict:
     """Flatten the Resume ORM's columns into a dict for the scorer."""
     return {c.name: getattr(resume, c.name, None) for c in Resume.__table__.columns}
+
+
+def _score_resume_level_aware(resume_dict: dict, degree_level: str | None) -> dict:
+    """Score a resume using the level-aware engine and return the legacy
+    shape callers expect: {overall_score, section_scores, issues, grade}.
+    """
+    result = calculate_level_aware_completeness(resume_dict, degree_level)
+    overall = int(result["display_score"])
+
+    # Build per-section scores from the level-aware result.
+    section_scores: dict[str, dict] = {}
+    for s in result["present_required"]:
+        section_scores[s] = {"score": 1, "max": 1, "percentage": 100}
+    for s in result["missing_required"]:
+        section_scores[s] = {"score": 0, "max": 1, "percentage": 0}
+    for s in result["present_bonus"]:
+        section_scores[s] = {"score": 1, "max": 1, "percentage": 100}
+
+    # Derive issues from missing required sections.
+    issues = [f"Missing {s.replace('_', ' ')}" for s in result["missing_required"]]
+
+    return {
+        "overall_score": overall,
+        "section_scores": section_scores,
+        "issues": issues,
+        "grade": result["grade"],
+    }
+
+
+async def _get_degree_level_by_user_id(db: AsyncSession, user_id) -> str | None:
+    """Get degree_level from profile by user_id (for background tasks)."""
+    from uuid import UUID as _UUID
+    uid = user_id if isinstance(user_id, _UUID) else _UUID(str(user_id))
+    prof_result = await db.execute(select(Profile.degree_level).where(Profile.user_id == uid))
+    row = prof_result.first()
+    return row[0] if row else None
 
 
 def _attach_level_aware_completeness(
@@ -277,7 +313,7 @@ async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename
                 resume.ai_suggestions = analysis.get("ai_suggestions", "")
                 resume.status = "completed"
                 
-                # Calculate deterministic score
+                # Calculate level-aware score
                 resume_dict = {
                     "email": resume.email, "phone": resume.phone, "location": resume.location,
                     "linkedin_url": resume.linkedin_url, "summary": resume.summary,
@@ -286,7 +322,8 @@ async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename
                     "certifications": resume.certifications or [], "publications": resume.publications or [],
                     "languages": resume.languages or [],
                 }
-                score_result = calculate_resume_score(resume_dict)
+                degree_level = await _get_degree_level_by_user_id(db, resume.user_id)
+                score_result = _score_resume_level_aware(resume_dict, degree_level)
                 resume.overall_score = score_result["overall_score"]
                 resume.section_scores = score_result["section_scores"]
                 # Convert flat issues list to structured format with severity
@@ -370,7 +407,7 @@ async def update_resume(resume_id: str, data: ResumeUpdate, background_tasks: Ba
     for key, value in update_data.items():
         setattr(resume, key, value)
 
-    # Recalculate score on save (deterministic only)
+    # Recalculate score on save (level-aware)
     resume_dict = {
         "email": resume.email, "phone": resume.phone, "location": resume.location,
         "linkedin_url": resume.linkedin_url, "summary": resume.summary,
@@ -379,7 +416,8 @@ async def update_resume(resume_id: str, data: ResumeUpdate, background_tasks: Ba
         "certifications": resume.certifications or [], "publications": resume.publications or [],
         "languages": resume.languages or [],
     }
-    score_result = calculate_resume_score(resume_dict)
+    degree_level = await _user_degree_level(db, user)
+    score_result = _score_resume_level_aware(resume_dict, degree_level)
     resume.overall_score = score_result["overall_score"]
     resume.section_scores = score_result["section_scores"]
     resume.issues = [
@@ -521,7 +559,7 @@ async def reanalyze_resume(resume_id: str, user: User = Depends(get_current_user
         resume.ai_suggestions = analysis.get("ai_suggestions", "")
         resume.status = "completed"
 
-        # Score with deterministic engine only
+        # Score with level-aware engine
         resume_dict = {
             "email": resume.email, "phone": resume.phone, "location": resume.location,
             "linkedin_url": resume.linkedin_url, "summary": resume.summary,
@@ -530,7 +568,8 @@ async def reanalyze_resume(resume_id: str, user: User = Depends(get_current_user
             "certifications": resume.certifications or [], "publications": resume.publications or [],
             "languages": resume.languages or [],
         }
-        score_result = calculate_resume_score(resume_dict)
+        degree_level = await _user_degree_level(db, user)
+        score_result = _score_resume_level_aware(resume_dict, degree_level)
         resume.overall_score = score_result["overall_score"]
         resume.section_scores = score_result["section_scores"]
         resume.issues = [

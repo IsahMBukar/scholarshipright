@@ -30,7 +30,7 @@ from app.services.agent import (
     stream_agent_response,
     call_agent_structured,
 )
-from app.services.scoring import calculate_resume_score
+from app.services.scoring import calculate_level_aware_completeness
 from app.core.rate_limit import agent_rate_limit
 from app.core.config import get_settings
 from app.services.agent_errors import (
@@ -116,7 +116,7 @@ async def _get_user_context(db: AsyncSession, user: User) -> tuple[str, dict]:
 
     resume_data = {}
     if resume:
-        resume_score = calculate_resume_score({
+        resume_dict = {
             "email": resume.email,
             "phone": resume.phone,
             "location": resume.location,
@@ -129,13 +129,25 @@ async def _get_user_context(db: AsyncSession, user: User) -> tuple[str, dict]:
             "certifications": resume.certifications or [],
             "publications": resume.publications or [],
             "languages": resume.languages or [],
-        })
+        }
+        degree_level = profile.degree_level if profile else None
+        la_result = calculate_level_aware_completeness(resume_dict, degree_level)
+        overall = int(la_result["display_score"])
+        section_scores: dict = {}
+        for s in la_result["present_required"]:
+            section_scores[s] = {"score": 1, "max": 1, "percentage": 100}
+        for s in la_result["missing_required"]:
+            section_scores[s] = {"score": 0, "max": 1, "percentage": 0}
+        for s in la_result["present_bonus"]:
+            section_scores[s] = {"score": 1, "max": 1, "percentage": 100}
+        issues = [f"Missing {s.replace('_', ' ')}" for s in la_result["missing_required"]]
+
         resume_data = {
             "title": resume.title,
-            "overall_score": resume.overall_score or resume_score["overall_score"],
-            "grade": resume_score["grade"],
-            "section_scores": resume_score["section_scores"],
-            "issues": resume_score["issues"],
+            "overall_score": resume.overall_score or overall,
+            "grade": la_result["grade"],
+            "section_scores": section_scores,
+            "issues": issues,
             "summary": resume.summary,
             "education": resume.education or [],
             "experience": resume.experience or [],
@@ -540,15 +552,15 @@ async def api_agent_context(
 
     resume_score = 0
     if resume:
-        score_data = calculate_resume_score({
+        score_data = calculate_level_aware_completeness({
             "email": resume.email, "phone": resume.phone, "location": resume.location,
             "linkedin_url": resume.linkedin_url, "summary": resume.summary,
             "education": resume.education or [], "experience": resume.experience or [],
             "research_projects": resume.research_projects or [], "skills": resume.skills or [],
             "certifications": resume.certifications or [], "publications": resume.publications or [],
             "languages": resume.languages or [],
-        })
-        resume_score = score_data["overall_score"]
+        }, profile.degree_level if profile else None)
+        resume_score = int(score_data["display_score"])
 
     return {
         "profile": {
