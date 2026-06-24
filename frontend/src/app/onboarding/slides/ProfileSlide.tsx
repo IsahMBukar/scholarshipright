@@ -28,6 +28,13 @@ const DEGREE_OPTIONS = [
   { value: 'phd', label: 'PhD' },
 ];
 
+const CURRENT_EDUCATION_OPTIONS = [
+  { value: 'high_school', label: 'High School' },
+  { value: 'bachelor', label: "Bachelor's" },
+  { value: 'master', label: "Master's" },
+  { value: 'phd', label: 'PhD' },
+];
+
 const COUNTRIES_OF_ORIGIN = [
   'Nigeria', 'Ghana', 'Kenya', 'South Africa', 'Egypt', 'Ethiopia',
   'India', 'Pakistan', 'Bangladesh', 'Indonesia', 'Philippines', 'Vietnam',
@@ -86,6 +93,7 @@ export default function ProfileSlide({
 }) {
   // ── A. Required fields ─────────────────────────────────────────────
   const [country, setCountry] = useState<string>(initialProfile?.country_of_origin || '');
+  const [degreeLevel, setDegreeLevel] = useState<string>(initialProfile?.degree_level || '');
   const [targetDegree, setTargetDegree] = useState<string>(initialProfile?.target_degree || '');
   const [field, setField] = useState<string>(initialProfile?.field_of_study || '');
   const [targets, setTargets] = useState<string[]>(initialProfile?.target_countries || []);
@@ -121,7 +129,7 @@ export default function ProfileSlide({
   };
 
   // Only the 4 required fields gate the submit button.
-  const canSubmit = country && targetDegree && field && targets.length > 0;
+  const canSubmit = country && degreeLevel && targetDegree && field && targets.length > 0;
 
   const onSubmit = async () => {
     if (!canSubmit || saving) return;
@@ -133,6 +141,7 @@ export default function ProfileSlide({
     // existing data with empty strings).
     const payload: Partial<Profile> = {
       country_of_origin: country,
+      degree_level: degreeLevel,
       target_degree: targetDegree,
       field_of_study: field,
       target_fields: [field],
@@ -194,6 +203,29 @@ export default function ProfileSlide({
               <option key={c} value={c}>{c}</option>
             ))}
           </select>
+        </div>
+
+        {/* Current education level */}
+        <div>
+          <label className="text-[12px] font-bold text-text-secondary uppercase tracking-wide block mb-1.5">
+            Current education level
+          </label>
+          <div className="grid grid-cols-4 gap-2">
+            {CURRENT_EDUCATION_OPTIONS.map(d => (
+              <button
+                key={d.value}
+                type="button"
+                onClick={() => setDegreeLevel(d.value)}
+                className={`px-3 py-2.5 rounded-btn text-[13px] font-semibold transition-all ${
+                  degreeLevel === d.value
+                    ? 'bg-primary text-text-inverse shadow-md shadow-primary/20'
+                    : 'bg-white border border-gray-200 text-text-primary hover:border-primary hover:bg-primary/5'
+                }`}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Target degree */}

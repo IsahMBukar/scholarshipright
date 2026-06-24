@@ -17,6 +17,7 @@ import {
 } from '@/hooks/useOnboarding';
 
 const DEGREE_OPTIONS = ['bachelor', 'master', 'phd'];
+const CURRENT_EDUCATION_OPTIONS = ['high_school', 'bachelor', 'master', 'phd'];
 const COUNTRIES = ['Nigeria', 'Ghana', 'Kenya', 'South Africa', 'Ethiopia', 'Tanzania', 'Uganda', 'Egypt', 'Morocco', 'Senegal', 'Cameroon', 'Rwanda', 'Other'];
 const FIELDS = ['computer_science', 'engineering', 'medicine', 'business', 'law', 'natural_sciences', 'social_sciences', 'arts', 'education', 'agriculture', 'public_health', 'economics', 'mathematics', 'physics', 'chemistry', 'biology'];
 const LANGUAGES_LIST = ['English', 'French', 'Arabic', 'Portuguese', 'Swahili', 'Spanish', 'German', 'Japanese', 'Chinese', 'Korean', 'Turkish'];
@@ -505,7 +506,7 @@ function ProfilePageInner() {
                   <StatCard icon="science" label="Field of Study" value={profile.field_of_study ? profile.field_of_study.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : undefined} />
                   <StatCard icon="travel_explore" label="Target Countries" value={profile.target_countries?.length ? `${profile.target_countries.length} selected` : undefined} />
                   <StatCard icon="calendar_today" label="Graduation" value={profile.graduation_year} />
-                  <StatCard icon="school" label="Current Degree" value={profile.degree_level} />
+                  <StatCard icon="school" label="Current Degree" value={profile.degree_level ? profile.degree_level.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : undefined} />
                   <StatCard icon="grade" label="CGPA" value={profile.cgpa} />
                   <StatCard icon="work" label="Experience" value={profile.work_experience_years ? `${profile.work_experience_years} yrs` : undefined} />
                   <StatCard icon="translate" label="IELTS" value={profile.has_ielts ? profile.ielts_score : undefined} />
@@ -739,7 +740,7 @@ function ProfilePageInner() {
                     <Input value={editForm.graduation_year?.toString() || ''} onChange={v => setEditForm({ ...editForm, graduation_year: v })} type="number" placeholder="e.g. 2024" />
                   </Field>
                   <Field label="Current degree">
-                    <Select value={editForm.degree_level || ''} onChange={v => setEditForm({ ...editForm, degree_level: v })} options={[{ value: '', label: 'Select' }, ...DEGREE_OPTIONS.map(d => ({ value: d, label: d.charAt(0).toUpperCase() + d.slice(1) }))]} />
+                    <Select value={editForm.degree_level || ''} onChange={v => setEditForm({ ...editForm, degree_level: v })} options={[{ value: '', label: 'Select' }, ...CURRENT_EDUCATION_OPTIONS.map(d => ({ value: d, label: d === 'high_school' ? 'High School' : d.charAt(0).toUpperCase() + d.slice(1) }))]} />
                   </Field>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
