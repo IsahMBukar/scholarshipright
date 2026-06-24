@@ -8,15 +8,6 @@ import { ScholarshipDetailSkeleton } from '@/components/Skeletons';
 import { fetchScholarship, saveScholarship, removeSavedScholarship, fetchSavedScholarships, updateSavedScholarship } from '@/services/api';
 import type { Scholarship, MatchBreakdown } from '@/services/api';
 
-function deterministicScore(id: string): number {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = ((hash << 5) - hash) + id.charCodeAt(i);
-    hash |= 0;
-  }
-  return 65 + (Math.abs(hash) % 30);
-}
-
 export default function ScholarshipDetailPage() {
   const params = useParams();
   const [scholarship, setScholarship] = useState<Scholarship | null>(null);
@@ -88,8 +79,10 @@ export default function ScholarshipDetailPage() {
   const daysUntilDeadline = Math.max(0, Math.ceil(
     (new Date(scholarship.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
   ));
-  const score = scholarship.match_score || deterministicScore(scholarship.id);
-  const matchLabel = score >= 85 ? 'STRONG MATCH' : score >= 70 ? 'GOOD MATCH' : score >= 50 ? 'FAIR MATCH' : 'LOW MATCH';
+  const score = scholarship.match_score;
+  const matchLabel = score != null
+    ? (score >= 85 ? 'STRONG MATCH' : score >= 70 ? 'GOOD MATCH' : score >= 50 ? 'FAIR MATCH' : 'LOW MATCH')
+    : null;
 
   // Derive data from scholarship
   const tags = [
@@ -339,6 +332,8 @@ export default function ScholarshipDetailPage() {
 
               {/* Right: Match Score Card */}
               <div className="border border-primary-light bg-white rounded-xl p-5 shadow-sm space-y-4">
+                {score != null ? (
+                  <>
                 <div className="flex justify-between items-baseline">
                   <span className="text-4xl font-extrabold text-text-primary">{score}%</span>
                   <span className="bg-primary-light/40 text-text-primary text-xs font-bold px-2.5 py-1 rounded-md">
@@ -410,6 +405,19 @@ export default function ScholarshipDetailPage() {
                     <div className="flex justify-between text-xs">
                       <span className="text-text-secondary">Monthly Stipend</span>
                       <span className="font-semibold text-primary">${scholarship.monthly_stipend_usd}/mo</span>
+                    </div>
+                  </div>
+                )}
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-6 gap-3">
+                    <div className="relative w-10 h-10">
+                      <div className="absolute inset-0 rounded-full border-2 border-gray-100"></div>
+                      <div className="absolute inset-0 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-semibold text-text-primary">Calculating your match…</p>
+                      <p className="text-[11px] text-text-secondary mt-1">We're matching this scholarship to your profile.</p>
                     </div>
                   </div>
                 )}

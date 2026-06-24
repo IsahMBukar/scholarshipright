@@ -35,6 +35,11 @@ import {
   PREVIOUS_DEGREE_OPTIONS,
   STANDARDIZED_TEST_OPTIONS,
   RECOMMENDATION_COUNT_OPTIONS,
+  DEGREE_LEVEL_OPTIONS,
+  FIELD_OF_STUDY_OPTIONS,
+  COUNTRY_OPTIONS,
+  REGION_OPTIONS,
+  NATIONALITY_SUGGESTIONS,
   emptyForm,
   validateForm,
   buildCreateBody,
@@ -48,6 +53,7 @@ import {
   SectionHeader,
   CheckboxRow,
 } from './FormPrimitives';
+import MultiSelect from './ui/MultiSelect';
 
 // ── Main component ────────────────────────────────────────────────
 
@@ -205,10 +211,14 @@ export default function CreateScholarshipDrawer({
           </div>
           <div>
             <FieldLabel required>Host country</FieldLabel>
-            <TextInput
-              value={form.host_country}
-              onChange={(v) => set('host_country', v)}
-              placeholder="Germany"
+            <MultiSelect
+              multiple={false}
+              value={form.host_country || null}
+              onChange={(v) => set('host_country', v ?? '')}
+              options={COUNTRY_OPTIONS}
+              placeholder="Pick a country — type to search…"
+              ariaLabel="Host country"
+              id="create-host-country"
             />
           </div>
         </div>
@@ -233,40 +243,56 @@ export default function CreateScholarshipDrawer({
       </div>
 
       {/* ── Scope ──────────────────────────────────────────────── */}
-      <SectionHeader hint="Comma-separated lists — used by the match engine to score candidates.">
+      <SectionHeader hint="Pick from the canonical lists — used by the match engine to score candidates. Free text is allowed for values not in the list.">
         Scope
       </SectionHeader>
       <div className="space-y-3">
         <div>
           <FieldLabel>Degree levels</FieldLabel>
-          <TextInput
+          <MultiSelect
+            multiple
             value={form.degree_levels}
             onChange={(v) => set('degree_levels', v)}
-            placeholder="master, phd"
+            options={DEGREE_LEVEL_OPTIONS}
+            placeholder="Pick degree levels…"
+            ariaLabel="Degree levels"
+            id="create-degree-levels"
           />
         </div>
         <div>
           <FieldLabel>Fields of study</FieldLabel>
-          <TextInput
+          <MultiSelect
+            multiple
             value={form.fields_of_study}
             onChange={(v) => set('fields_of_study', v)}
-            placeholder="engineering, computer_science, public_health"
+            options={FIELD_OF_STUDY_OPTIONS}
+            placeholder="Pick fields of study — type to search…"
+            ariaLabel="Fields of study"
+            id="create-fields-of-study"
           />
         </div>
         <div>
           <FieldLabel>Eligible nationalities</FieldLabel>
-          <TextInput
+          <MultiSelect
+            multiple
             value={form.eligible_nationalities}
             onChange={(v) => set('eligible_nationalities', v)}
-            placeholder="Nigerian, African, All"
+            options={NATIONALITY_SUGGESTIONS}
+            placeholder="Pick or type nationality groups…"
+            ariaLabel="Eligible nationalities"
+            id="create-eligible-nationalities"
           />
         </div>
         <div>
           <FieldLabel>Eligible regions</FieldLabel>
-          <TextInput
+          <MultiSelect
+            multiple
             value={form.eligible_regions}
             onChange={(v) => set('eligible_regions', v)}
-            placeholder="Africa, Asia, Latin America"
+            options={REGION_OPTIONS}
+            placeholder="Pick regions…"
+            ariaLabel="Eligible regions"
+            id="create-eligible-regions"
           />
         </div>
       </div>

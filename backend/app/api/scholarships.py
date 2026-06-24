@@ -12,6 +12,8 @@ from app.schemas.scholarship import ScholarshipResponse, ScholarshipListResponse
 from app.services.document_defaults import apply_auto_defaults
 from app.api.users import COOKIE_NAME
 from app.api.auth import decode_token
+from app.models.user import User
+from app.services.match_auto import recompute_matches_for_user, REASON_MANUAL
 
 router = APIRouter()
 
@@ -65,6 +67,18 @@ async def list_scholarships(
 ):
     user_id = await _optional_user_id(request)
     query = select(Scholarship).where(Scholarship.is_active == True)
+
+    # Safety net: if logged-in user has 0 match_scores, recompute on the fly.
+    # This catches cases where the background trigger didn't execute (e.g.
+    # orphaned BackgroundTasks, race condition, or server restart mid-flow).
+    if user_id:
+        from sqlalchemy import func as _func
+        ms_count = (await db.execute(
+            select(_func.count()).select_from(MatchScore).where(MatchScore.user_id == user_id)
+        )).scalar() or 0
+        if ms_count == 0:
+            await recompute_matches_for_user(user_id, reason=REASON_MANUAL)
+            await db.commit()
 
     # Filters
     if degree:
@@ -279,6 +293,15 @@ async def get_scholarship(slug: str, request: Request, db: AsyncSession = Depend
 
     user_id = await _optional_user_id(request)
     if user_id:
+        # Safety net: recompute if user has 0 match_scores
+        from sqlalchemy import func as _func
+        ms_count = (await db.execute(
+            select(_func.count()).select_from(MatchScore).where(MatchScore.user_id == user_id)
+        )).scalar() or 0
+        if ms_count == 0:
+            await recompute_matches_for_user(user_id, reason=REASON_MANUAL)
+            await db.commit()
+
         ms_result = await db.execute(
             select(MatchScore.score, MatchScore.breakdown).where(
                 MatchScore.user_id == user_id,

@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import {
   fetchMatches,
-  fetchFeaturedScholarships,
   type Scholarship,
 } from '@/services/api';
 
@@ -185,24 +184,9 @@ export default function MatchesPreviewSlide({
         //    no manual compute step is needed.
         let list = await fetchMatches();
 
-        // 2. If still empty (no profile yet, or engine returned zero), fall back to featured
-        if (!list || list.length === 0) {
-          const featured = await fetchFeaturedScholarships();
-          if (!cancelled) {
-            setMatches(
-              featured.slice(0, 2).map(s => ({
-                scholarship: s,
-                // Featured uses snake_case match_score; matches uses score
-                score: typeof (s as unknown as { match_score?: number }).match_score === 'number'
-                  ? (s as unknown as { match_score: number }).match_score
-                  : 50, // neutral default if no score available
-              })),
-            );
-          }
-          return;
+        if (!cancelled && list && list.length > 0) {
+          setMatches(list.slice(0, 2));
         }
-
-        if (!cancelled) setMatches(list.slice(0, 2));
       } catch (err) {
         if (!cancelled) setLoadError("We couldn't load your matches.");
       } finally {
@@ -228,9 +212,18 @@ export default function MatchesPreviewSlide({
       </div>
 
       {loading ? (
-        <div className="space-y-2.5">
+        <div className="space-y-3">
+          {/* Loading message */}
+          <div className="flex items-center justify-center gap-2.5 py-3">
+            <div className="relative w-5 h-5">
+              <div className="absolute inset-0 rounded-full border-2 border-gray-100"></div>
+              <div className="absolute inset-0 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
+            </div>
+            <span className="text-[13px] font-medium text-text-secondary">Finding your best matches…</span>
+          </div>
+          {/* Skeleton cards */}
           {[0, 1].map(i => (
-            <div key={i} className="rounded-2xl bg-white border border-gray-200 p-4 animate-pulse">
+            <div key={i} className="rounded-2xl bg-white border border-gray-200 p-4 animate-pulse" style={{ animationDelay: `${i * 150}ms` }}>
               <div className="flex items-start gap-3">
                 <div className="w-12 h-12 rounded-xl bg-gray-200" />
                 <div className="flex-1 space-y-2">

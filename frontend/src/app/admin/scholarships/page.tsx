@@ -23,9 +23,15 @@ import {
   PREVIOUS_DEGREE_OPTIONS,
   STANDARDIZED_TEST_OPTIONS,
   RECOMMENDATION_COUNT_OPTIONS,
+  DEGREE_LEVEL_OPTIONS,
+  FIELD_OF_STUDY_OPTIONS,
+  COUNTRY_OPTIONS,
+  REGION_OPTIONS,
+  NATIONALITY_SUGGESTIONS,
   formFromScholarship,
-  buildPatchBody,
   emptyForm,
+  validateForm,
+  buildPatchBody,
   type ScholarshipForm,
 } from '@/components/admin/scholarshipForm';
 import {
@@ -35,6 +41,7 @@ import {
   SectionHeader,
   CheckboxRow,
 } from '@/components/admin/FormPrimitives';
+import MultiSelect from '@/components/admin/ui/MultiSelect';
 import { adminApi, type ListScholarshipsParams } from '@/lib/admin/api';
 import type { AdminScholarshipCreate, AdminScholarshipPatch } from '@/lib/admin/types';
 import { AdminApiError } from '@/lib/admin/client';
@@ -545,9 +552,14 @@ function ScholarshipDrawer({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <FieldLabel required>Host country</FieldLabel>
-                <TextInput
-                  value={form.host_country}
-                  onChange={(v) => set('host_country', v)}
+                <MultiSelect
+                  multiple={false}
+                  value={form.host_country || null}
+                  onChange={(v) => set('host_country', v ?? '')}
+                  options={COUNTRY_OPTIONS}
+                  placeholder="Pick a country — type to search…"
+                  ariaLabel="Host country"
+                  id="edit-host-country"
                 />
               </div>
               <div>
@@ -569,40 +581,56 @@ function ScholarshipDrawer({
           </div>
 
           {/* ── Scope ────────────────────────────────────────── */}
-          <SectionHeader hint="Comma-separated. Empty fields are treated as 'no restriction'.">
+          <SectionHeader hint="Pick from the canonical lists. Free text is allowed for values not in the list.">
             Scope
           </SectionHeader>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <FieldLabel>Degree levels</FieldLabel>
-              <TextInput
+              <MultiSelect
+                multiple
                 value={form.degree_levels}
                 onChange={(v) => set('degree_levels', v)}
-                placeholder="bachelor, master, phd"
+                options={DEGREE_LEVEL_OPTIONS}
+                placeholder="Pick degree levels…"
+                ariaLabel="Degree levels"
+                id="edit-degree-levels"
               />
             </div>
             <div>
               <FieldLabel>Fields of study</FieldLabel>
-              <TextInput
+              <MultiSelect
+                multiple
                 value={form.fields_of_study}
                 onChange={(v) => set('fields_of_study', v)}
-                placeholder="computer science, economics"
+                options={FIELD_OF_STUDY_OPTIONS}
+                placeholder="Pick fields of study — type to search…"
+                ariaLabel="Fields of study"
+                id="edit-fields-of-study"
               />
             </div>
             <div>
               <FieldLabel>Eligible nationalities</FieldLabel>
-              <TextInput
+              <MultiSelect
+                multiple
                 value={form.eligible_nationalities}
                 onChange={(v) => set('eligible_nationalities', v)}
-                placeholder="Nigerian, Kenyan, …"
+                options={NATIONALITY_SUGGESTIONS}
+                placeholder="Pick or type nationality groups…"
+                ariaLabel="Eligible nationalities"
+                id="edit-eligible-nationalities"
               />
             </div>
             <div>
               <FieldLabel>Eligible regions</FieldLabel>
-              <TextInput
+              <MultiSelect
+                multiple
                 value={form.eligible_regions}
                 onChange={(v) => set('eligible_regions', v)}
-                placeholder="Sub-Saharan Africa, EU, …"
+                options={REGION_OPTIONS}
+                placeholder="Pick regions…"
+                ariaLabel="Eligible regions"
+                id="edit-eligible-regions"
               />
             </div>
           </div>

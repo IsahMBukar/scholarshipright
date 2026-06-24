@@ -28,6 +28,13 @@ import type {
 
 // Same shape returned by emptyForm() below. Edit drawer pre-populates via
 // formFromScholarship() so it doesn't need to track which fields are "set".
+//
+// The four "scope" fields (degree_levels, fields_of_study,
+// eligible_nationalities, eligible_regions) are `string[]` directly —
+// the admin picks values from the canonical token list via the
+// MultiSelect combobox, so we no longer round-trip through
+// comma-separated strings. This eliminates typo bugs the old free-text
+// input had (e.g. "bachelor " vs "Bachelor" vs "Bsc").
 export interface ScholarshipForm {
   // Identity
   name: string;
@@ -36,11 +43,11 @@ export interface ScholarshipForm {
   host_country: string;
   host_institution: string;
   provider: string;
-  // Scope
-  degree_levels: string;
-  fields_of_study: string;
-  eligible_nationalities: string;
-  eligible_regions: string;
+  // Scope — arrays of canonical tokens (see CANONICAL_OPTIONS below).
+  degree_levels: string[];
+  fields_of_study: string[];
+  eligible_nationalities: string[];
+  eligible_regions: string[];
   // Funding
   funding_type: string;
   covers_tuition: boolean;
@@ -146,15 +153,161 @@ export const STANDARDIZED_TEST_OPTIONS: ReadonlyArray<{ value: StandardizedTest 
   { value: 'gmat',     label: 'GMAT (typically business Master\u2019s)' },
 ];
 
-// Recommendation letter count option list (1\u20135 plus auto).
+// Recommendation letter count option list (1–5 plus auto).
 // The 'auto' sentinel is sent as null in the body.
 export const RECOMMENDATION_COUNT_OPTIONS: ReadonlyArray<{ value: number | 'auto'; label: string }> = [
-  { value: 'auto', label: 'Auto (2 for Bachelor/Master\u2019s, 3 for PhD)' },
+  { value: 'auto', label: 'Auto (2 for Bachelor/Master’s, 3 for PhD)' },
   { value: 1,      label: '1 letter' },
   { value: 2,      label: '2 letters' },
   { value: 3,      label: '3 letters' },
   { value: 4,      label: '4 letters' },
   { value: 5,      label: '5 letters' },
+];
+
+// ── Canonical scope tokens ────────────────────────────────────────
+//
+// These lists power the MultiSelect comboboxes in the admin drawers.
+// Each value is the exact token stored in the database and recognised
+// by the backend match engine (see app/services/match_engine.py).
+// The label is what the admin sees in the dropdown — admins pick
+// from the label, we send the value.
+//
+// Keep these in sync with the backend's match_engine taxonomy:
+//   - DEGREE_LEVEL_OPTIONS matches match_engine.DEGREE_ORDER keys
+//     (plus "other" which is advertised by the public filter API).
+//   - FIELD_OF_STUDY_OPTIONS is the union of FIELD_SIBLINGS keys and
+//     the distinct values already stored in the DB
+//     (SELECT DISTINCT unnest(fields_of_study) FROM scholarships).
+//   - REGION_OPTIONS matches the existing DB values exactly.
+
+// Canonical degree-level tokens. Sent as-is to the backend, so the
+// match engine's DEGREE_ORDER substring match picks them up:
+// "bachelor" / "master" / "phd" / "doctoral" / "postdoc" etc.
+export const DEGREE_LEVEL_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: 'bachelor',    label: 'Bachelor / Undergraduate' },
+  { value: 'master',      label: "Master's (MSc, MA, MBA, MPhil)" },
+  { value: 'phd',         label: 'PhD / Doctoral' },
+  { value: 'postdoc',     label: 'Postdoctoral' },
+  { value: 'certificate', label: 'Certificate' },
+  { value: 'diploma',     label: 'Diploma' },
+  { value: 'associate',   label: 'Associate' },
+  { value: 'other',       label: 'Other / unclassified' },
+];
+
+// Canonical field-of-study tokens. The match engine uses these via
+// FIELD_SIBLINGS to compute sibling-field bonuses; using an exact
+// canonical token ensures the bonus kicks in. Anything not in this
+// list can still be entered via free text (the MultiSelect's
+// "Create …" affordance) but loses the sibling match.
+export const FIELD_OF_STUDY_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
+  // FIELD_SIBLINGS keys (16) — get full sibling-match bonuses
+  { value: 'agriculture',           label: 'Agriculture' },
+  { value: 'artificial_intelligence', label: 'Artificial Intelligence' },
+  { value: 'biology',               label: 'Biology' },
+  { value: 'business',              label: 'Business / Management' },
+  { value: 'chemistry',             label: 'Chemistry' },
+  { value: 'computer_science',      label: 'Computer Science' },
+  { value: 'data_science',          label: 'Data Science' },
+  { value: 'economics',             label: 'Economics' },
+  { value: 'engineering',           label: 'Engineering' },
+  { value: 'law',                   label: 'Law' },
+  { value: 'mathematics',           label: 'Mathematics' },
+  { value: 'medicine',              label: 'Medicine' },
+  { value: 'natural_sciences',      label: 'Natural Sciences' },
+  { value: 'physics',               label: 'Physics' },
+  { value: 'public_health',         label: 'Public Health' },
+  { value: 'social_sciences',       label: 'Social Sciences' },
+  // DB-extras that aren't in FIELD_SIBLINGS but already appear in data
+  { value: 'all_fields',            label: 'All fields' },
+  { value: 'architecture',          label: 'Architecture' },
+  { value: 'environment',           label: 'Environmental Science' },
+  { value: 'governance',            label: 'Governance / Public Policy' },
+  { value: 'health',                label: 'Health (general)' },
+  { value: 'humanities',            label: 'Humanities' },
+  { value: 'life_sciences',         label: 'Life Sciences' },
+  { value: 'nursing',               label: 'Nursing' },
+  { value: 'pharmacy',              label: 'Pharmacy' },
+  { value: 'political_science',     label: 'Political Science' },
+  { value: 'psychology',            label: 'Psychology' },
+  { value: 'water_management',      label: 'Water Management' },
+];
+
+// Canonical host countries. Comprehensive list — the typeahead shows
+// 5 at a time so the long-list UX stays scannable. Free text is also
+// allowed for descriptive values like "Multiple EU countries" that
+// don't reduce to a single ISO country.
+//
+// Sorted alphabetically by label for predictable menu order. Values
+// are the canonical English short names as commonly used in
+// scholarship copy (e.g. "Turkey" instead of "Türkiye" — both are
+// present in the DB today; the typeahead matches either).
+export const COUNTRY_OPTIONS: ReadonlyArray<string> = [
+  'Afghanistan', 'Albania', 'Algeria', 'Argentina', 'Armenia', 'Australia',
+  'Austria', 'Azerbaijan', 'Bahrain', 'Bangladesh', 'Belarus', 'Belgium',
+  'Benin', 'Bolivia', 'Bosnia and Herzegovina', 'Botswana', 'Brazil',
+  'Bulgaria', 'Burkina Faso', 'Burundi', 'Cambodia', 'Cameroon', 'Canada',
+  'Central African Republic', 'Chad', 'Chile', 'China', 'Colombia', 'Comoros',
+  'Congo', 'Costa Rica', 'Côte d’Ivoire', 'Croatia', 'Cuba', 'Cyprus',
+  'Czech Republic', 'Democratic Republic of the Congo', 'Denmark', 'Djibouti',
+  'Dominican Republic', 'Ecuador', 'Egypt', 'El Salvador', 'Eritrea', 'Estonia',
+  'Ethiopia', 'Fiji', 'Finland', 'France', 'Gabon', 'Gambia', 'Georgia',
+  'Germany', 'Ghana', 'Greece', 'Guatemala', 'Guinea', 'Guinea-Bissau',
+  'Haiti', 'Honduras', 'Hungary', 'Iceland', 'India', 'Indonesia', 'Iran',
+  'Iraq', 'Ireland', 'Israel', 'Italy', 'Jamaica', 'Japan', 'Jordan',
+  'Kazakhstan', 'Kenya', 'Kuwait', 'Kyrgyzstan', 'Laos', 'Latvia', 'Lebanon',
+  'Lesotho', 'Liberia', 'Libya', 'Lithuania', 'Luxembourg', 'Madagascar',
+  'Malawi', 'Malaysia', 'Mali', 'Malta', 'Mauritania', 'Mauritius', 'Mexico',
+  'Moldova', 'Mongolia', 'Montenegro', 'Morocco', 'Mozambique', 'Myanmar',
+  'Namibia', 'Nepal', 'Netherlands', 'New Zealand', 'Nicaragua', 'Niger',
+  'Nigeria', 'North Korea', 'North Macedonia', 'Norway', 'Oman', 'Pakistan',
+  'Palestine', 'Panama', 'Papua New Guinea', 'Paraguay', 'Peru', 'Philippines',
+  'Poland', 'Portugal', 'Qatar', 'Romania', 'Russia', 'Rwanda',
+  'Saudi Arabia', 'Senegal', 'Serbia', 'Sierra Leone', 'Singapore', 'Slovakia',
+  'Slovenia', 'Somalia', 'South Africa', 'South Korea', 'South Sudan', 'Spain',
+  'Sri Lanka', 'Sudan', 'Sweden', 'Switzerland', 'Syria', 'Taiwan',
+  'Tajikistan', 'Tanzania', 'Thailand', 'Togo', 'Trinidad and Tobago',
+  'Tunisia', 'Türkiye', 'Turkey', 'Uganda', 'Ukraine',
+  'United Arab Emirates', 'United Kingdom', 'United States', 'Uruguay',
+  'Uzbekistan', 'Venezuela', 'Vietnam', 'Yemen', 'Zambia', 'Zimbabwe',
+];
+
+// Canonical region values. The DB has 10 distinct values — we mirror
+// them exactly so existing rows round-trip through the MultiSelect.
+export const REGION_OPTIONS: ReadonlyArray<string> = [
+  'Africa',
+  'All regions',
+  'Americas',
+  'Asia',
+  'Caribbean',
+  'Europe',
+  'Latin America',
+  'Middle East',
+  'Oceania',
+  'Pacific',
+];
+
+// Descriptive nationality presets — these are the common patterns in
+// existing data ("African countries", "All Chevening-eligible
+// countries"). Free text remains available for uncommon ones.
+export const NATIONALITY_PRESETS: ReadonlyArray<string> = [
+  'All countries',
+  'African countries',
+  'All developing countries',
+  'ASEAN member states',
+  'Commonwealth countries',
+  'Developing countries',
+  'EU citizens',
+  'Non-EU/EEA students',
+  'US citizens only',
+  'US citizens, permanent residents, and nationals',
+];
+
+// Combined eligibility list (regions + presets) for the
+// eligible_nationalities MultiSelect. The dropdown shows these as
+// suggestions; the admin can still type any free-text value.
+export const NATIONALITY_SUGGESTIONS: ReadonlyArray<string> = [
+  ...NATIONALITY_PRESETS,
+  ...REGION_OPTIONS,
 ];
 
 // ── Form factories ────────────────────────────────────────────────
@@ -167,10 +320,10 @@ export function emptyForm(): ScholarshipForm {
     host_country: '',
     host_institution: '',
     provider: '',
-    degree_levels: '',
-    fields_of_study: '',
-    eligible_nationalities: '',
-    eligible_regions: '',
+    degree_levels: [],
+    fields_of_study: [],
+    eligible_nationalities: [],
+    eligible_regions: [],
     funding_type: 'fully_funded',
     covers_tuition: true,
     covers_living: false,
@@ -226,10 +379,10 @@ export function formFromScholarship(s: AdminScholarship): ScholarshipForm {
     host_country: s.host_country,
     host_institution: s.host_institution ?? '',
     provider: s.provider ?? '',
-    degree_levels: (s.degree_levels ?? []).join(', '),
-    fields_of_study: (s.fields_of_study ?? []).join(', '),
-    eligible_nationalities: (s.eligible_nationalities ?? []).join(', '),
-    eligible_regions: (s.eligible_regions ?? []).join(', '),
+    degree_levels: [...(s.degree_levels ?? [])],
+    fields_of_study: [...(s.fields_of_study ?? [])],
+    eligible_nationalities: [...(s.eligible_nationalities ?? [])],
+    eligible_regions: [...(s.eligible_regions ?? [])],
     funding_type: s.funding_type,
     covers_tuition: s.covers_tuition,
     covers_living: s.covers_living,
@@ -357,14 +510,13 @@ export function buildCreateBody(form: ScholarshipForm): AdminScholarshipCreate {
   const provider = opt(form.provider);
   if (provider) body.provider = provider;
 
-  const degree_levels = parseList(form.degree_levels);
-  if (degree_levels.length) body.degree_levels = degree_levels;
-  const fields_of_study = parseList(form.fields_of_study);
-  if (fields_of_study.length) body.fields_of_study = fields_of_study;
-  const eligible_nationalities = parseList(form.eligible_nationalities);
-  if (eligible_nationalities.length) body.eligible_nationalities = eligible_nationalities;
-  const eligible_regions = parseList(form.eligible_regions);
-  if (eligible_regions.length) body.eligible_regions = eligible_regions;
+  // Scope arrays — the form already holds them as string[] (the
+  // MultiSelect combobox manages them). We omit empty arrays so the
+  // backend's Pydantic schema treats them as "not set" rather than [].
+  if (form.degree_levels.length) body.degree_levels = form.degree_levels;
+  if (form.fields_of_study.length) body.fields_of_study = form.fields_of_study;
+  if (form.eligible_nationalities.length) body.eligible_nationalities = form.eligible_nationalities;
+  if (form.eligible_regions.length) body.eligible_regions = form.eligible_regions;
 
   body.covers_tuition = form.covers_tuition;
   body.covers_living = form.covers_living;
@@ -506,12 +658,14 @@ export function buildPatchBody(
   bool(form.is_active, original.is_active, 'is_active');
   bool(form.is_verified, original.is_verified, 'is_verified');
 
-  // Array fields — compare as sets (order-independent)
-  const arr = (formVal: string, orig: string[], key: keyof AdminScholarshipPatch) => {
-    const parsed = parseList(formVal).sort();
+  // Array fields — compare as sets (order-independent). Form state
+  // already holds string[] (no comma-splitting needed); we just sort
+  // both sides so ["a","b"] and ["b","a"] are treated as the same.
+  const arr = (formVal: string[], orig: string[], key: keyof AdminScholarshipPatch) => {
+    const parsed = [...formVal].sort();
     const was = [...orig].sort();
     if (parsed.length !== was.length || parsed.some((v, i) => v !== was[i])) {
-      (body as Record<string, unknown>)[key] = parsed;
+      (body as Record<string, unknown>)[key] = formVal;
     }
   };
   arr(form.degree_levels, original.degree_levels, 'degree_levels');
