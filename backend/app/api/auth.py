@@ -1,6 +1,6 @@
 """Auth endpoints — registration, login, logout, me, password reset."""
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel, EmailStr, Field
@@ -12,6 +12,7 @@ import logging
 from app.db.session import get_db
 from app.models.user import User
 from app.core.config import get_settings
+from app.core.cookie_config import auth_cookie_kwargs
 from app.core.rate_limit import (
     auth_forgot_rate_limit,
     auth_invite_rate_limit,
@@ -116,7 +117,8 @@ async def register(body: RegisterRequest, response: Response, db: AsyncSession =
     token = create_token(str(user.id))
     response.set_cookie(
         key=COOKIE_NAME, value=token,
-        httponly=True, samesite="lax", max_age=COOKIE_MAX_AGE,
+        max_age=COOKIE_MAX_AGE,
+        **auth_cookie_kwargs(),
     )
     return {"id": str(user.id), "email": user.email, "full_name": user.full_name}
 
@@ -136,15 +138,22 @@ async def login(body: LoginRequest, response: Response, db: AsyncSession = Depen
     token = create_token(str(user.id))
     response.set_cookie(
         key=COOKIE_NAME, value=token,
-        httponly=True, samesite="lax", max_age=COOKIE_MAX_AGE,
+        max_age=COOKIE_MAX_AGE,
+        **auth_cookie_kwargs(),
     )
     return {"id": str(user.id), "email": user.email, "full_name": user.full_name}
 
 
 @router.post("/logout")
 async def logout(response: Response):
-    """Clear auth cookie."""
-    response.delete_cookie(COOKIE_NAME)
+    """Clear auth cookie.
+
+    Must pass the SAME flags (httponly/samesite/secure) that the cookie
+    was set with, otherwise browsers silently fail to remove it -- in
+    particular a Secure flag set at create-time but missing at delete
+    would leave the production cookie alive past logout.
+    """
+    response.delete_cookie(COOKIE_NAME, **auth_cookie_kwargs())
     return {"status": "logged_out"}
 
 
@@ -260,11 +269,31 @@ async def set_password(
     }
 
 
-# ── Dev login (keep for backward compat) ──
+# ── Dev login ──
+#
+# Convenient one-click login for local development and the E2E suite.
+# Hard-coded to test@scholarshipright.com with password 'dev123' and is
+# the single biggest pre-launch security risk if it ever lands in a
+# production deploy -- anyone who finds the endpoint would get a real,
+# signed-in account with full access.
+#
+# Therefore: refuse the route entirely when environment != "development".
+# 404 rather than 401 so the endpoint "looks not here" in prod, matching
+# what a well-operated prod deployment should present (no dev tooling
+# visible at all). The handler is left defined so dev usage is unaffected.
 
 @router.post("/dev-login")
 async def dev_login(response: Response, db: AsyncSession = Depends(get_db)):
     """Dev-only login — finds or creates test user."""
+    if get_settings().environment != "development":
+        # Status explicitly not 401/403 (those would acknowledge the route).
+        # 404 makes this indistinguishable from any other missing path
+        # when probed against a production deployment.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Not Found",
+        )
+
     from uuid import UUID
     dev_email = "test@scholarshipright.com"
 
@@ -280,7 +309,8 @@ async def dev_login(response: Response, db: AsyncSession = Depends(get_db)):
     token = create_token(str(user.id))
     response.set_cookie(
         key=COOKIE_NAME, value=token,
-        httponly=True, samesite="lax", max_age=COOKIE_MAX_AGE,
+        max_age=COOKIE_MAX_AGE,
+        **auth_cookie_kwargs(),
     )
     return {"id": str(user.id), "email": user.email, "full_name": user.full_name}
 

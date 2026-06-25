@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.admin import require_admin, require_super_admin
+from app.core.cookie_config import auth_cookie_kwargs
 from app.core.rate_limit import auth_invite_rate_limit
 from app.db.session import get_db
 from app.models.user import User
@@ -194,11 +195,15 @@ async def accept_invite_endpoint(
             detail={"code": code, "user_message": msg, "retryable": False},
         )
 
-    # Set auth cookie so the user is now logged in
+    # Set auth cookie so the user is now logged in.
+    # Flags (httponly / samesite / secure) come from the same helper used
+    # everywhere else, so we never silently leak a session because one
+    # endpoint drifted out of sync.
     token = create_token(str(user.id))
     response.set_cookie(
         key=COOKIE_NAME, value=token,
-        httponly=True, samesite="lax", max_age=COOKIE_MAX_AGE,
+        max_age=COOKIE_MAX_AGE,
+        **auth_cookie_kwargs(),
     )
     return {
         "accepted": True,
