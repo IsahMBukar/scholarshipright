@@ -4,6 +4,7 @@ from sqlalchemy import select
 from typing import List
 from uuid import UUID
 
+from app.core.rate_limit import matches_rate_limit
 from app.db.session import get_db
 from app.models.match_score import MatchScore
 from app.models.scholarship import Scholarship
@@ -20,7 +21,7 @@ from app.services.match_auto import (
 router = APIRouter()
 
 
-@router.get("", response_model=List[dict])
+@router.get("", response_model=List[dict], dependencies=[Depends(matches_rate_limit)])
 async def get_matches(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

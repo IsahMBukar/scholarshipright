@@ -140,3 +140,15 @@ resume_rewrite_rate_limit = rate_limit("resume_rewrite", max_requests=20, window
 
 # General agent/chat/actions call the LLM and sometimes tools.
 agent_rate_limit = rate_limit("agent", max_requests=30, window_seconds=60 * 60)
+
+# GET /api/matches is cheap on a warm cache but transparently triggers
+# a synchronous recompute when user.match_dirty == True (see matches.py).
+# A recompute walks every active scholarship and re-runs the embedding
+# cosine distance + heuristic scoring, so a polling UI loop or a
+# racing client can quickly saturate it. 60/hour per user is enough
+# for legitimate polling (the match card refetches on tab focus and
+# after every onboarding/progress change, never faster than the user
+# can navigate) while blocking runaway loops that would burn compute
+# without delivering any new matches. Per-user bucketing happens
+# automatically through the cookie-aware key in _client_identifier.
+matches_rate_limit = rate_limit("matches", max_requests=60, window_seconds=60 * 60)
