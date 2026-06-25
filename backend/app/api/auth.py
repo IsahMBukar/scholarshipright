@@ -8,7 +8,6 @@ from passlib.context import CryptContext
 from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone
 import logging
-import os
 
 from app.db.session import get_db
 from app.models.user import User
@@ -34,7 +33,12 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # JWT config
-SECRET_KEY = os.getenv("JWT_SECRET", "scholarshipright-dev-secret-change-in-production")
+#
+# The signing secret comes from app.core.config.Settings.jwt_secret
+# (which reads the JWT_SECRET env var). Validation that the secret is non-empty,
+# non-placeholder, and >=32 chars happens at app boot via _validate_security_settings
+# when ENVIRONMENT=production. We read it fresh per call rather than caching
+# at import time so config changes take effect without a reload.
 ALGORITHM = "HS256"
 COOKIE_NAME = "sr_token"
 COOKIE_MAX_AGE = 86400 * 30  # 30 days
@@ -61,12 +65,16 @@ class LoginRequest(BaseModel):
 
 def create_token(user_id: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(seconds=COOKIE_MAX_AGE)
-    return jwt.encode({"sub": user_id, "exp": expire}, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(
+        {"sub": user_id, "exp": expire},
+        get_settings().jwt_secret,
+        algorithm=ALGORITHM,
+    )
 
 
 def decode_token(token: str) -> str | None:
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, get_settings().jwt_secret, algorithms=[ALGORITHM])
         return payload.get("sub")
     except JWTError:
         return None

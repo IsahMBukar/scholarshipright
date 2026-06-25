@@ -1,5 +1,20 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+
+# Production safety floor: a real JWT secret must be at least this long.
+# 32 chars matches the OWASP recommendation for HS256 signing keys.
+_MIN_JWT_SECRET_LEN = 32
+
+# Sentinel used to detect the dev-default placeholder string that was in
+# earlier .env files. If a production deploy sees this, that's a sign of
+# an unrotated dev secret and we refuse to start.
+_LEGACY_DEV_SECRET_MARKERS = {
+    "change-me-in-production",
+    "change-me-to-a-random-secret-key",
+    "scholarshipright-dev-secret-change-in-production",
+}
 
 
 class Settings(BaseSettings):
@@ -26,7 +41,17 @@ class Settings(BaseSettings):
 
     # App
     frontend_url: str = "http://localhost:3000"
-    secret_key: str = "change-me-in-production"
+
+    # Runtime environment: "development" (default) or "production".
+    # Read from the ENVIRONMENT env var. Changing this enables a suite of
+    # prod-only safety checks; see _validate_security_settings() below.
+    environment: str = "development"
+
+    # JWT signing secret. Mapped to the JWT_SECRET env variable.
+    # - In development: the empty default is allowed (so a fresh clone boots).
+    # - In production: must be non-empty, not a known dev placeholder, and
+    #   at least 32 chars of random data. The app refuses to start otherwise.
+    jwt_secret: str = Field(default="", alias="JWT_SECRET")
     # Dev only: include the raw password-reset token + URL in the
     # /api/auth/forgot-password response. Must be "1" to enable.
     # Leave "0" or unset in production so the response is always the
@@ -53,6 +78,49 @@ class Settings(BaseSettings):
         return self.llm_model or self.agent_model or self.openai_model or ""
 
 
+def _validate_security_settings(settings: "Settings") -> None:
+    """Refuse to boot the API in production with weakly-configured secrets.
+
+    Triggered by ``environment == "production"``. Catches three failure modes:
+
+    1. Empty JWT_SECRET — would mean tokens would be signed with the empty
+       string and accept any forged token.
+    2. Known dev placeholder ("change-me-..." etc.) — a tell that an old
+       .env file was copied into production unchanged.
+    3. JWT_SECRET shorter than 32 chars — below the OWASP-recommended floor
+       for HS256 keys, vulnerable to brute force.
+    """
+    if settings.environment != "production":
+        return
+
+    secret = settings.jwt_secret or ""
+    problems: list[str] = []
+
+    if not secret:
+        problems.append(
+            "JWT_SECRET is empty. Generate one with: "
+            "`python -c \"import secrets; print(secrets.token_urlsafe(48))\"`"
+        )
+    elif secret in _LEGACY_DEV_SECRET_MARKERS:
+        problems.append(
+            "JWT_SECRET is set to a known development placeholder. "
+            "Generate a new production-only secret."
+        )
+    elif len(secret) < _MIN_JWT_SECRET_LEN:
+        problems.append(
+            f"JWT_SECRET is {len(secret)} chars; minimum is {_MIN_JWT_SECRET_LEN}."
+        )
+
+    if problems:
+        details = "\n  - ".join(problems)
+        raise RuntimeError(
+            "Refusing to start in production with insecure settings:\n  - "
+            + details
+        )
+
+
 @lru_cache()
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    _validate_security_settings(settings)
+    return settings
