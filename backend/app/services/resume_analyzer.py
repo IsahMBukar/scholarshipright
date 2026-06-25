@@ -1,7 +1,17 @@
 import json
 import base64
+import logging
 import httpx
 from app.core.config import get_settings
+
+# Module logger. All operational/extraction diagnostics go through the
+# logging system so that nothing leaks to process stdout where it could be
+# picked up by container log aggregators (which usually archive stdout
+# verbatim). The DOCX subprocess at line ~223 captures its OWN stdout via
+# subprocess.run(...capture_output=True...) — that print() inside the
+# subprocess script body is intentional extraction plumbing, not a log,
+# and is left untouched.
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
@@ -77,7 +87,10 @@ async def extract_text_from_file(file_content: bytes, mime_type: str, filename: 
         # Try text extraction first, fallback to vision for flattened/image PDFs
         text = _extract_pdf_text(file_content)
         if len(text.strip()) < 50:
-            print(f"PDF text extraction yielded only {len(text.strip())} chars — trying vision fallback...")
+            logger.warning(
+                "PDF text extraction yielded only %d chars — trying vision fallback...",
+                len(text.strip()),
+            )
             text = await _pdf_vision_fallback(file_content)
         return text
     elif mime_type in [
@@ -128,7 +141,7 @@ async def _vision_extract(b64_image: str, mime_type: str) -> str:
             data = resp.json()
             return _extract_message_content(data)
     except Exception as e:
-        print(f"Vision extraction error: {e}")
+        logger.warning("Vision extraction error: %s", e)
         return ""
 
 
@@ -153,7 +166,7 @@ def _extract_pdf_text(content: bytes) -> str:
         os.unlink(tmp_path)
         return "\n".join(text_parts)
     except Exception as e:
-        print(f"PDF extraction error: {e}")
+        logger.warning("PDF extraction error: %s", e)
         return ""
 
 
@@ -175,7 +188,10 @@ async def _pdf_vision_fallback(content: bytes) -> str:
         doc = fitz.open(tmp_path)
         max_pages = min(len(doc), 15)  # Limit to 15 pages for vision
         
-        print(f"PDF vision fallback: converting {max_pages} pages to images concurrently...")
+        logger.debug(
+            "PDF vision fallback: converting %d pages to images concurrently...",
+            max_pages,
+        )
         
         # Convert all pages to base64 images first
         page_images = []
@@ -202,13 +218,17 @@ async def _pdf_vision_fallback(content: bytes) -> str:
         for page_num, text in sorted(results, key=lambda x: x[0]):
             if text.strip():
                 all_text.append(f"--- Page {page_num + 1} ---\n{text}")
-                print(f"  Page {page_num + 1}: extracted {len(text)} chars")
+                logger.debug("  Page %d: extracted %d chars", page_num + 1, len(text))
         
         combined = "\n\n".join(all_text)
-        print(f"PDF vision fallback complete: {len(combined)} total chars from {max_pages} pages (concurrent)")
+        logger.debug(
+            "PDF vision fallback complete: %d total chars from %d pages (concurrent)",
+            len(combined),
+            max_pages,
+        )
         return combined
     except Exception as e:
-        print(f"PDF vision fallback error: {e}")
+        logger.warning("PDF vision fallback error: %s", e)
         return ""
 
 
@@ -234,7 +254,7 @@ for p in root.iter('{{{http://schemas.openxmlformats.org/wordprocessingml/2006/m
             if result.returncode == 0:
                 return result.stdout
     except Exception as e:
-        print(f"DOCX extraction error: {e}")
+        logger.warning("DOCX extraction error: %s", e)
     return ""
 
 
@@ -399,7 +419,7 @@ Return ONLY valid JSON. No markdown, no code blocks."""
                 repaired = _repair_json(content)
                 return json.loads(repaired)
     except Exception as e:
-        print(f"AI analysis error: {e}")
+        logger.exception("AI analysis error: %s", e)
         raise RuntimeError("AI resume analysis failed") from e
 
 
@@ -477,5 +497,5 @@ async def rewrite_field(field_name: str, current_value: str, context: str) -> st
             data = resp.json()
             return _extract_message_content(data).strip()
     except Exception as e:
-        print(f"AI rewrite error: {e}")
+        logger.exception("AI rewrite error: %s", e)
         raise RuntimeError("AI resume rewrite failed") from e

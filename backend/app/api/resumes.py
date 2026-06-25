@@ -9,6 +9,7 @@ from sqlalchemy import select, update
 from typing import Optional, List
 import json
 import asyncio
+import logging
 
 from app.db.session import get_db, AsyncSessionLocal
 from app.models.resume import Resume
@@ -31,6 +32,13 @@ from app.services.match_auto import (
 )
 
 router = APIRouter(prefix="/api/resumes", tags=["resumes"])
+
+# Module logger for the backend "resume" subsystem. Background-analysis
+# progress, errors, and timing diagnostics route here instead of stdout
+# so that resume IDs and status transitions never appear in process
+# stdout (which is often captured to log aggregators and shipped to
+# observability backends).
+logger = logging.getLogger(__name__)
 
 UPLOAD_DIR = "/home/alaiisah/Desktop/Scholarshipright/backend/uploads/resumes"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -268,7 +276,6 @@ async def create_manual_resume(
 
 async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename: str, fields_list: list, target_degree: str):
     """Background task: extract text, run AI analysis, update resume."""
-    import traceback
     try:
         raw_text = await asyncio.wait_for(
             extract_text_from_file(content, mime_type, filename),
@@ -282,7 +289,7 @@ async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename
             result = await db.execute(select(Resume).where(Resume.id == resume_id))
             resume = result.scalar_one_or_none()
             if not resume:
-                print(f"Background analysis: resume {resume_id} not found")
+                logger.warning("Background analysis: resume %s not found", resume_id)
                 return
             
             resume.raw_text = raw_text[:20000] if raw_text else None
@@ -343,9 +350,13 @@ async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename
                 )
 
             await db.commit()
-            print(f"Background analysis complete for resume {resume_id}: status={resume.status}")
+            logger.info(
+                "Background analysis complete for resume %s: status=%s",
+                resume_id,
+                resume.status,
+            )
     except asyncio.TimeoutError:
-        print(f"Background analysis timed out for resume {resume_id}")
+        logger.warning("Background analysis timed out for resume %s", resume_id)
         try:
             async with AsyncSessionLocal() as db:
                 result = await db.execute(select(Resume).where(Resume.id == resume_id))
@@ -363,8 +374,7 @@ async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename
         except Exception:
             pass
     except Exception as e:
-        print(f"Background analysis error for resume {resume_id}: {e}")
-        traceback.print_exc()
+        logger.exception("Background analysis error for resume %s: %s", resume_id, e)
         try:
             async with AsyncSessionLocal() as db:
                 result = await db.execute(select(Resume).where(Resume.id == resume_id))
