@@ -30,6 +30,7 @@ import Link from 'next/link';
 import { LogIn, AlertTriangle, CheckCircle2, Loader2, Mail } from 'lucide-react';
 import Button from '@/components/admin/ui/Button';
 import PasswordField from '@/components/auth/PasswordField';
+import { useAuth } from '@/hooks/useAuth';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -47,6 +48,7 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const nextPath = safeNext(searchParams.get('next'), '/scholarships');
+  const { pendingAction, setPendingAction, refresh } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -90,6 +92,23 @@ function LoginForm() {
         body: JSON.stringify({ email: email.trim(), password }),
       });
       if (res.ok) {
+        // Refresh auth state
+        await refresh();
+
+        // If there's a pending action (from action gating), replay it
+        if (pendingAction) {
+          const action = pendingAction;
+          setPendingAction(null);
+          action.onReplay?.();
+          // Navigate to the next path (or stay on current page if no next)
+          if (searchParams.get('next')) {
+            router.push(nextPath);
+          } else {
+            router.push('/scholarships');
+          }
+          return;
+        }
+
         // If a `?next` was passed (e.g. /admin), honor it. Otherwise
         // walk through onboarding if the user has no profile.
         if (searchParams.get('next')) {

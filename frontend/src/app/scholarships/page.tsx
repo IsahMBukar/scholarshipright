@@ -9,6 +9,7 @@ import ActiveFilterChips from '@/components/ActiveFilterChips';
 import { ScholarshipListSkeleton } from '@/components/Skeletons';
 import NotificationBell from '@/components/NotificationBell';
 import { useOnboarding } from '@/hooks/useOnboarding';
+import { useAuth } from '@/hooks/useAuth';
 import { logoutAndRedirect } from '@/hooks/useLogout';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { fetchFilterMetadata } from '@/services/api';
@@ -33,6 +34,7 @@ export default function ScholarshipsPage() {
   const [meta, setMeta] = useState<FilterMetadata | null>(null);
   const showConfirm = useConfirm();
   const pathname = usePathname();
+  const { isAuthenticated, setPendingAction } = useAuth();
 
   // Match scores are only meaningful once the user has a complete profile.
   // Until then, hide them (and the deterministic placeholder) so we don't
@@ -92,6 +94,20 @@ export default function ScholarshipsPage() {
   }, [searchQuery, filters, loadScholarships]);
 
   async function handleSave(id: string) {
+    // Action gating: guests see auth modal, then action replays automatically
+    if (!isAuthenticated) {
+      const sch = scholarships.find((s) => s.id === id);
+      setPendingAction({
+        type: 'save',
+        label: `Save "${sch?.title || 'this scholarship'}"`,
+        onReplay: async () => {
+          await saveScholarship(id).catch(() => {});
+          setSavedIds((prev) => new Set(prev).add(id));
+          setSavedStatuses((prev) => ({ ...prev, [id]: 'saved' }));
+        },
+      });
+      return;
+    }
     if (savedIds.has(id)) {
       await removeSavedScholarship(id).catch(() => {});
       setSavedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
@@ -104,6 +120,23 @@ export default function ScholarshipsPage() {
   }
 
   async function handleApplyNow(id: string) {
+    // Action gating for guests
+    if (!isAuthenticated) {
+      const sch = scholarships.find((s) => s.id === id);
+      setPendingAction({
+        type: 'apply',
+        label: `Apply to "${sch?.title || 'this scholarship'}"`,
+        onReplay: async () => {
+          if (!savedIds.has(id)) {
+            await saveScholarship(id).catch(() => {});
+            setSavedIds((prev) => new Set(prev).add(id));
+          }
+          await updateSavedScholarship(id, { status: 'applying' }).catch(() => {});
+          setSavedStatuses((prev) => ({ ...prev, [id]: 'applying' }));
+        },
+      });
+      return;
+    }
     // Auto-save if not saved yet
     if (!savedIds.has(id)) {
       await saveScholarship(id).catch(() => {});

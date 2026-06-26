@@ -1,13 +1,10 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog';
+import { AuthProvider } from '@/hooks/useAuth';
+import { SessionExpiryHandler } from '@/components/SessionExpiryHandler';
+import AuthModal from '@/components/AuthModal';
 
-// Mounted at the root so any page (login, onboarding, profile, admin,
-// etc.) can call `useConfirm()` to get a styled confirmation modal
-// without each layout having to wire the provider. The dialog is
-// rendered at z-[80] so it sits above most page content; pages that
-// need it above everything else can pass a higher z-index on their
-// own overlays.
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
@@ -18,14 +15,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="bg-gray-100 text-text-primary antialiased">
-        {/* Skip-to-content: hidden until focused via Tab for keyboard users */}
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:rounded-lg focus:text-sm focus:font-semibold focus:outline-none focus:ring-2 focus:ring-white"
         >
           Skip to content
         </a>
-        <ConfirmProvider>{children}</ConfirmProvider>
+        <AuthProvider>
+          <SessionExpiryHandler />
+          <AuthModal />
+          <ConfirmProvider>{children}</ConfirmProvider>
+        </AuthProvider>
       </body>
     </html>
   );

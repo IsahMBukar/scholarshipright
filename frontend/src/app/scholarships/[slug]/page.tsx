@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import AppLayout from '@/components/AppLayout';
 import { ScholarshipDetailSkeleton } from '@/components/Skeletons';
+import { useAuth } from '@/hooks/useAuth';
 import { fetchScholarship, saveScholarship, removeSavedScholarship, fetchSavedScholarships, updateSavedScholarship, incrementScholarshipView } from '@/services/api';
 import type { Scholarship, MatchBreakdown } from '@/services/api';
 
@@ -18,6 +19,7 @@ export default function ScholarshipDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const viewedRef = useRef<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const { isAuthenticated, setPendingAction } = useAuth();
 
   function handleShare() {
     const url = window.location.href;
@@ -63,6 +65,19 @@ export default function ScholarshipDetailPage() {
 
   async function handleSave() {
     if (!scholarship) return;
+    // Action gating for guests
+    if (!isAuthenticated) {
+      setPendingAction({
+        type: 'save',
+        label: `Save "${scholarship.name}"`,
+        onReplay: async () => {
+          await saveScholarship(scholarship!.id).catch(() => {});
+          setIsSaved(true);
+          setSavedStatus('saved');
+        },
+      });
+      return;
+    }
     if (isSaved) {
       await removeSavedScholarship(scholarship.id).catch(() => {});
       setIsSaved(false);
@@ -76,6 +91,22 @@ export default function ScholarshipDetailPage() {
 
   async function handleApplyNow() {
     if (!scholarship) return;
+    // Action gating for guests
+    if (!isAuthenticated) {
+      setPendingAction({
+        type: 'apply',
+        label: `Apply to "${scholarship.name}"`,
+        onReplay: async () => {
+          if (!isSaved) {
+            await saveScholarship(scholarship!.id).catch(() => {});
+            setIsSaved(true);
+          }
+          await updateSavedScholarship(scholarship!.id, { status: 'applying' }).catch(() => {});
+          setSavedStatus('applying');
+        },
+      });
+      return;
+    }
     // Auto-save if not saved yet
     if (!isSaved) {
       await saveScholarship(scholarship.id).catch(() => {});
@@ -1050,6 +1081,42 @@ export default function ScholarshipDetailPage() {
           </div>
         )}
         </div>
+
+        {/* Match CTA — shown to guests as a conversion point */}
+        {!isAuthenticated && (
+          <div className="mt-8 p-6 bg-gradient-to-br from-primary/10 via-primary/5 to-white rounded-2xl border border-primary/20">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+                <span className="material-symbols-outlined text-primary text-[24px]">auto_awesome</span>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-[16px] font-bold text-text-primary">How well do you match this scholarship?</h3>
+                <p className="text-[13px] text-text-secondary mt-1 leading-relaxed">
+                  Create a free account to receive a personalized match score, eligibility explanation,
+                  and a checklist of what you need to strengthen your application.
+                </p>
+                <div className="flex flex-wrap gap-2 mt-4">
+                  <button
+                    onClick={() => setPendingAction({
+                      type: 'match',
+                      label: 'Get your match score',
+                      onReplay: () => { window.location.href = '/onboarding'; },
+                    })}
+                    className="px-5 py-2.5 bg-primary text-white text-[13px] font-bold rounded-btn hover:brightness-110 transition-all"
+                  >
+                    Upload Resume
+                  </button>
+                  <a
+                    href="/signup"
+                    className="px-5 py-2.5 bg-white border border-gray-200 text-text-primary text-[13px] font-semibold rounded-btn hover:bg-gray-50 transition-all"
+                  >
+                    Create free account
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </AppLayout>
   );
