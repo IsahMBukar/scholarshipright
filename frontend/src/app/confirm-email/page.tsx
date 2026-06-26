@@ -3,16 +3,15 @@
 // /confirm-email — email confirmation page.
 //
 // Flow:
-//   1. User clicks confirmation link in email
-//   2. Link contains ?token=...
-//   3. We POST /api/auth/confirm-email with the token
-//   4. On success → redirect to /onboarding (cookie already set from registration)
-//   5. On error → show error message with resend option
+//   1. User clicks confirmation link in email → /confirm-email?token=...
+//   2. We POST /api/auth/confirm-email with the token
+//   3. Backend confirms email + sets auth cookie (auto-login)
+//   4. Redirect to /onboarding
 
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Mail, CheckCircle2, AlertTriangle, Loader2, ExternalLink } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 import Button from '@/components/admin/ui/Button';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -22,10 +21,8 @@ function ConfirmEmailForm() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
 
-  const [status, setStatus] = useState<'loading' | 'success' | 'already' | 'error'>('loading');
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
-  const [email, setEmail] = useState<string | null>(null);
-  const [devUrl, setDevUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) {
@@ -33,6 +30,8 @@ function ConfirmEmailForm() {
       setError('No confirmation token found. Please check your email link.');
       return;
     }
+
+    let cancelled = false;
 
     async function confirm() {
       try {
@@ -42,47 +41,39 @@ function ConfirmEmailForm() {
           credentials: 'include',
           body: JSON.stringify({ token }),
         });
-        const data = await res.json().catch(() => ({}));
+
+        if (cancelled) return;
 
         if (res.ok) {
-          if (data.status === 'already_confirmed') {
-            setStatus('already');
-            setEmail(data.email);
-          } else {
-            setStatus('success');
-            setEmail(data.email);
-          }
-          // Auto-redirect to onboarding after 2 seconds
-          setTimeout(() => router.push('/onboarding'), 2000);
+          setStatus('success');
+          // Auto-redirect to onboarding after 1.5s
+          setTimeout(() => {
+            if (!cancelled) router.push('/onboarding');
+          }, 1500);
         } else {
+          const data = await res.json().catch(() => ({}));
           setStatus('error');
           const detail = data.detail;
           if (typeof detail === 'object' && detail?.user_message) {
             setError(detail.user_message);
-          } else if (typeof detail === 'string') {
-            setError(detail);
           } else {
             setError('This confirmation link is invalid or has expired.');
           }
         }
       } catch {
-        setStatus('error');
-        setError('Connection failed. Please try again.');
+        if (!cancelled) {
+          setStatus('error');
+          setError('Connection failed. Please try again.');
+        }
       }
     }
 
     confirm();
+    return () => { cancelled = true; };
   }, [token, router]);
 
-  // Dev hint: if there's a token param, show it for debugging
-  useEffect(() => {
-    if (token && process.env.NODE_ENV === 'development') {
-      setDevUrl(`${API_URL}/api/auth/confirm-email`);
-    }
-  }, [token]);
-
-  // ── Success / Already confirmed ──
-  if (status === 'success' || status === 'already') {
+  // ── Success ──
+  if (status === 'success') {
     return (
       <div className="min-h-screen flex items-center justify-center p-6 bg-gray-100">
         <div className="max-w-md w-full bg-white rounded-card border border-gray-200 p-8">
@@ -91,39 +82,22 @@ function ConfirmEmailForm() {
               <CheckCircle2 className="w-5 h-5 text-emerald-600" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-text-primary">
-                {status === 'already' ? 'Already confirmed' : 'Email confirmed!'}
-              </h1>
+              <h1 className="text-lg font-semibold text-text-primary">Email confirmed!</h1>
               <p className="text-xs text-text-secondary">
-                {status === 'already'
-                  ? 'Your email was already confirmed.'
-                  : 'Your email has been verified successfully.'}
+                Redirecting you to get started…
               </p>
             </div>
           </div>
 
-          {email && (
-            <div className="flex items-center gap-3 rounded-btn border border-gray-200 bg-gray-50 p-4 mb-6">
-              <Mail className="w-5 h-5 text-primary shrink-0" />
-              <p className="text-sm font-medium text-text-primary">{email}</p>
-            </div>
-          )}
-
-          <div className="space-y-3 text-sm text-text-secondary">
-            <p>Redirecting you to onboarding in a moment…</p>
-          </div>
-
-          <div className="mt-6">
-            <Button
-              type="button"
-              variant="primary"
-              size="md"
-              className="w-full"
-              onClick={() => router.push('/onboarding')}
-            >
-              Continue to onboarding
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="primary"
+            size="md"
+            className="w-full"
+            onClick={() => router.push('/onboarding')}
+          >
+            Continue
+          </Button>
         </div>
       </div>
     );
@@ -146,50 +120,29 @@ function ConfirmEmailForm() {
             </div>
           </div>
 
-          <div className="space-y-3 text-sm text-text-secondary">
+          <div className="space-y-3 text-sm text-text-secondary mb-6">
             <p>
               Confirmation links expire in <span className="font-semibold text-text-primary">24 hours</span>.
-              You can request a new one below.
+              You can request a new one from the sign up page.
             </p>
           </div>
 
-          <div className="mt-6 space-y-3">
-            <Button
-              type="button"
-              variant="primary"
-              size="md"
-              className="w-full"
-              onClick={async () => {
-                if (email) {
-                  await fetch(`${API_URL}/api/auth/resend-confirmation`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email }),
-                  });
-                  alert('Confirmation email sent! Check your inbox.');
-                } else {
-                  router.push('/signup');
-                }
-              }}
-            >
-              {email ? 'Resend confirmation' : 'Go to signup'}
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="primary"
+            size="md"
+            className="w-full"
+            onClick={() => router.push('/signup')}
+          >
+            Go to sign up
+          </Button>
 
-          <div className="mt-4 flex items-center justify-between text-xs">
-            <Link
-              href="/login"
-              className="text-text-secondary hover:text-text-primary"
-            >
-              Back to sign in
+          <p className="text-[11px] text-text-secondary text-center mt-4">
+            Already confirmed?{' '}
+            <Link href="/login" className="text-primary font-semibold hover:underline">
+              Sign in
             </Link>
-            <Link
-              href="/signup"
-              className="text-primary font-semibold hover:underline"
-            >
-              Create new account
-            </Link>
-          </div>
+          </p>
         </div>
       </div>
     );

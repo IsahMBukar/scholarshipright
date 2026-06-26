@@ -2,31 +2,27 @@
 
 // /signup — public sign-up page.
 //
-// After successful registration:
-//   - Auth cookie is set (auto-login)
-//   - Shows "Check your email" dialog (like /forgot-password)
-//   - User clicks "Continue to onboarding" → /onboarding
-//   - User clicks email link → /confirm-email → auto-login → /onboarding
+// Flow (mirrors /forgot-password):
+//   1. User fills form, submits
+//   2. Page transforms to "Confirm your email" success state
+//   3. User clicks link in email → auto-login → /onboarding
 
 import { useState, type FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { UserPlus, AlertTriangle, Mail, CheckCircle2 } from 'lucide-react';
+import { UserPlus, AlertTriangle, Mail, CheckCircle2, ArrowLeft } from 'lucide-react';
 import Button from '@/components/admin/ui/Button';
 import PasswordField from '@/components/auth/PasswordField';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export default function SignupPage() {
-  const router = useRouter();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirmEmail, setConfirmEmail] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
 
-  // Mirror backend schema: min 8 chars
   const pwTooShort = password.length > 0 && password.length < 8;
   const canSubmit =
     fullName.trim().length > 0 &&
@@ -51,8 +47,7 @@ export default function SignupPage() {
         }),
       });
       if (res.ok) {
-        // Show confirmation dialog, then redirect to onboarding
-        setConfirmEmail(email.trim());
+        setSubmitted(true);
         return;
       }
       const data = (await res.json().catch(() => ({}))) as { detail?: unknown };
@@ -71,8 +66,8 @@ export default function SignupPage() {
     }
   }
 
-  // ── Confirmation dialog (after successful registration) ──
-  if (confirmEmail) {
+  // ── Success state: "Confirm your email" ──
+  if (submitted) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6 bg-gray-100">
         <div className="max-w-md w-full bg-white rounded-card border border-gray-200 p-8">
@@ -91,7 +86,7 @@ export default function SignupPage() {
           <div className="flex items-center gap-3 rounded-btn border border-gray-200 bg-gray-50 p-4 mb-6">
             <Mail className="w-5 h-5 text-primary shrink-0" />
             <div>
-              <p className="text-sm font-medium text-text-primary">{confirmEmail}</p>
+              <p className="text-sm font-medium text-text-primary">{email}</p>
               <p className="text-[11px] text-text-secondary mt-0.5">
                 Click the link in the email to confirm your address.
               </p>
@@ -105,34 +100,28 @@ export default function SignupPage() {
             </p>
           </div>
 
-          <div className="mt-6">
-            <Button
-              type="button"
-              variant="primary"
-              size="md"
-              className="w-full"
-              onClick={() => router.push('/onboarding')}
+          <div className="mt-6 flex items-center justify-between text-xs">
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary"
             >
-              Continue to onboarding
-            </Button>
-          </div>
-
-          <p className="text-[11px] text-text-secondary text-center mt-4">
-            Didn&apos;t get the email?{' '}
+              <ArrowLeft className="w-3.5 h-3.5" />
+              Back to sign in
+            </Link>
             <button
               type="button"
               onClick={async () => {
                 await fetch(`${API_URL}/api/auth/resend-confirmation`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ email: confirmEmail }),
+                  body: JSON.stringify({ email: email.trim() }),
                 });
               }}
               className="text-primary font-semibold hover:underline"
             >
               Resend confirmation
             </button>
-          </p>
+          </div>
         </div>
       </div>
     );

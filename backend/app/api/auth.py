@@ -507,9 +507,13 @@ class ConfirmEmailRequest(BaseModel):
 @router.post("/confirm-email")
 async def confirm_email(
     body: ConfirmEmailRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
-    """Confirm a user's email address using the token from the confirmation email."""
+    """Confirm a user's email address using the token from the confirmation email.
+
+    Also sets the auth cookie so the user is auto-logged in on confirmation.
+    """
     from app.models.user import hash_email_confirm_token
 
     raw = body.token.strip()
@@ -530,6 +534,13 @@ async def confirm_email(
 
     now = datetime.now(timezone.utc)
     if user.email_confirmed_at is not None:
+        # Already confirmed — still set cookie (user might have cleared cookies)
+        auth_token = create_token(str(user.id))
+        response.set_cookie(
+            key=COOKIE_NAME, value=auth_token,
+            max_age=COOKIE_MAX_AGE,
+            **auth_cookie_kwargs(),
+        )
         return {"status": "already_confirmed", "email": user.email}
 
     if user.email_confirm_expires_at and user.email_confirm_expires_at <= now:
@@ -542,6 +553,14 @@ async def confirm_email(
     user.email_confirm_token_hash = None
     user.email_confirm_expires_at = None
     await db.commit()
+
+    # Auto-login: set auth cookie
+    auth_token = create_token(str(user.id))
+    response.set_cookie(
+        key=COOKIE_NAME, value=auth_token,
+        max_age=COOKIE_MAX_AGE,
+        **auth_cookie_kwargs(),
+    )
 
     return {"status": "confirmed", "email": user.email}
 
