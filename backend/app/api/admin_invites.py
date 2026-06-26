@@ -84,6 +84,20 @@ async def create_invite_endpoint(
     )
     await db.commit()
 
+    # Send invite email (fire-and-forget)
+    from app.services.email import send_templated_email
+    note_html = f'<p style="margin:8px 0 0;font-size:13px;color:#4a4a4a;">{body.note}</p>' if body.note else ''
+    await send_templated_email(
+        to=invite.email,
+        template="admin_invite",
+        variables={
+            "RECIPIENT_NAME": invite.email.split("@")[0].title(),
+            "ADMIN_ROLE": invite.admin_role,
+            "INVITE_NOTE": note_html,
+        },
+        subject=f"You're invited to join ScholarshipRight as {invite.admin_role}",
+    )
+
     return AdminInviteResponse(
         id=invite.id,
         email=invite.email,

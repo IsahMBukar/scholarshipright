@@ -82,6 +82,34 @@ async def check_deadlines():
                     if n is not None:
                         notifications_created += 1
 
+                        # Send deadline reminder email (fire-and-forget)
+                        from app.services.email import send_templated_email
+                        # Resolve user email
+                        from app.models.user import User
+                        user_result = await db.execute(select(User).where(User.id == saved.user_id))
+                        user = user_result.scalar_one_or_none()
+                        if user:
+                            urgency_map = {
+                                7: ("d4972e", "7 DAYS LEFT", "You have one week left to apply for this scholarship."),
+                                3: ("e67e22", "3 DAYS LEFT", "Only 3 days left! Don't miss this deadline."),
+                                1: ("e74c3c", "DEADLINE TOMORROW", "This deadline is tomorrow — apply now!"),
+                            }
+                            color, badge, msg = urgency_map.get(days_before, ("d4972e", "REMINDER", "Deadline approaching."))
+                            await send_templated_email(
+                                to=user.email,
+                                template="deadline_reminder",
+                                variables={
+                                    "RECIPIENT_NAME": user.full_name or "Student",
+                                    "SCHOLARSHIP_NAME": scholarship.name,
+                                    "DEADLINE": deadline_str,
+                                    "DAYS_LEFT": str(days_before),
+                                    "URGENCY_COLOR": color,
+                                    "URGENCY_BADGE": badge,
+                                    "URGENCY_MESSAGE": msg,
+                                },
+                                subject=f"{badge}: {scholarship.name}",
+                            )
+
             await db.commit()
             if notifications_created > 0:
                 print(f"[DeadlineChecker] Created {notifications_created} deadline notifications")

@@ -120,6 +120,16 @@ async def register(body: RegisterRequest, response: Response, db: AsyncSession =
         max_age=COOKIE_MAX_AGE,
         **auth_cookie_kwargs(),
     )
+
+    # Send welcome email (fire-and-forget)
+    from app.services.email import send_templated_email
+    await send_templated_email(
+        to=email,
+        template="welcome",
+        variables={"RECIPIENT_NAME": body.full_name.strip() or "Student"},
+        subject="Welcome to ScholarshipRight!",
+    )
+
     return {"id": str(user.id), "email": user.email, "full_name": user.full_name}
 
 
@@ -353,17 +363,24 @@ async def forgot_password(
     db.add(token_row)
     await db.commit()
 
-    # Dev-mode "email" — the operator copies the link from the terminal.
-    # Replace with `await email_service.send(...)` to wire a real service.
+    # Send password reset email via OquMail
+    from app.services.email import send_templated_email
     settings = get_settings()
     reset_url = make_reset_url(settings.frontend_url, raw_token)
-    logger.info(
-        "[password-reset] Send to %s (expires in %d min): %s",
-        user.email, RESET_TTL_MINUTES, reset_url,
+    await send_templated_email(
+        to=user.email,
+        template="password_reset",
+        variables={
+            "RECIPIENT_NAME": user.full_name or "Student",
+            "RESET_URL": reset_url,
+            "EXPIRY_MINUTES": str(RESET_TTL_MINUTES),
+        },
+        subject="Reset your ScholarshipRight password",
     )
-    # Also print to stdout so it shows up in `docker logs` / Proot
-    # backgrounded-process output, which is the common dev workflow.
-    print(f"[password-reset] {user.email} → {reset_url}")
+    logger.info(
+        "[password-reset] Email sent to %s (expires in %d min)",
+        user.email, RESET_TTL_MINUTES,
+    )
 
     # In dev mode, surface the raw token + reset URL in the response so
     # the E2E test (and the /forgot-password page) can grab it without

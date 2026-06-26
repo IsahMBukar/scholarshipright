@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     # generic {status: "ok"} shape (no email enumeration, no token leak).
     dev_return_reset_token: str = "0"
 
+    # OquMail email API key for sending transactional emails.
+    # Loaded from OQUMAIL_API_KEY env var. If empty, emails are logged
+    # but not sent (dev mode).
+    oqumail_api_key: str = ""
+
     # pydantic-settings v2 model_config. extra="ignore" lets us keep
     # extra env vars (agent_*, dev_return_reset_token) in .env without
     # declaring them on the model. The original inner-class Config
