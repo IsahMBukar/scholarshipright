@@ -2,30 +2,16 @@
 
 // /signup — public sign-up page.
 //
-// Visual DNA is shared with /login and /admin/accept-invite so all three
-// auth surfaces look and feel identical:
-//   - Same `min-h-screen flex items-center justify-center p-6 bg-gray-100`
-//     page layout
-//   - Same `max-w-md w-full bg-white rounded-card border border-gray-200 p-8`
-//     card (no shadow-sm — accept-invite is the source of truth)
-//   - Same in-card icon+title+subtitle header (UserPlus icon)
-//   - Same small subtle labels with red asterisk for required fields
-//   - Same white-on-gray-200 input style (40px tall, rounded-btn, small text)
-//   - Same red-pill error display with AlertTriangle icon
-//   - Same `Button` from @/components/admin/ui/Button
-//   - Same `PasswordField` from @/components/auth/PasswordField — and
-//     because this is a NEW password, we surface the strength meter.
-//
-// Behavior:
-//   - POST /api/auth/register with full_name + email + password.
-//   - On success → /onboarding (so the new user walks the standard flow).
-//   - On error → surface backend's `user_message` if present, else the
-//     raw `detail`, else a generic "Registration failed".
+// After successful registration:
+//   - Auth cookie is set (auto-login)
+//   - Shows "Check your email" dialog (like /forgot-password)
+//   - User clicks "Continue to onboarding" → /onboarding
+//   - User clicks email link → /confirm-email → auto-login → /onboarding
 
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { UserPlus, AlertTriangle } from 'lucide-react';
+import { UserPlus, AlertTriangle, Mail, CheckCircle2 } from 'lucide-react';
 import Button from '@/components/admin/ui/Button';
 import PasswordField from '@/components/auth/PasswordField';
 
@@ -38,9 +24,9 @@ export default function SignupPage() {
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmEmail, setConfirmEmail] = useState<string | null>(null);
 
-  // Mirror backend schema: min 8 chars (already enforced by backend, but
-  // we can show a soft hint and disable submit when too short).
+  // Mirror backend schema: min 8 chars
   const pwTooShort = password.length > 0 && password.length < 8;
   const canSubmit =
     fullName.trim().length > 0 &&
@@ -65,7 +51,8 @@ export default function SignupPage() {
         }),
       });
       if (res.ok) {
-        router.push('/onboarding');
+        // Show confirmation dialog, then redirect to onboarding
+        setConfirmEmail(email.trim());
         return;
       }
       const data = (await res.json().catch(() => ({}))) as { detail?: unknown };
@@ -84,6 +71,74 @@ export default function SignupPage() {
     }
   }
 
+  // ── Confirmation dialog (after successful registration) ──
+  if (confirmEmail) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 bg-gray-100">
+        <div className="max-w-md w-full bg-white rounded-card border border-gray-200 p-8">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold text-text-primary">Check your email</h1>
+              <p className="text-xs text-text-secondary">
+                We&apos;ve sent a confirmation link to your inbox.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 rounded-btn border border-gray-200 bg-gray-50 p-4 mb-6">
+            <Mail className="w-5 h-5 text-primary shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-text-primary">{confirmEmail}</p>
+              <p className="text-[11px] text-text-secondary mt-0.5">
+                Click the link in the email to confirm your address.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3 text-sm text-text-secondary">
+            <p>
+              The link expires in <span className="font-semibold text-text-primary">24 hours</span>.
+              If you don&apos;t see the email, check your spam folder.
+            </p>
+          </div>
+
+          <div className="mt-6">
+            <Button
+              type="button"
+              variant="primary"
+              size="md"
+              className="w-full"
+              onClick={() => router.push('/onboarding')}
+            >
+              Continue to onboarding
+            </Button>
+          </div>
+
+          <p className="text-[11px] text-text-secondary text-center mt-4">
+            Didn&apos;t get the email?{' '}
+            <button
+              type="button"
+              onClick={async () => {
+                await fetch(`${API_URL}/api/auth/resend-confirmation`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ email: confirmEmail }),
+                });
+              }}
+              className="text-primary font-semibold hover:underline"
+            >
+              Resend confirmation
+            </button>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Registration form ──
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-gray-100">
       <div className="max-w-md w-full bg-white rounded-card border border-gray-200 p-8">

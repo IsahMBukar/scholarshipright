@@ -27,7 +27,7 @@
 import { Suspense, useEffect, useState, type FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { LogIn, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
+import { LogIn, AlertTriangle, CheckCircle2, Loader2, Mail } from 'lucide-react';
 import Button from '@/components/admin/ui/Button';
 import PasswordField from '@/components/auth/PasswordField';
 
@@ -52,6 +52,7 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
   // Banners driven by query params:
   //   ?reset=success  → password was just reset
   //   ?signup=ok      → account was just created (existing)
@@ -110,6 +111,16 @@ function LoginForm() {
       }
       const data = (await res.json().catch(() => ({}))) as { detail?: unknown };
       const detail = data.detail;
+
+      // Check for email_not_confirmed (403)
+      if (res.status === 403 && detail && typeof detail === 'object' && 'code' in detail) {
+        const d = detail as { code?: string; email?: string };
+        if (d.code === 'email_not_confirmed') {
+          setUnconfirmedEmail(d.email || email.trim());
+          return;
+        }
+      }
+
       if (typeof detail === 'string') {
         setError(detail);
       } else if (detail && typeof detail === 'object' && 'user_message' in detail) {
@@ -124,6 +135,82 @@ function LoginForm() {
     }
   }
 
+
+  // ── Email not confirmed dialog ──
+  if (unconfirmedEmail) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 bg-gray-100">
+        <div className="max-w-md w-full bg-white rounded-card border border-gray-200 p-8">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center">
+              <Mail className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <h1 className="text-lg font-semibold text-text-primary">Confirm your email</h1>
+              <p className="text-xs text-text-secondary">
+                Please verify your email address before signing in.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 rounded-btn border border-gray-200 bg-gray-50 p-4 mb-6">
+            <Mail className="w-5 h-5 text-primary shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-text-primary">{unconfirmedEmail}</p>
+              <p className="text-[11px] text-text-secondary mt-0.5">
+                We sent a confirmation link to this address.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3 text-sm text-text-secondary">
+            <p>
+              Check your inbox and click the confirmation link.
+              The link expires in <span className="font-semibold text-text-primary">24 hours</span>.
+            </p>
+          </div>
+
+          <div className="mt-6 space-y-3">
+            <Button
+              type="button"
+              variant="primary"
+              size="md"
+              className="w-full"
+              onClick={async () => {
+                await fetch(`${API_URL}/api/auth/resend-confirmation`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ email: unconfirmedEmail }),
+                });
+                alert('Confirmation email sent! Check your inbox.');
+              }}
+            >
+              Resend confirmation email
+            </Button>
+          </div>
+
+          <div className="mt-4 flex items-center justify-between text-xs">
+            <button
+              type="button"
+              onClick={() => {
+                setUnconfirmedEmail(null);
+                setError(null);
+              }}
+              className="text-text-secondary hover:text-text-primary"
+            >
+              ← Back to sign in
+            </button>
+            <Link
+              href="/signup"
+              className="text-primary font-semibold hover:underline"
+            >
+              Use a different email
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-gray-100">
