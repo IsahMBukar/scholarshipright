@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { uploadResume, type Resume } from '@/services/api';
 
 /**
@@ -40,6 +41,7 @@ export default function ResumeSlide({
    */
   onMarkManual?: () => void | Promise<void>;
 }) {
+  const router = useRouter();
   const [state, setState] = useState<UploadState>({ kind: 'idle' });
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -92,7 +94,7 @@ export default function ResumeSlide({
     if (onMarkManual) {
       void onMarkManual();
     }
-    window.location.href = '/resume?onboarding=1&return=/onboarding';
+    router.push('/resume?onboarding=1&return=/onboarding');
   };
 
   // ── Already has a resume (came back from /resume?return=)

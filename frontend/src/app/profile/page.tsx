@@ -446,7 +446,6 @@ function ProfilePageInner() {
             <span className="material-symbols-outlined text-[15px] text-primary">mood</span>
           </div>
           <span className="text-[13px] text-text-secondary flex-1">Your profile data is kept private and secure.</span>
-          <span className="material-symbols-outlined text-[16px] text-text-secondary/50 cursor-help">help</span>
         </div>
 
         {/* Tabs */}

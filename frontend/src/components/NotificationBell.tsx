@@ -34,11 +34,14 @@ export default function NotificationBell() {
   }, [open]);
 
   async function loadNotifications() {
+    setLoading(true);
     try {
       const data = await fetchNotifications();
       setNotifications(data.items);
       setUnreadCount(data.unread_count);
-    } catch {}
+    } catch {} finally {
+      setLoading(false);
+    }
   }
 
   async function handleMarkRead(id: string) {
@@ -93,7 +96,7 @@ export default function NotificationBell() {
 
       {/* Dropdown panel */}
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-[360px] bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
+        <div className="absolute right-0 top-full mt-2 w-[min(360px,calc(100vw-2rem))] bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <h3 className="text-[15px] font-bold text-text-primary">Notifications</h3>

@@ -8,8 +8,8 @@ const NAV_ITEMS = [
   { label: 'Resume', icon: 'description', href: '/resume' },
   { label: 'Profile', icon: 'person', href: '/profile' },
   { label: 'Agent', icon: 'smart_toy', href: '/chat' },
-  { label: 'Coaching', icon: 'record_voice_over', href: '/coaching' },
-  { label: 'Interview', icon: 'quiz', href: '/interview' },
+  { label: 'Coaching', icon: 'record_voice_over', href: '/coaching', soon: true },
+  { label: 'Interview', icon: 'quiz', href: '/interview', soon: true },
 ];
 
 export default function Sidebar() {
@@ -34,6 +34,9 @@ export default function Sidebar() {
           >
             <span className="material-symbols-outlined text-[22px]">{item.icon}</span>
             <span className="text-[10px] font-medium leading-tight">{item.label}</span>
+            {'soon' in item && item.soon && (
+              <span className="absolute top-1.5 right-1 text-[7px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 px-1 rounded">Soon</span>
+            )}
             {active && (
               <div className="absolute left-0 w-[3px] h-8 bg-primary rounded-r-full" />
             )}

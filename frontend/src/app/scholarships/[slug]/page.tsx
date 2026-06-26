@@ -15,6 +15,7 @@ export default function ScholarshipDetailPage() {
   const [isSaved, setIsSaved] = useState(false);
   const [savedStatus, setSavedStatus] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'overview' | 'provider'>('overview');
+  const [loadError, setLoadError] = useState<string | null>(null);
   const viewedRef = useRef<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -42,7 +43,14 @@ export default function ScholarshipDetailPage() {
         const found = saved.find((s: any) => (s.scholarship_id || s.id) === sch.id);
         setIsSaved(!!found);
         if (found) setSavedStatus((found as any).status || 'saved');
-      }).catch(console.error)
+      }).catch((err) => {
+        console.error(err);
+        if (err?.status === 404 || err?.message?.includes('404')) {
+          setLoadError('not_found');
+        } else {
+          setLoadError('network');
+        }
+      })
         .finally(() => setLoading(false));
 
       // Track view once per slug (guards against double-mount in dev)
@@ -86,13 +94,31 @@ export default function ScholarshipDetailPage() {
     );
   }
 
-  if (!scholarship) {
+  if (!scholarship && !loading) {
     return (
       <AppLayout>
         <div className="p-6 text-center py-20">
-          <span className="material-symbols-outlined text-6xl text-text-secondary mb-4 block">error</span>
-          <h2 className="text-[24px] font-bold text-text-primary mb-2">Scholarship Not Found</h2>
-          <Link href="/scholarships" className="text-primary font-semibold hover:underline">Back to scholarships</Link>
+          <span className="material-symbols-outlined text-6xl text-text-secondary mb-4 block">
+            {loadError === 'network' ? 'wifi_off' : 'error'}
+          </span>
+          <h2 className="text-[24px] font-bold text-text-primary mb-2">
+            {loadError === 'network' ? 'Something went wrong' : 'Scholarship Not Found'}
+          </h2>
+          <p className="text-sm text-text-secondary mb-4">
+            {loadError === 'network'
+              ? 'We couldn\'t load this scholarship. Please check your connection and try again.'
+              : 'This scholarship doesn\'t exist or has been removed.'}
+          </p>
+          {loadError === 'network' ? (
+            <button
+              onClick={() => window.location.reload()}
+              className="text-primary font-semibold hover:underline"
+            >
+              Try again
+            </button>
+          ) : (
+            <Link href="/scholarships" className="text-primary font-semibold hover:underline">Back to scholarships</Link>
+          )}
         </div>
       </AppLayout>
     );
