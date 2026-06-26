@@ -15,6 +15,7 @@ import { fetchFilterMetadata } from '@/services/api';
 import { fetchScholarships, saveScholarship, removeSavedScholarship, fetchSavedScholarships, updateSavedScholarship } from '@/services/api';
 import type { Scholarship, ScholarshipListResponse, FilterMetadata } from '@/services/api';
 import { filtersToApiParams } from '@/lib/filterParams';
+import { NAV_ITEMS } from '@/lib/nav-items';
 
 const TABS = ['Recommended', 'Saved', 'Applied', 'External'];
 
@@ -192,14 +193,7 @@ export default function ScholarshipsPage() {
               </button>
             </div>
             <nav className="flex flex-col p-4 gap-1">
-              {[
-                { label: 'Scholarships', icon: 'school', href: '/scholarships' },
-                { label: 'Resume', icon: 'description', href: '/resume' },
-                { label: 'Profile', icon: 'person', href: '/profile' },
-                { label: 'Agent', icon: 'smart_toy', href: '/chat' },
-                { label: 'Coaching', icon: 'record_voice_over', href: '/coaching' },
-                { label: 'Interview', icon: 'quiz', href: '/interview' },
-              ].map((item) => {
+              {NAV_ITEMS.map((item) => {
                 const active = pathname === item.href || pathname?.startsWith(item.href + '/');
                 return (
                   <a

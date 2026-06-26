@@ -139,7 +139,7 @@ function ConfirmEmailForm() {
 
           <p className="text-[11px] text-text-secondary text-center mt-4">
             Already confirmed?{' '}
-            <Link href="/login" className="text-primary font-semibold hover:underline">
+            <Link href="/login" className="text-primary-readable font-semibold hover:underline">
               Sign in
             </Link>
           </p>

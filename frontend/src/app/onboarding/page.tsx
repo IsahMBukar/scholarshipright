@@ -113,6 +113,7 @@ export default function OnboardingPage() {
       total={TOTAL_SLIDES}
       onBack={ob.prevSlide}
       onSkip={handleSkipAll}
+      onGoTo={(i) => ob.setSlideIndex(i)}
       showBack={ob.slideIndex > 0}
     >
       {ob.slideIndex === 0 && (

@@ -150,7 +150,7 @@ export default function ForgotPasswordPage() {
                 setDevHint(null);
                 setEmail('');
               }}
-              className="text-primary font-semibold hover:underline"
+              className="text-primary-readable font-semibold hover:underline"
             >
               Use a different email
             </button>

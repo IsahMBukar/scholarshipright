@@ -24,7 +24,7 @@ export default function WelcomeSlide({ userName, onNext }: { userName: string; o
 
       <p className="text-[15px] md:text-[16px] text-text-secondary mt-3 max-w-md leading-relaxed animate-onboarding-slide-up">
         Let&apos;s learn a little about you so we can find the
-        <span className="text-primary font-semibold"> best matching scholarships</span>
+        <span className="text-primary-readable font-semibold"> best matching scholarships</span>
         {' '}for your background.
       </p>
 

@@ -38,7 +38,7 @@ export default function OnboardingProgress() {
         <span className="font-semibold text-text-primary">Next: </span>
         {ob.next.title}
       </p>
-      <p className="text-[11px] text-primary font-semibold mt-1.5 group-hover:underline">
+      <p className="text-[11px] text-primary-readable font-semibold mt-1.5 group-hover:underline">
         Continue →
       </p>
     </button>

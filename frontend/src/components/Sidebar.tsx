@@ -2,15 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-
-const NAV_ITEMS = [
-  { label: 'Scholarships', icon: 'school', href: '/scholarships' },
-  { label: 'Resume', icon: 'description', href: '/resume' },
-  { label: 'Profile', icon: 'person', href: '/profile' },
-  { label: 'Agent', icon: 'smart_toy', href: '/chat' },
-  { label: 'Coaching', icon: 'record_voice_over', href: '/coaching', soon: true },
-  { label: 'Interview', icon: 'quiz', href: '/interview', soon: true },
-];
+import { NAV_ITEMS } from '@/lib/nav-items';
 
 export default function Sidebar() {
   const pathname = usePathname();

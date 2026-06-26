@@ -20,6 +20,7 @@
 import {
   type ReactNode,
   useCallback,
+  useEffect,
   useMemo,
   useState,
   Fragment,
@@ -156,6 +157,24 @@ export default function DataTable<T>({
     () => rows.filter((r) => selected.has(keyExtractor(r))),
     [rows, selected, keyExtractor]
   );
+
+  // Keyboard shortcuts: ←/→ for pagination (only when no input is focused)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Don't capture when user is typing in an input/textarea
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.key === 'ArrowLeft' && page > 1) {
+        e.preventDefault();
+        onPageChange(page - 1);
+      } else if (e.key === 'ArrowRight' && page < totalPages) {
+        e.preventDefault();
+        onPageChange(page + 1);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [page, totalPages, onPageChange]);
 
   const sortIcon = (col: Column<T>) => {
     if (col.disableSort) return null;
@@ -337,6 +356,7 @@ export default function DataTable<T>({
       <div className="flex items-center justify-between gap-3 px-4 h-12 border-t border-gray-200 bg-gray-50/50">
         <div className="text-xs text-text-secondary">
           {total === 0 ? '0 results' : `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total}`}
+          <span className="hidden lg:inline ml-2 text-text-secondary/60">(← → to navigate)</span>
         </div>
         <div className="flex items-center gap-2">
           <select

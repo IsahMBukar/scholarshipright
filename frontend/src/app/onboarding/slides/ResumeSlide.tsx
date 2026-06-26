@@ -224,7 +224,7 @@ export default function ResumeSlide({
           Drop your file here
         </p>
         <p className="text-[12px] text-text-secondary mt-1">
-          or <span className="text-primary font-semibold">browse</span> · PDF, DOC, image
+          or <span className="text-primary-readable font-semibold">browse</span> · PDF, DOC, image
         </p>
         <input
           ref={fileRef}

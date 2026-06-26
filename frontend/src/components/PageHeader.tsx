@@ -3,15 +3,7 @@
 import { useState } from 'react';
 import { usePathname } from 'next/navigation';
 import NotificationBell from './NotificationBell';
-
-const NAV_ITEMS = [
-  { label: 'Scholarships', icon: 'school', href: '/scholarships' },
-  { label: 'Resume', icon: 'description', href: '/resume' },
-  { label: 'Profile', icon: 'person', href: '/profile' },
-  { label: 'Agent', icon: 'smart_toy', href: '/chat' },
-  { label: 'Coaching', icon: 'record_voice_over', href: '/coaching' },
-  { label: 'Interview', icon: 'quiz', href: '/interview' },
-];
+import { NAV_ITEMS } from '@/lib/nav-items';
 
 export default function PageHeader({ title, children }: { title: string; children?: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);

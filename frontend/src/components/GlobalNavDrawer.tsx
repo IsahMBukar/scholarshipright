@@ -1,15 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-
-const NAV_ITEMS = [
-  { label: 'Scholarships', icon: 'school', href: '/scholarships' },
-  { label: 'Resume', icon: 'description', href: '/resume' },
-  { label: 'Profile', icon: 'person', href: '/profile' },
-  { label: 'Agent', icon: 'smart_toy', href: '/chat' },
-  { label: 'Coaching', icon: 'record_voice_over', href: '/coaching' },
-  { label: 'Interview', icon: 'quiz', href: '/interview' },
-];
+import { NAV_ITEMS } from '@/lib/nav-items';
 
 /**
  * Slide-in global nav drawer (mobile only). Caller controls `open` state

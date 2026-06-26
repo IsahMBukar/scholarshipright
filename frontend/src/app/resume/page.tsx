@@ -47,6 +47,8 @@ function ResumePageInner() {
   const [selectedResume, setSelectedResume] = useState<Resume | null>(null);
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const [pollProgress, setPollProgress] = useState(0); // 0-100 during analysis polling
 
   // `?onboarding=1` puts a "Return to onboarding" banner at the top of
   // the page so the user doesn't get lost after leaving the hub.
@@ -112,10 +114,10 @@ function ResumePageInner() {
       setUploading(false);
     }
   }
-
   async function pollForCompletion(resumeId: string) {
     const maxAttempts = 150; // 5 min max (MiMo reasoning can take 2-3 min)
     for (let i = 0; i < maxAttempts; i++) {
+      setPollProgress(Math.round(((i + 1) / maxAttempts) * 100));
       await new Promise(r => setTimeout(r, 2000));
       try {
         const updated = await fetchResume(resumeId);
@@ -124,13 +126,16 @@ function ResumePageInner() {
           setEditData(updated);
           setResumes(prev => prev.map(r => r.id === updated.id ? updated : r));
           setAnalyzing(false);
+          setPollProgress(0);
           return;
         }
       } catch (err) {
         console.error('Poll error:', err);
       }
     }
+    // Timed out — analysis is taking unusually long
     setAnalyzing(false);
+    setPollProgress(0);
   }
 
   // ---- EDITOR ----
@@ -471,7 +476,7 @@ function ResumePageInner() {
                     <span className="text-[12px] text-text-secondary">
                       {selectedResume.level_aware_completeness.base_score}% base
                       {selectedResume.level_aware_completeness.bonus_score > 0 && (
-                        <span className="text-primary font-semibold"> + {selectedResume.level_aware_completeness.bonus_score}% bonus</span>
+                        <span className="text-primary-readable font-semibold"> + {selectedResume.level_aware_completeness.bonus_score}% bonus</span>
                       )}
                     </span>
                     <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${
@@ -484,22 +489,29 @@ function ResumePageInner() {
                 )}
               </div>
               <div className="flex flex-wrap gap-2 sm:flex-nowrap">
-                <div className="relative group">
-                  <button disabled={exporting} className="px-3 py-2 border border-gray-200 text-text-secondary text-[12px] font-medium rounded-btn hover:border-primary hover:text-primary transition-colors disabled:opacity-50 flex items-center gap-1">
+                <div className="relative">
+                  <button
+                    disabled={exporting}
+                    onClick={() => setDownloadOpen((p) => !p)}
+                    onBlur={() => setTimeout(() => setDownloadOpen(false), 200)}
+                    className="px-3 py-2 border border-gray-200 text-text-secondary text-[12px] font-medium rounded-btn hover:border-primary hover:text-primary transition-colors disabled:opacity-50 flex items-center gap-1"
+                  >
                     <span className="material-symbols-outlined text-[16px]">download</span>
                     {exporting ? 'Exporting...' : 'Download'}
                     <span className="material-symbols-outlined text-[14px]">arrow_drop_down</span>
                   </button>
-                  <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 min-w-[160px]">
-                    <button onClick={() => handleExportPdf('resume')} className="w-full text-left px-4 py-2.5 text-[13px] text-text-primary hover:bg-gray-50 rounded-t-lg flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[16px] text-text-secondary">description</span>
-                      Resume (1 page)
-                    </button>
-                    <button onClick={() => handleExportPdf('cv')} className="w-full text-left px-4 py-2.5 text-[13px] text-text-primary hover:bg-gray-50 rounded-b-lg flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[16px] text-text-secondary">folder_open</span>
-                      CV (Full detail)
-                    </button>
-                  </div>
+                  {downloadOpen && (
+                    <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[160px] animate-fade-in">
+                      <button onClick={() => { handleExportPdf('resume'); setDownloadOpen(false); }} className="w-full text-left px-4 py-2.5 text-[13px] text-text-primary hover:bg-gray-50 rounded-t-lg flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[16px] text-text-secondary">description</span>
+                        Resume (1 page)
+                      </button>
+                      <button onClick={() => { handleExportPdf('cv'); setDownloadOpen(false); }} className="w-full text-left px-4 py-2.5 text-[13px] text-text-primary hover:bg-gray-50 rounded-b-lg flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[16px] text-text-secondary">folder_open</span>
+                        CV (Full detail)
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <button onClick={handleReanalyze} disabled={analyzing} className="px-3 py-2 border border-gray-200 text-text-secondary text-[12px] font-medium rounded-btn hover:border-primary hover:text-primary transition-colors disabled:opacity-50">
                   {analyzing ? 'Analyzing...' : 'Re-analyze'}
@@ -510,13 +522,25 @@ function ResumePageInner() {
               </div>
             </div>
 
-            {/* Analyzing banner */}
+            {/* Analyzing banner with progress */}
             {analyzing && (
               <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-card border border-blue-200 mb-4">
                 <span className="material-symbols-outlined text-[24px] text-blue-600 animate-spin">refresh</span>
-                <div>
+                <div className="flex-1">
                   <p className="text-[14px] font-semibold text-blue-800">AI is analyzing your CV...</p>
-                  <p className="text-[12px] text-blue-600">This usually takes 30-120 seconds. Fields will populate automatically.</p>
+                  <p className="text-[12px] text-blue-600">
+                    {pollProgress < 30
+                      ? 'This usually takes 30-120 seconds. Fields will populate automatically.'
+                      : pollProgress < 80
+                      ? `Still working... (${pollProgress}% elapsed) — complex CVs take longer.`
+                      : `Taking longer than usual (${pollProgress}%). The AI may be processing a detailed CV.`}
+                  </p>
+                  <div className="w-full h-1.5 bg-blue-200 rounded-full mt-2 overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 rounded-full transition-all duration-1000"
+                      style={{ width: `${pollProgress}%` }}
+                    />
+                  </div>
                 </div>
               </div>
             )}

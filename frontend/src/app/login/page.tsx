@@ -212,7 +212,7 @@ function LoginForm() {
             </button>
             <Link
               href="/signup"
-              className="text-primary font-semibold hover:underline"
+              className="text-primary-readable font-semibold hover:underline"
             >
               Use a different email
             </Link>
@@ -308,7 +308,7 @@ function LoginForm() {
 
         <p className="text-[11px] text-text-secondary text-center mt-4">
           Don&apos;t have an account?{' '}
-          <Link href="/signup" className="text-primary font-semibold hover:underline">
+          <Link href="/signup" className="text-primary-readable font-semibold hover:underline">
             Sign up
           </Link>
         </p>

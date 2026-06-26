@@ -112,12 +112,12 @@ export default function ScholarshipDetailPage() {
           {loadError === 'network' ? (
             <button
               onClick={() => window.location.reload()}
-              className="text-primary font-semibold hover:underline"
+              className="text-primary-readable font-semibold hover:underline"
             >
               Try again
             </button>
           ) : (
-            <Link href="/scholarships" className="text-primary font-semibold hover:underline">Back to scholarships</Link>
+            <Link href="/scholarships" className="text-primary-readable font-semibold hover:underline">Back to scholarships</Link>
           )}
         </div>
       </AppLayout>

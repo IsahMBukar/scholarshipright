@@ -9,6 +9,7 @@
   :root {
     --color-primary: #f5b942;
     --color-primary-light: #f5d9a2;
+    --color-primary-readable: #d4972e; /* WCAG AA on white (4.5:1 contrast) */
     --color-bg: #ffffff;
     --color-bg-soft: #e0c48b;
     --color-text-primary: #1a1a1a;

@@ -1,15 +1,17 @@
 'use client';
 
+import { type ReactNode } from 'react';
+
 /**
  * SlideShell — the consistent wrapper around every slide.
  *
  * Renders:
- *   - Top: small brand mark + step dots (NOT a progress bar of all 5)
+ *   - Top: small brand mark + step dots (clickable to navigate)
  *   - Middle: the slide content (passed as children)
  *   - Bottom: small "Skip onboarding" link
  *
- * The dots are non-clickable indicators (you can navigate with back/next
- * buttons or swipe, but clicking a dot is allowed for power users).
+ * The dots are clickable indicators for power users who want to jump
+ * to a specific slide.
  */
 
 const SLIDE_LABELS = ['Welcome', 'Resume', 'Profile', 'Matches', 'Scholara'];
@@ -19,6 +21,7 @@ export default function SlideShell({
   total,
   onBack,
   onSkip,
+  onGoTo,
   showBack,
   children,
 }: {
@@ -26,6 +29,7 @@ export default function SlideShell({
   total: number;
   onBack: () => void;
   onSkip: () => void;
+  onGoTo?: (i: number) => void;
   showBack: boolean;
   children: React.ReactNode;
 }) {
@@ -47,19 +51,22 @@ export default function SlideShell({
         </button>
       </div>
 
-      {/* Step dots */}
+      {/* Step dots — clickable for navigation */}
       <div className="w-full max-w-2xl mx-auto px-4 mt-4 flex items-center justify-center gap-1.5">
         {Array.from({ length: total }).map((_, i) => (
-          <div
+          <button
             key={i}
+            type="button"
+            onClick={() => onGoTo?.(i)}
+            disabled={!onGoTo}
+            aria-label={`Step ${i + 1} of ${total}: ${SLIDE_LABELS[i]}`}
             className={`h-1.5 rounded-full transition-all duration-500 ${
               i === index
                 ? 'w-8 bg-primary'
                 : i < index
                 ? 'w-1.5 bg-primary/40'
                 : 'w-1.5 bg-gray-200'
-            }`}
-            aria-label={`Step ${i + 1} of ${total}: ${SLIDE_LABELS[i]}`}
+            } ${onGoTo ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
           />
         ))}
       </div>
