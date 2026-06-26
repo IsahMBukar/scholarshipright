@@ -137,27 +137,27 @@ export default function AdminAuditPage() {
   );
 
   const headerActions = (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <input
         type="text"
         value={actorFilter}
         onChange={(e) => setActorFilter(e.target.value)}
         placeholder="Filter by actor email"
-        className="h-9 w-56 px-3 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary"
+        className="h-9 w-full sm:w-56 px-3 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary"
       />
       <input
         type="text"
         value={actionFilter}
         onChange={(e) => setActionFilter(e.target.value)}
         placeholder="action (e.g. user.update)"
-        className="h-9 w-56 px-3 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary"
+        className="h-9 w-full sm:w-56 px-3 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary"
       />
       <input
         type="text"
         value={targetTypeFilter}
         onChange={(e) => setTargetTypeFilter(e.target.value)}
         placeholder="target_type (e.g. user)"
-        className="h-9 w-48 px-3 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary"
+        className="h-9 w-full sm:w-48 px-3 text-sm bg-white border border-gray-200 rounded-btn focus:outline-none focus:ring-1 focus:ring-primary"
       />
       <Button
         variant="secondary"

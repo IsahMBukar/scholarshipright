@@ -33,6 +33,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
 import { useOnboarding } from '@/hooks/useOnboarding';
 import SlideShell from './slides/SlideShell';
 import WelcomeSlide from './slides/WelcomeSlide';
@@ -89,7 +90,10 @@ export default function OnboardingPage() {
   if (!authChecked || ob.loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-pulse text-text-secondary">Loading…</div>
+        <div className="flex items-center gap-2 text-sm text-text-secondary">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Loading…
+        </div>
       </div>
     );
   }
