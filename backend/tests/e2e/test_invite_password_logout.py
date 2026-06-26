@@ -20,6 +20,7 @@ import json
 import os
 import random
 import re
+import subprocess
 import sys
 import time
 import urllib.request
@@ -119,7 +120,6 @@ def check(name, ok, detail=""):
 
 # ── Setup: clean any leftover test user ───────────────────────────
 try:
-    import subprocess
     subprocess.run(
         ["psql", "-U", "system", "-d", "scholarshipright", "-c",
          f"DELETE FROM users WHERE email = '{TEST_EMAIL}';"],
@@ -133,8 +133,30 @@ staff_jar = CookieJar()
 
 # ── STEP 1 ─────────────────────────────────────────────────────────
 step("STEP 1: Super admin logs in & creates invite")
-status, body = call("POST", "/api/auth/dev-login", jar=admin_jar)
-check("dev-login returns 200", status == 200, str(body))
+
+# Register a fresh admin user and promote to super_admin via DB.
+admin_email = f"e2e-admin-{random.randint(10000,99999)}@example.com"
+admin_pw = "AdminPass123!"
+status, body = call("POST", "/api/auth/register",
+    body={"email": admin_email, "password": admin_pw, "full_name": "E2E Admin"},
+    jar=admin_jar)
+check("register admin returns 200", status == 200, str(body)[:80])
+
+# Promote to super_admin directly in the DB
+try:
+    subprocess.run(
+        ["psql", "-U", "system", "-d", "scholarshipright", "-c",
+         f"UPDATE users SET is_admin = true, admin_role = 'super_admin' WHERE email = '{admin_email}';"],
+        capture_output=True, check=True,
+    )
+    check("promoted to super_admin in DB", True)
+except Exception as e:
+    check("promoted to super_admin in DB", False, str(e)[:100])
+
+# Login again to get a fresh session with the admin flag
+status, body = call("POST", "/api/auth/login",
+    body={"email": admin_email, "password": admin_pw}, jar=admin_jar)
+check("admin login returns 200", status == 200, str(body)[:80])
 check("super_admin cookie set", has_token(admin_jar))
 
 status, body = call("POST", "/api/admin/invites",

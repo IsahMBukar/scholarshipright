@@ -268,53 +268,6 @@ async def set_password(
         "has_password": bool(user.password_hash),
     }
 
-
-# ── Dev login ──
-#
-# Convenient one-click login for local development and the E2E suite.
-# Hard-coded to test@scholarshipright.com with password 'dev123' and is
-# the single biggest pre-launch security risk if it ever lands in a
-# production deploy -- anyone who finds the endpoint would get a real,
-# signed-in account with full access.
-#
-# Therefore: refuse the route entirely when environment != "development".
-# 404 rather than 401 so the endpoint "looks not here" in prod, matching
-# what a well-operated prod deployment should present (no dev tooling
-# visible at all). The handler is left defined so dev usage is unaffected.
-
-@router.post("/dev-login")
-async def dev_login(response: Response, db: AsyncSession = Depends(get_db)):
-    """Dev-only login — finds or creates test user."""
-    if get_settings().environment != "development":
-        # Status explicitly not 401/403 (those would acknowledge the route).
-        # 404 makes this indistinguishable from any other missing path
-        # when probed against a production deployment.
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Not Found",
-        )
-
-    from uuid import UUID
-    dev_email = "test@scholarshipright.com"
-
-    result = await db.execute(select(User).where(User.email == dev_email))
-    user = result.scalar_one_or_none()
-
-    if not user:
-        user = User(email=dev_email, full_name="Test User", password_hash=hash_password("dev123"))
-        db.add(user)
-        await db.commit()
-        await db.refresh(user)
-
-    token = create_token(str(user.id))
-    response.set_cookie(
-        key=COOKIE_NAME, value=token,
-        max_age=COOKIE_MAX_AGE,
-        **auth_cookie_kwargs(),
-    )
-    return {"id": str(user.id), "email": user.email, "full_name": user.full_name}
-
-
 # ── Password reset ────────────────────────────────────────────────
 #
 # Flow:

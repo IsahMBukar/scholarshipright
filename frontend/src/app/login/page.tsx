@@ -27,12 +27,12 @@
 import { Suspense, useEffect, useState, type FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { LogIn, AlertTriangle, CheckCircle2, Loader2, Zap } from 'lucide-react';
+import { LogIn, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import Button from '@/components/admin/ui/Button';
 import PasswordField from '@/components/auth/PasswordField';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-const SHOW_DEV_LOGIN = process.env.NEXT_PUBLIC_ENABLE_DEV_LOGIN === '1';
+
 
 // Only allow internal paths as the ?next= target. Block absolute URLs and
 // protocol-relative ones to prevent open-redirect via crafted query.
@@ -124,22 +124,6 @@ function LoginForm() {
     }
   }
 
-  async function handleDevLogin() {
-    setSubmitting(true);
-    setError(null);
-    try {
-      const res = await fetch(`${API_URL}/api/auth/dev-login`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (res.ok) router.push(nextPath);
-      else setError('Dev login failed');
-    } catch {
-      setError('Connection failed.');
-    } finally {
-      setSubmitting(false);
-    }
-  }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-gray-100">
@@ -232,25 +216,7 @@ function LoginForm() {
           </Link>
         </p>
 
-        <div className="flex items-center gap-4 my-4">
-          <div className="flex-1 h-px bg-gray-200" />
-          <span className="text-[11px] text-text-secondary">or</span>
-          <div className="flex-1 h-px bg-gray-200" />
-        </div>
 
-        {SHOW_DEV_LOGIN && (
-          <Button
-            type="button"
-            variant="secondary"
-            size="md"
-            loading={submitting}
-            onClick={handleDevLogin}
-            leftIcon={<Zap className="w-3.5 h-3.5" />}
-            className="w-full"
-          >
-            Quick dev login
-          </Button>
-        )}
       </div>
     </div>
   );
