@@ -1,0 +1,127 @@
+"""
+Weekly digest email service.
+
+Runs as a background task every Sunday at 9 AM UTC. For each user with
+active matches, sends a weekly_digest email containing their top 5
+scholarship matches.
+
+Runs alongside the deadline_checker loop in main.py lifespan.
+"""
+from datetime import datetime, timezone
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.session import AsyncSessionLocal
+from app.models.user import User
+from app.models.match_score import MatchScore
+from app.models.scholarship import Scholarship
+
+
+TOP_N = 5  # Number of top matches to include in the digest
+
+
+def _build_match_card(scholarship_name: str, score: float, amount: str, deadline: str, country: str) -> str:
+    """Build a single match card HTML for the digest."""
+    score_rounded = round(score)
+    return f'''    <div style="background:#fdfbf7;border:1px solid #f0ebe0;border-radius:16px;padding:20px 24px;margin-bottom:12px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;">
+        <tr>
+          <td>
+            <div style="display:inline-block;background:#f5b942;color:#05151b;font-weight:700;font-size:11px;padding:4px 10px;border-radius:999px;margin-bottom:8px;">{score_rounded}% MATCH</div>
+            <p style="margin:0 0 4px;font-size:15px;font-weight:700;color:#1a1a1a;">{scholarship_name}</p>
+            <p style="margin:0;font-size:13px;color:#4a4a4a;">{country} &middot; {amount} &middot; Due {deadline}</p>
+          </td>
+        </tr>
+      </table>
+    </div>'''
+
+
+async def send_weekly_digests():
+    """Send weekly digest emails to all users with matches."""
+    try:
+        async with AsyncSessionLocal() as db:
+            # Get all users with email confirmed and matches
+            users_result = await db.execute(
+                select(User).where(
+                    User.is_active == True,
+                    User.email_confirmed_at.isnot(None),
+                )
+            )
+            users = users_result.scalars().all()
+
+            emails_sent = 0
+
+            for user in users:
+                # Get top N matches for this user
+                matches_result = await db.execute(
+                    select(MatchScore, Scholarship)
+                    .join(Scholarship, MatchScore.scholarship_id == Scholarship.id)
+                    .where(
+                        MatchScore.user_id == user.id,
+                        MatchScore.score >= 50.0,
+                        Scholarship.is_active == True,
+                    )
+                    .order_by(MatchScore.score.desc())
+                    .limit(TOP_N)
+                )
+                rows = matches_result.all()
+
+                if not rows:
+                    continue  # No matches, skip
+
+                # Build match cards HTML
+                cards = []
+                for match, sch in rows:
+                    deadline_str = sch.deadline.strftime("%b %d, %Y") if sch.deadline else "Open"
+                    amount = getattr(sch, "amount", None) or "See details"
+                    country = getattr(sch, "host_country", None) or ""
+                    cards.append(_build_match_card(
+                        scholarship_name=sch.name,
+                        score=float(match.score),
+                        amount=amount,
+                        deadline=deadline_str,
+                        country=country,
+                    ))
+
+                match_cards_html = "\n".join(cards)
+
+                # Send digest email
+                from app.services.email import send_templated_email
+                await send_templated_email(
+                    to=user.email,
+                    template="weekly_digest",
+                    variables={
+                        "RECIPIENT_NAME": user.full_name or "Student",
+                        "MATCH_CARDS": match_cards_html,
+                    },
+                    subject="Your weekly scholarship matches",
+                )
+                emails_sent += 1
+
+            if emails_sent > 0:
+                print(f"[WeeklyDigest] Sent {emails_sent} digest emails")
+            else:
+                print("[WeeklyDigest] No users with matches to email")
+
+    except Exception as e:
+        print(f"[WeeklyDigest] Error: {e}")
+
+
+async def weekly_digest_loop():
+    """Run weekly digest every Sunday at 9 AM UTC."""
+    import asyncio
+
+    while True:
+        now = datetime.now(timezone.utc)
+        # Calculate seconds until next Sunday 9 AM UTC
+        days_until_sunday = (6 - now.weekday()) % 7  # 6 = Sunday
+        if days_until_sunday == 0 and now.hour >= 9:
+            days_until_sunday = 7  # Already past 9 AM this Sunday, wait for next
+
+        from datetime import timedelta
+        next_run = now.replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=days_until_sunday)
+        wait_seconds = (next_run - now).total_seconds()
+
+        print(f"[WeeklyDigest] Next run: {next_run.isoformat()} (in {wait_seconds/3600:.1f}h)")
+        await asyncio.sleep(wait_seconds)
+        await send_weekly_digests()

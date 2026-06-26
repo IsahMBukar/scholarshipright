@@ -121,8 +121,29 @@ async def register(body: RegisterRequest, response: Response, db: AsyncSession =
         **auth_cookie_kwargs(),
     )
 
-    # Send welcome email (fire-and-forget)
+    # Generate email confirmation token and send confirmation email
+    from app.models.user import (
+        generate_email_confirm_token, hash_email_confirm_token, EMAIL_CONFIRM_TTL_HOURS,
+    )
     from app.services.email import send_templated_email
+
+    confirm_token = generate_email_confirm_token()
+    user.email_confirm_token_hash = hash_email_confirm_token(confirm_token)
+    user.email_confirm_expires_at = datetime.now(timezone.utc) + timedelta(hours=EMAIL_CONFIRM_TTL_HOURS)
+    await db.commit()
+
+    confirm_url = f"{get_settings().frontend_url.rstrip('/')}/confirm-email?token={confirm_token}"
+    await send_templated_email(
+        to=email,
+        template="email_confirmation",
+        variables={
+            "RECIPIENT_NAME": body.full_name.strip() or "Student",
+            "CONFIRM_URL": confirm_url,
+        },
+        subject="Confirm your ScholarshipRight email",
+    )
+
+    # Send welcome email (fire-and-forget)
     await send_templated_email(
         to=email,
         template="welcome",
@@ -462,6 +483,99 @@ async def reset_password(
     # or unused, and the user might be mid-multi-device-reset.
     token_row.used_at = now
     await db.commit()
+
+    return {"status": "ok"}
+
+
+# ── Email confirmation ──────────────────────────────────────────────
+
+class ConfirmEmailRequest(BaseModel):
+    token: str
+
+
+@router.post("/confirm-email")
+async def confirm_email(
+    body: ConfirmEmailRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Confirm a user's email address using the token from the confirmation email."""
+    from app.models.user import hash_email_confirm_token
+
+    raw = body.token.strip()
+    if not raw:
+        raise HTTPException(400, "Invalid confirmation link")
+
+    token_hash = hash_email_confirm_token(raw)
+    result = await db.execute(
+        select(User).where(User.email_confirm_token_hash == token_hash)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            400,
+            {"code": "invalid_token", "user_message": "This confirmation link is invalid or has expired."},
+        )
+
+    now = datetime.now(timezone.utc)
+    if user.email_confirmed_at is not None:
+        return {"status": "already_confirmed", "email": user.email}
+
+    if user.email_confirm_expires_at and user.email_confirm_expires_at <= now:
+        raise HTTPException(
+            400,
+            {"code": "token_expired", "user_message": "This confirmation link has expired. Request a new one."},
+        )
+
+    user.email_confirmed_at = now
+    user.email_confirm_token_hash = None
+    user.email_confirm_expires_at = None
+    await db.commit()
+
+    return {"status": "confirmed", "email": user.email}
+
+
+class ResendConfirmationRequest(BaseModel):
+    email: str
+
+
+@router.post("/resend-confirmation", dependencies=[Depends(auth_forgot_rate_limit)])
+async def resend_confirmation(
+    body: ResendConfirmationRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Resend email confirmation link. Rate-limited same as forgot-password."""
+    from app.models.user import (
+        generate_email_confirm_token, hash_email_confirm_token, EMAIL_CONFIRM_TTL_HOURS,
+    )
+    from app.services.email import send_templated_email
+
+    email = body.email.strip().lower()
+    if not email:
+        return {"status": "ok"}
+
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+
+    if not user or user.email_confirmed_at is not None:
+        # Don't leak whether email exists or is already confirmed
+        return {"status": "ok"}
+
+    confirm_token = generate_email_confirm_token()
+    user.email_confirm_token_hash = hash_email_confirm_token(confirm_token)
+    user.email_confirm_expires_at = datetime.now(timezone.utc) + timedelta(hours=EMAIL_CONFIRM_TTL_HOURS)
+    await db.commit()
+
+    confirm_url = f"{get_settings().frontend_url.rstrip('/')}/confirm-email?token={confirm_token}"
+    await send_templated_email(
+        to=email,
+        template="email_confirmation",
+        variables={
+            "RECIPIENT_NAME": user.full_name or "Student",
+            "CONFIRM_URL": confirm_url,
+        },
+        subject="Confirm your ScholarshipRight email",
+    )
 
     return {"status": "ok"}
 
