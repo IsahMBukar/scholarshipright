@@ -166,6 +166,17 @@ async def login(body: LoginRequest, response: Response, db: AsyncSession = Depen
     if not verify_password(body.password, user.password_hash):
         raise HTTPException(401, "Invalid email or password")
 
+    # Block login until email is confirmed
+    if user.email_confirmed_at is None:
+        raise HTTPException(
+            403,
+            {
+                "code": "email_not_confirmed",
+                "user_message": "Please confirm your email address before logging in.",
+                "email": user.email,
+            },
+        )
+
     token = create_token(str(user.id))
     response.set_cookie(
         key=COOKIE_NAME, value=token,

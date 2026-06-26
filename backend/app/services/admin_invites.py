@@ -214,6 +214,10 @@ async def accept_invite(
     u.is_active = True
     u.updated_at = datetime.now(timezone.utc)
 
+    # Auto-confirm email for invited staff (trusted, created by super_admin)
+    if u.email_confirmed_at is None:
+        u.email_confirmed_at = datetime.now(timezone.utc)
+
     inv.accepted_at = datetime.now(timezone.utc)
     inv.accepted_by = u.id
 
