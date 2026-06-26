@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   fetchMatches,
+  fetchFeaturedScholarships,
   type Scholarship,
 } from '@/services/api';
 
@@ -183,6 +184,26 @@ export default function MatchesPreviewSlide({
         //    The backend transparently recomputes stale data on read —
         //    no manual compute step is needed.
         let list = await fetchMatches();
+
+        // Fall back to /api/scholarships/featured when the user has no
+        // personalised matches yet (e.g. brand-new account, no profile).
+        // Featured scholarships carry match_score so the preview still
+        // renders with a score badge — just not user-specific scores.
+        if (!cancelled && (!list || list.length === 0)) {
+          try {
+            const featured = await fetchFeaturedScholarships();
+            if (!cancelled && featured && featured.length > 0) {
+              // Wrap Scholarship[] into Match[] shape so the existing
+              // MatchPreview component works unchanged.
+              list = featured.map((s: Scholarship) => ({
+                scholarship: s,
+                score: (s as Scholarship & { match_score?: number }).match_score ?? 0,
+              }));
+            }
+          } catch {
+            // Featured endpoint failed too — show the empty state below.
+          }
+        }
 
         if (!cancelled && list && list.length > 0) {
           setMatches(list.slice(0, 2));
