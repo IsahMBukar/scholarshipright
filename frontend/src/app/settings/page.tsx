@@ -7,6 +7,7 @@ import { useLogout } from '@/hooks/useLogout';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { fetchMe, changePassword } from '@/services/api';
 import type { MeUser } from '@/services/api';
+import PasswordField from '@/components/auth/PasswordField';
 
 export default function SettingsPage() {
   const [user, setUser] = useState<MeUser | null>(null);
@@ -21,8 +22,6 @@ export default function SettingsPage() {
   const [pwError, setPwError] = useState('');
   const [pwSuccess, setPwSuccess] = useState('');
   const [pwLoading, setPwLoading] = useState(false);
-  const [showCurrentPw, setShowCurrentPw] = useState(false);
-  const [showNewPw, setShowNewPw] = useState(false);
 
   useEffect(() => {
     fetchMe()
@@ -127,66 +126,36 @@ export default function SettingsPage() {
 
           <div className="space-y-3">
             {/* Current password */}
-            <div className="relative">
-              <label className="block text-[12px] font-semibold text-text-secondary mb-1">
-                Current Password
-              </label>
-              <input
-                type={showCurrentPw ? 'text' : 'password'}
-                value={currentPw}
-                onChange={e => setCurrentPw(e.target.value)}
-                placeholder="Enter current password"
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-[14px] text-text-primary placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary pr-11"
-              />
-              <button
-                type="button"
-                onClick={() => setShowCurrentPw(!showCurrentPw)}
-                className="absolute right-3 bottom-2.5 text-text-secondary hover:text-text-primary"
-                tabIndex={-1}
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  {showCurrentPw ? 'visibility_off' : 'visibility'}
-                </span>
-              </button>
-            </div>
+            <PasswordField
+              id="current-password"
+              label="Current Password"
+              value={currentPw}
+              onChange={setCurrentPw}
+              placeholder="Enter current password"
+              autoComplete="current-password"
+              disabled={pwLoading}
+            />
 
-            {/* New password */}
-            <div className="relative">
-              <label className="block text-[12px] font-semibold text-text-secondary mb-1">
-                New Password
-              </label>
-              <input
-                type={showNewPw ? 'text' : 'password'}
-                value={newPw}
-                onChange={e => setNewPw(e.target.value)}
-                placeholder="At least 8 characters"
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-[14px] text-text-primary placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary pr-11"
-              />
-              <button
-                type="button"
-                onClick={() => setShowNewPw(!showNewPw)}
-                className="absolute right-3 bottom-2.5 text-text-secondary hover:text-text-primary"
-                tabIndex={-1}
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  {showNewPw ? 'visibility_off' : 'visibility'}
-                </span>
-              </button>
-            </div>
+            <PasswordField
+              id="new-password"
+              label="New Password"
+              value={newPw}
+              onChange={setNewPw}
+              placeholder="At least 8 characters"
+              autoComplete="new-password"
+              disabled={pwLoading}
+              showStrength
+            />
 
-            {/* Confirm new password */}
-            <div>
-              <label className="block text-[12px] font-semibold text-text-secondary mb-1">
-                Confirm New Password
-              </label>
-              <input
-                type="password"
-                value={confirmPw}
-                onChange={e => setConfirmPw(e.target.value)}
-                placeholder="Re-enter new password"
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-[14px] text-text-primary placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-              />
-            </div>
+            <PasswordField
+              id="confirm-password"
+              label="Confirm New Password"
+              value={confirmPw}
+              onChange={setConfirmPw}
+              placeholder="Re-enter new password"
+              autoComplete="new-password"
+              disabled={pwLoading}
+            />
 
             {/* Error / Success messages */}
             {pwError && (
