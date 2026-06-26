@@ -1,8 +1,10 @@
 import asyncio
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.core.config import get_settings
+from app.core.rate_limit import init_redis_url, probe_redis
 from app.api import scholarships, users, matches, saved, reminders, auth, resumes, agent
 from app.api import admin_matches
 from app.api import admin_overview
@@ -24,41 +26,46 @@ from app.models.scholarship import (
 )
 
 settings = get_settings()
+logger = logging.getLogger("scholarshipright.startup")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Initialize the Redis-backed rate limiter (falls back to in-memory
+    # silently if Redis is unreachable — see rate_limit.py).
+    init_redis_url(settings.redis_url)
+
     # Startup: ensure the new match-recompute columns exist (idempotent).
     try:
         await ensure_schema_columns()
     except Exception as e:  # noqa: BLE001
         # Don't crash the app for a migration problem — log loudly.
-        print(f"ensure_schema_columns failed: {e}")
+        logger.exception("ensure_schema_columns failed: %s", e)
 
     # Startup: ensure the admin columns exist (idempotent).
     try:
         await ensure_admin_schema_columns()
     except Exception as e:  # noqa: BLE001
-        print(f"ensure_admin_schema_columns failed: {e}")
+        logger.exception("ensure_admin_schema_columns failed: %s", e)
 
     # Startup: ensure the admin_audit_log table exists (idempotent).
     try:
         await ensure_audit_schema_columns()
     except Exception as e:  # noqa: BLE001
-        print(f"ensure_audit_schema_columns failed: {e}")
+        logger.exception("ensure_audit_schema_columns failed: %s", e)
 
     # Startup: ensure the admin_invites table exists (idempotent).
     try:
         await ensure_invites_schema_columns()
     except Exception as e:  # noqa: BLE001
-        print(f"ensure_invites_schema_columns failed: {e}")
+        logger.exception("ensure_invites_schema_columns failed: %s", e)
 
     # Startup: ensure the accepted_english_tests column exists on
     # scholarships (idempotent). Pairs with the Scholarship model.
     try:
         await ensure_scholarship_schema_columns()
     except Exception as e:  # noqa: BLE001
-        print(f"ensure_scholarship_schema_columns failed: {e}")
+        logger.exception("ensure_scholarship_schema_columns failed: %s", e)
 
     # Startup: ensure the prior_studies_in_english column exists on
     # profiles (idempotent). Pairs with the Profile model. Pairs with
@@ -66,7 +73,7 @@ async def lifespan(app: FastAPI):
     try:
         await ensure_profile_schema_columns()
     except Exception as e:  # noqa: BLE001
-        print(f"ensure_profile_schema_columns failed: {e}")
+        logger.exception("ensure_profile_schema_columns failed: %s", e)
 
     # Startup: ensure the 14 required-documents columns exist on
     # scholarships (idempotent). Pairs with the Scholarship model.
@@ -74,13 +81,13 @@ async def lifespan(app: FastAPI):
     try:
         await ensure_required_documents_schema_columns()
     except Exception as e:  # noqa: BLE001
-        print(f"ensure_required_documents_schema_columns failed: {e}")
+        logger.exception("ensure_required_documents_schema_columns failed: %s", e)
 
     # Startup: ensure the password_reset_tokens table exists (idempotent).
     try:
         await ensure_password_reset_schema_columns()
     except Exception as e:  # noqa: BLE001
-        print(f"ensure_password_reset_schema_columns failed: {e}")
+        logger.exception("ensure_password_reset_schema_columns failed: %s", e)
 
     # Startup: start deadline checker in background
     task = asyncio.create_task(deadline_checker_loop())
@@ -100,7 +107,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_url, "http://localhost:3000", "http://localhost:3001"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -127,4 +134,9 @@ app.include_router(admin_invites_module.accept_invite_router, prefix="/api/auth"
 
 @app.get("/healthz")
 async def healthz():
-    return {"status": "ok", "service": "scholarshipright-api"}
+    rl_info = await probe_redis()
+    return {
+        "status": "ok",
+        "service": "scholarshipright-api",
+        "rate_limit_backend": rl_info.get("rate_limit_backend", "unknown"),
+    }
