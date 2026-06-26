@@ -32,6 +32,7 @@ import Button from '@/components/admin/ui/Button';
 import PasswordField from '@/components/auth/PasswordField';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const SHOW_DEV_LOGIN = process.env.NEXT_PUBLIC_ENABLE_DEV_LOGIN === '1';
 
 // Only allow internal paths as the ?next= target. Block absolute URLs and
 // protocol-relative ones to prevent open-redirect via crafted query.
@@ -237,17 +238,19 @@ function LoginForm() {
           <div className="flex-1 h-px bg-gray-200" />
         </div>
 
-        <Button
-          type="button"
-          variant="secondary"
-          size="md"
-          loading={submitting}
-          onClick={handleDevLogin}
-          leftIcon={<Zap className="w-3.5 h-3.5" />}
-          className="w-full"
-        >
-          Quick dev login
-        </Button>
+        {SHOW_DEV_LOGIN && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="md"
+            loading={submitting}
+            onClick={handleDevLogin}
+            leftIcon={<Zap className="w-3.5 h-3.5" />}
+            className="w-full"
+          >
+            Quick dev login
+          </Button>
+        )}
       </div>
     </div>
   );
