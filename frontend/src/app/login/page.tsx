@@ -53,6 +53,7 @@ function LoginForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
+  const [resendSent, setResendSent] = useState(false);
   // Banners driven by query params:
   //   ?reset=success  → password was just reset
   //   ?signup=ok      → account was just created (existing)
@@ -170,22 +171,31 @@ function LoginForm() {
             </p>
           </div>
 
+          {resendSent && (
+            <div className="flex items-start gap-2 rounded-btn border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700 mt-4">
+              <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+              <span>Confirmation email sent! Check your inbox.</span>
+            </div>
+          )}
+
           <div className="mt-6 space-y-3">
             <Button
               type="button"
               variant="primary"
               size="md"
               className="w-full"
+              disabled={resendSent}
               onClick={async () => {
+                setResendSent(false);
                 await fetch(`${API_URL}/api/auth/resend-confirmation`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ email: unconfirmedEmail }),
                 });
-                alert('Confirmation email sent! Check your inbox.');
+                setResendSent(true);
               }}
             >
-              Resend confirmation email
+              {resendSent ? 'Email sent ✓' : 'Resend confirmation email'}
             </Button>
           </div>
 

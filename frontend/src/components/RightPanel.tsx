@@ -11,6 +11,7 @@ export default function RightPanel() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [scholarshipCount, setScholarshipCount] = useState(0);
   const [savedCount, setSavedCount] = useState(0);
+  const [appliedCount, setAppliedCount] = useState(0);
   const [deadlines, setDeadlines] = useState<Array<{ name: string; slug: string; days: number }>>([]);
   const [loading, setLoading] = useState(true);
 
@@ -38,7 +39,11 @@ export default function RightPanel() {
             });
           setDeadlines(upcoming);
         }
-        if (saved.status === 'fulfilled') setSavedCount(saved.value.length);
+        if (saved.status === 'fulfilled') {
+          setSavedCount(saved.value.length);
+          const appliedStatuses = ['applying', 'applied', 'reviewing', 'accepted'];
+          setAppliedCount(saved.value.filter((s: { status?: string }) => appliedStatuses.includes(s.status || '')).length);
+        }
       } catch (err) {
         console.error('RightPanel load error:', err);
       } finally {
@@ -107,7 +112,7 @@ export default function RightPanel() {
         {[
           { label: 'Matched', value: scholarshipCount, icon: 'school', href: '/scholarships' },
           { label: 'Saved', value: savedCount, icon: 'bookmark', href: '/saved' },
-          { label: 'Applied', value: 0, icon: 'send', href: '/saved' },
+          { label: 'Applied', value: appliedCount, icon: 'send', href: '/saved' },
         ].map((stat) => (
           <button
             key={stat.label}

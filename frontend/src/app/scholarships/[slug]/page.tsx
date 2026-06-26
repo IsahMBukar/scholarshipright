@@ -16,6 +16,20 @@ export default function ScholarshipDetailPage() {
   const [savedStatus, setSavedStatus] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'overview' | 'provider'>('overview');
   const viewedRef = useRef<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  function handleShare() {
+    const url = window.location.href;
+    const title = scholarship?.name || 'Scholarship';
+    if (navigator.share) {
+      navigator.share({ title, url }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(url).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
+    }
+  }
 
   useEffect(() => {
     if (params.slug) {
@@ -180,8 +194,14 @@ export default function ScholarshipDetailPage() {
                   {savedStatus.charAt(0).toUpperCase() + savedStatus.slice(1)}
                 </span>
               )}
-              <button className="w-10 h-10 flex items-center justify-center rounded-full border border-gray-200 hover:bg-gray-50 text-text-secondary transition">
-                <span className="material-symbols-outlined text-[18px]">share</span>
+              <button
+                onClick={handleShare}
+                aria-label="Share this scholarship"
+                className="w-10 h-10 flex items-center justify-center rounded-full border border-gray-200 hover:bg-gray-50 text-text-secondary transition"
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  {copied ? 'check' : 'share'}
+                </span>
               </button>
               <button
                 onClick={handleSave}

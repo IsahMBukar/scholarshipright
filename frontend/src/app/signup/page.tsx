@@ -22,6 +22,7 @@ export default function SignupPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [resendSent, setResendSent] = useState(false);
 
   const pwTooShort = password.length > 0 && password.length < 8;
   const canSubmit =
@@ -110,16 +111,19 @@ export default function SignupPage() {
             </Link>
             <button
               type="button"
+              disabled={resendSent}
               onClick={async () => {
+                setResendSent(false);
                 await fetch(`${API_URL}/api/auth/resend-confirmation`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ email: email.trim() }),
                 });
+                setResendSent(true);
               }}
-              className="text-primary font-semibold hover:underline"
+              className={`font-semibold ${resendSent ? 'text-emerald-600' : 'text-primary hover:underline'}`}
             >
-              Resend confirmation
+              {resendSent ? 'Email sent ✓' : 'Resend confirmation'}
             </button>
           </div>
         </div>
