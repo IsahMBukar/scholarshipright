@@ -103,6 +103,10 @@ export default function ScholarshipDetailPage() {
           }
           await updateSavedScholarship(scholarship!.id, { status: 'applying' }).catch(() => {});
           setSavedStatus('applying');
+          // Navigate to the official application page (same as card behavior)
+          if (scholarship!.official_url) {
+            window.open(scholarship!.official_url, '_blank');
+          }
         },
       });
       return;
@@ -115,6 +119,10 @@ export default function ScholarshipDetailPage() {
     // Set status to applying
     await updateSavedScholarship(scholarship.id, { status: 'applying' }).catch(() => {});
     setSavedStatus('applying');
+    // Navigate to the official application page (same as card behavior)
+    if (scholarship.official_url) {
+      window.open(scholarship.official_url, '_blank');
+    }
   }
 
   if (loading) {
@@ -494,6 +502,22 @@ export default function ScholarshipDetailPage() {
                   </div>
                 )}
                   </>
+                ) : !isAuthenticated ? (
+                  <div className="flex flex-col items-center justify-center py-6 gap-3">
+                    <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-[24px] text-text-secondary">lock</span>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-semibold text-text-primary">Sign in to see your match score</p>
+                      <p className="text-[11px] text-text-secondary mt-1">Create a free profile to find out how well you fit this scholarship.</p>
+                    </div>
+                    <Link
+                      href="/signup"
+                      className="mt-1 px-5 py-2 bg-primary hover:brightness-110 text-white text-sm font-semibold rounded-lg shadow-sm transition"
+                    >
+                      Create free profile
+                    </Link>
+                  </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center py-6 gap-3">
                     <div className="relative w-10 h-10">
