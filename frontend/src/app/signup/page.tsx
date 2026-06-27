@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { UserPlus, AlertTriangle, Mail, CheckCircle2, ArrowLeft } from 'lucide-react';
 import Button from '@/components/admin/ui/Button';
 import PasswordField from '@/components/auth/PasswordField';
+import GoogleButton from '@/components/auth/GoogleButton';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -148,6 +149,17 @@ export default function SignupPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <GoogleButton label="Sign up with Google" />
+
+          <div className="relative flex items-center justify-center my-1">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200" />
+            </div>
+            <span className="relative bg-white px-3 text-[11px] font-medium text-text-secondary uppercase tracking-wider">
+              or
+            </span>
+          </div>
+
           <div>
             <label
               htmlFor="full_name"

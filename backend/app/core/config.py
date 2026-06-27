@@ -63,6 +63,13 @@ class Settings(BaseSettings):
     # but not sent (dev mode).
     oqumail_api_key: str = ""
 
+    # Google OAuth. Leave empty to disable Google sign-in.
+    # Get credentials from https://console.cloud.google.com/apis/credentials
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    # Backend server URL (used for OAuth callback construction)
+    server_url: str = "http://localhost:8000"
+
     # pydantic-settings v2 model_config. extra="ignore" lets us keep
     # extra env vars (agent_*, dev_return_reset_token) in .env without
     # declaring them on the model. The original inner-class Config

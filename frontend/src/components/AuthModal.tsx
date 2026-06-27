@@ -7,6 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth, type PendingAction } from '@/hooks/useAuth';
+import GoogleButton from '@/components/auth/GoogleButton';
 
 export default function AuthModal() {
   const { pendingAction, setPendingAction, login, refresh } = useAuth();
@@ -124,6 +125,17 @@ export default function AuthModal() {
 
         {/* Form */}
         <form onSubmit={mode === 'login' ? handleLogin : handleSignup} className="px-6 pb-2 space-y-3">
+          <GoogleButton label={mode === 'login' ? 'Continue with Google' : 'Sign up with Google'} />
+
+          <div className="relative flex items-center justify-center my-1">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200" />
+            </div>
+            <span className="relative bg-white px-3 text-[11px] font-medium text-text-secondary uppercase tracking-wider">
+              or
+            </span>
+          </div>
+
           {mode === 'signup' && (
             <div>
               <label className="text-[12px] font-semibold text-text-secondary block mb-1">Full Name</label>

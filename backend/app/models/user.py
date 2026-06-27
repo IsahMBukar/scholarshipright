@@ -36,6 +36,11 @@ class User(Base):
     email_confirmed_at = Column(DateTime(timezone=True), nullable=True)
     email_confirm_token_hash = Column(String(64), nullable=True, index=True)
     email_confirm_expires_at = Column(DateTime(timezone=True), nullable=True)
+    # OAuth fields. `auth_provider` tracks how the user signed up ("local"
+    # for email/password, "google" for Google OAuth). `google_id` stores
+    # the Google subject ID for fast lookups on subsequent logins.
+    auth_provider = Column(String(20), nullable=True, server_default="local")
+    google_id = Column(String(64), nullable=True, unique=True, index=True)
 
 
 def generate_email_confirm_token() -> str:
@@ -49,7 +54,7 @@ def hash_email_confirm_token(token: str) -> str:
 
 
 async def ensure_email_confirm_columns() -> None:
-    """Idempotent runtime migration for email confirmation columns."""
+    """Idempotent runtime migration for email confirmation and OAuth columns."""
     from sqlalchemy import text as sa_text
     from app.db.session import engine
     try:
@@ -58,11 +63,17 @@ async def ensure_email_confirm_columns() -> None:
                 ALTER TABLE users
                 ADD COLUMN IF NOT EXISTS email_confirmed_at TIMESTAMPTZ,
                 ADD COLUMN IF NOT EXISTS email_confirm_token_hash VARCHAR(64),
-                ADD COLUMN IF NOT EXISTS email_confirm_expires_at TIMESTAMPTZ
+                ADD COLUMN IF NOT EXISTS email_confirm_expires_at TIMESTAMPTZ,
+                ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(20) DEFAULT 'local',
+                ADD COLUMN IF NOT EXISTS google_id VARCHAR(64)
             """))
             await conn.execute(sa_text(
                 "CREATE INDEX IF NOT EXISTS ix_users_email_confirm_token_hash "
                 "ON users (email_confirm_token_hash) WHERE email_confirm_token_hash IS NOT NULL"
+            ))
+            await conn.execute(sa_text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_google_id "
+                "ON users (google_id) WHERE google_id IS NOT NULL"
             ))
     except Exception as e:
         print(f"ensure_email_confirm_columns failed: {e}")

@@ -1,6 +1,7 @@
 """Auth endpoints — registration, login, logout, me, password reset."""
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from starlette.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel, EmailStr, Field
@@ -232,6 +233,8 @@ async def get_me(request: Request, db: AsyncSession = Depends(get_db)):
         # /settings UI uses this to decide whether to show "Set password"
         # or "Change password".
         "has_password": bool(user.password_hash),
+        # "local" for email/password, "google" for Google OAuth.
+        "auth_provider": user.auth_provider or "local",
     }
 
 
@@ -652,3 +655,188 @@ async def dev_get_reset_tokens(
             for r in rows
         ]
     }
+
+
+# ── Google OAuth ───────────────────────────────────────────────────
+#
+# Flow:
+#   1. Frontend links to GET /api/auth/google
+#   2. Backend builds Google authorization URL with CSRF state,
+#      stores state in a short-lived cookie, redirects browser to Google.
+#   3. User consents → Google redirects to GET /api/auth/google/callback
+#   4. Backend validates state, exchanges code for tokens, fetches user
+#      info, creates/links account, sets JWT cookie, redirects to frontend.
+#
+# Google Cloud Console setup:
+#   Authorized redirect URI: http://localhost:8000/api/auth/google/callback
+
+import secrets as _secrets
+import httpx
+
+GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_ENDPOINT = "https://openidconnect.googleapis.com/v1/userinfo"
+
+
+@router.get("/google")
+async def google_login(request: Request):
+    """Initiate Google OAuth flow. Redirects browser to Google consent screen."""
+    settings = get_settings()
+    if not settings.google_client_id or not settings.google_client_secret:
+        raise HTTPException(503, "Google sign-in is not configured")
+
+    redirect_uri = f"{settings.server_url.rstrip('/')}/api/auth/google/callback"
+    state = _secrets.token_urlsafe(32)
+
+    params = {
+        "client_id": settings.google_client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "access_type": "offline",
+        "prompt": "select_account",
+    }
+    from urllib.parse import urlencode
+    authorization_url = f"{GOOGLE_AUTH_ENDPOINT}?{urlencode(params)}"
+
+    # Store CSRF state in a short-lived cookie (5 min)
+    resp = RedirectResponse(url=authorization_url)
+    resp.set_cookie(
+        "google_oauth_state",
+        value=state,
+        max_age=300,
+        httponly=True,
+        samesite="lax",
+        secure=settings.environment == "production",
+    )
+    return resp
+
+
+@router.get("/google/callback")
+async def google_callback(request: Request, db: AsyncSession = Depends(get_db)):
+    """Handle Google OAuth callback. Creates/links account, sets JWT cookie, redirects to frontend."""
+    settings = get_settings()
+    frontend = settings.frontend_url.rstrip("/")
+
+    if not settings.google_client_id or not settings.google_client_secret:
+        raise HTTPException(503, "Google sign-in is not configured")
+
+    # Check for errors from Google
+    error = request.query_params.get("error")
+    if error:
+        return RedirectResponse(url=f"{frontend}/login?error=google_denied")
+
+    # Validate CSRF state
+    state = request.query_params.get("state")
+    saved_state = request.cookies.get("google_oauth_state")
+    if not state or not saved_state or state != saved_state:
+        return RedirectResponse(url=f"{frontend}/login?error=invalid_state")
+
+    code = request.query_params.get("code")
+    if not code:
+        return RedirectResponse(url=f"{frontend}/login?error=google_failed")
+
+    redirect_uri = f"{settings.server_url.rstrip('/')}/api/auth/google/callback"
+
+    # Exchange authorization code for tokens
+    try:
+        async with httpx.AsyncClient() as client:
+            token_resp = await client.post(GOOGLE_TOKEN_ENDPOINT, data={
+                "code": code,
+                "client_id": settings.google_client_id,
+                "client_secret": settings.google_client_secret,
+                "redirect_uri": redirect_uri,
+                "grant_type": "authorization_code",
+            })
+            token_resp.raise_for_status()
+            token_data = token_resp.json()
+    except Exception as e:
+        logger.warning("[google-oauth] Token exchange failed: %s", e)
+        return RedirectResponse(url=f"{frontend}/login?error=google_failed")
+
+    access_token = token_data.get("access_token")
+    if not access_token:
+        return RedirectResponse(url=f"{frontend}/login?error=google_failed")
+
+    # Fetch user info from Google
+    try:
+        async with httpx.AsyncClient() as client:
+            userinfo_resp = await client.get(
+                GOOGLE_USERINFO_ENDPOINT,
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            userinfo_resp.raise_for_status()
+            google_user = userinfo_resp.json()
+    except Exception as e:
+        logger.warning("[google-oauth] Failed to fetch user info: %s", e)
+        return RedirectResponse(url=f"{frontend}/login?error=google_failed")
+
+    google_sub = google_user.get("sub")  # Google's unique user ID
+    email = (google_user.get("email") or "").strip().lower()
+    name = google_user.get("name") or ""
+    picture = google_user.get("picture") or ""
+
+    if not email:
+        return RedirectResponse(url=f"{frontend}/login?error=google_no_email")
+
+    # ── Find or create user ──
+    user = None
+
+    # 1. Fast lookup by google_id
+    if google_sub:
+        result = await db.execute(select(User).where(User.google_id == google_sub))
+        user = result.scalar_one_or_none()
+
+    # 2. Fallback: lookup by email (linking existing local account)
+    if not user:
+        result = await db.execute(select(User).where(User.email == email))
+        user = result.scalar_one_or_none()
+        if user:
+            # Link existing local account to Google
+            if not user.google_id:
+                user.google_id = google_sub
+            if not user.auth_provider:
+                user.auth_provider = "google"
+            # Auto-confirm email if not yet confirmed (Google verified it)
+            if user.email_confirmed_at is None:
+                user.email_confirmed_at = datetime.now(timezone.utc)
+            await db.commit()
+
+    # 3. Create new user if neither matched
+    if not user:
+        user = User(
+            email=email,
+            full_name=name or None,
+            auth_provider="google",
+            google_id=google_sub,
+            email_confirmed_at=datetime.now(timezone.utc),  # Google verified
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+
+        # Send welcome email (fire-and-forget)
+        from app.services.email import send_templated_email
+        await send_templated_email(
+            to=email,
+            template="welcome",
+            variables={"RECIPIENT_NAME": name or "Student"},
+            subject="Welcome to ScholarshipRight!",
+        )
+
+    if not user.is_active:
+        return RedirectResponse(url=f"{frontend}/login?error=account_deactivated")
+
+    # Set JWT cookie and redirect to frontend auth callback page
+    auth_token = create_token(str(user.id))
+    redirect = RedirectResponse(url=f"{frontend}/auth/callback")
+    redirect.set_cookie(
+        key=COOKIE_NAME,
+        value=auth_token,
+        max_age=COOKIE_MAX_AGE,
+        **auth_cookie_kwargs(),
+    )
+    # Clear the state cookie
+    redirect.delete_cookie("google_oauth_state")
+    return redirect

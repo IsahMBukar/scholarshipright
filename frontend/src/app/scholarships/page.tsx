@@ -324,6 +324,7 @@ export default function ScholarshipsPage() {
                 savedStatus={savedStatuses[sch.id]}
                 onApplyNow={handleApplyNow}
                 showMatchScore={showMatchScores}
+                isAuthenticated={isAuthenticated}
               />
             ))}
             {displayScholarships.length === 0 && (

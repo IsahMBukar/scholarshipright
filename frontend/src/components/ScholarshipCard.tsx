@@ -15,6 +15,8 @@ interface ScholarshipCardProps {
    * NOT shown — we never want to mislead users with a fake score.
    */
   showMatchScore?: boolean;
+  /** Whether the current user is authenticated. Affects the no-score CTA. */
+  isAuthenticated?: boolean;
 }
 
 function getMatchLabel(score: number): string {
@@ -31,7 +33,7 @@ function getMatchColor(score: number): string {
   return 'text-text-secondary';
 }
 
-export default function ScholarshipCard({ scholarship, onSave, isSaved, savedStatus, onApplyNow, showMatchScore = true }: ScholarshipCardProps) {
+export default function ScholarshipCard({ scholarship, onSave, isSaved, savedStatus, onApplyNow, showMatchScore = true, isAuthenticated = false }: ScholarshipCardProps) {
   // Only show a real score if both the caller asked for it AND the backend
   // returned one. Never fall back to a deterministic pseudo-score — that
   // would mislead users who haven't completed onboarding.
@@ -77,10 +79,10 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved, savedSta
               </>
             ) : (
               <a
-                href="/profile"
+                href={isAuthenticated ? "/profile" : "/signup"}
                 className="text-[11px] font-semibold text-primary hover:underline"
               >
-                Set up profile for score →
+                {isAuthenticated ? 'Set up profile for score →' : 'Login for score →'}
               </a>
             )}
           </div>
@@ -281,15 +283,15 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved, savedSta
         </div>
       ) : (
         <div className="hidden md:flex flex-col items-center justify-center match-gradient rounded-r-card rounded-l-none p-4 gap-2 min-w-[140px]">
-          <span className="material-symbols-outlined text-primary text-[28px]">school</span>
+          <span className="material-symbols-outlined text-primary text-[28px]">{isAuthenticated ? 'school' : 'lock'}</span>
           <p className="text-[11px] text-center text-white/90 leading-snug px-1">
-            Set up your profile to see your match score.
+            {isAuthenticated ? 'Set up your profile to see your match score.' : 'Sign in to see your match score.'}
           </p>
           <a
-            href="/profile"
+            href={isAuthenticated ? "/profile" : "/signup"}
             className="w-full text-center py-2 bg-primary text-white text-[12px] font-bold rounded-btn hover:brightness-110 transition-all"
           >
-            Complete profile
+            {isAuthenticated ? 'Complete profile' : 'Sign in'}
           </a>
         </div>
       )}

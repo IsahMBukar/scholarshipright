@@ -30,6 +30,7 @@ import Link from 'next/link';
 import { LogIn, AlertTriangle, CheckCircle2, Loader2, Mail } from 'lucide-react';
 import Button from '@/components/admin/ui/Button';
 import PasswordField from '@/components/auth/PasswordField';
+import GoogleButton from '@/components/auth/GoogleButton';
 import { useAuth } from '@/hooks/useAuth';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -59,9 +60,11 @@ function LoginForm() {
   // Banners driven by query params:
   //   ?reset=success  → password was just reset
   //   ?signup=ok      → account was just created (existing)
+  //   ?error=...      → Google OAuth error
   // ?next= is honored if present (see safeNext).
   const justReset = searchParams.get('reset') === 'success';
   const justSignedUp = searchParams.get('signup') === 'ok';
+  const oauthError = searchParams.get('error');
 
   useEffect(() => {
     let cancelled = false;
@@ -255,6 +258,17 @@ function LoginForm() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <GoogleButton />
+
+          <div className="relative flex items-center justify-center my-1">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200" />
+            </div>
+            <span className="relative bg-white px-3 text-[11px] font-medium text-text-secondary uppercase tracking-wider">
+              or
+            </span>
+          </div>
+
           <div>
             <label
               htmlFor="email"
@@ -295,7 +309,7 @@ function LoginForm() {
             </Link>
           </div>
 
-          {(justReset || justSignedUp) && !error && (
+          {(justReset || justSignedUp) && !error && !oauthError && (
             <div className="flex items-start gap-2 rounded-btn border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700">
               <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
               <span>
@@ -310,6 +324,19 @@ function LoginForm() {
             <div className="flex items-start gap-2 rounded-btn border border-red-200 bg-red-50 p-3 text-xs text-red-700">
               <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {oauthError && (
+            <div className="flex items-start gap-2 rounded-btn border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+              <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+              <span>
+                {oauthError === 'google_denied'
+                  ? 'Google sign-in was cancelled. Please try again.'
+                  : oauthError === 'google_no_email'
+                  ? 'Could not get your email from Google. Please use email sign-in.'
+                  : 'Google sign-in failed. Please try again.'}
+              </span>
             </div>
           )}
 
