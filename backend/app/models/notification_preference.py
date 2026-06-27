@@ -21,7 +21,7 @@ class NotificationPreference(Base):
     # Weekly digest: top 5 matches summary every Sunday
     email_weekly_digest = Column(Boolean, default=True, nullable=False)
     # Marketing / product updates: new features, tips, etc.
-    email_marketing = Column(Boolean, default=False, nullable=False)
+    email_marketing = Column(Boolean, default=True, nullable=False)
 
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -41,7 +41,7 @@ async def ensure_notification_preference_columns() -> None:
                     email_match_improvements BOOLEAN NOT NULL DEFAULT TRUE,
                     email_deadline_reminders BOOLEAN NOT NULL DEFAULT TRUE,
                     email_weekly_digest BOOLEAN NOT NULL DEFAULT TRUE,
-                    email_marketing BOOLEAN NOT NULL DEFAULT FALSE,
+                    email_marketing BOOLEAN NOT NULL DEFAULT TRUE,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
