@@ -619,10 +619,10 @@ export default function LandingPage() {
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Company</h4>
               <ul className="space-y-2.5">
-                <li><a href="#" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">About</a></li>
-                <li><a href="#" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Contact</a></li>
-                <li><a href="#" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Privacy</a></li>
-                <li><a href="#" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Terms</a></li>
+                <li><Link href="/about" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">About</Link></li>
+                <li><Link href="/contact" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Contact</Link></li>
+                <li><Link href="/privacy" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Privacy</Link></li>
+                <li><Link href="/terms" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Terms</Link></li>
               </ul>
             </div>
           </div>

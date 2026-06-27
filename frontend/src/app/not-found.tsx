@@ -1,58 +1,44 @@
 'use client';
 
-// app/not-found.tsx — Custom 404 page matching auth page DNA.
-
 import Link from 'next/link';
-import { FileQuestion, ArrowLeft, Home, Search } from 'lucide-react';
-import Button from '@/components/admin/ui/Button';
+import { motion } from 'framer-motion';
+import LandingShell from '@/components/LandingShell';
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-gray-100">
-      <div className="max-w-md w-full bg-white rounded-card border border-gray-200 p-8">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center">
-            <FileQuestion className="w-5 h-5 text-amber-600" />
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold text-text-primary">Page not found</h1>
-            <p className="text-xs text-text-secondary">
-              The page you&apos;re looking for doesn&apos;t exist or has been moved.
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-3 mb-6">
-          <Link
-            href="/scholarships"
-            className="flex items-center gap-3 rounded-btn border border-gray-200 bg-gray-50 p-3 hover:border-primary/40 transition-colors"
-          >
-            <Search className="w-4 h-4 text-primary shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-text-primary">Browse scholarships</p>
-              <p className="text-[11px] text-text-secondary">Search and discover matches</p>
-            </div>
-          </Link>
-          <Link
-            href="/"
-            className="flex items-center gap-3 rounded-btn border border-gray-200 bg-gray-50 p-3 hover:border-primary/40 transition-colors"
-          >
-            <Home className="w-4 h-4 text-primary shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-text-primary">Go home</p>
-              <p className="text-[11px] text-text-secondary">Back to the homepage</p>
-            </div>
-          </Link>
-        </div>
-
-        <Link
-          href="/scholarships"
-          className="inline-flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary"
+    <LandingShell>
+      <div className="min-h-[70vh] flex items-center justify-center px-4 sm:px-6 pt-20">
+        <motion.div
+          className="text-center max-w-[520px]"
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Back to scholarships
-        </Link>
+          <div className="text-[80px] sm:text-[100px] font-black text-[#f5b942]/20 leading-none mb-2 select-none">
+            404
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight mb-3">
+            Page not found
+          </h1>
+          <p className="text-sm sm:text-base text-gray-600 leading-relaxed mb-8">
+            The page you&apos;re looking for doesn&apos;t exist or has been moved. Maybe it&apos;s time to find your scholarship match instead?
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link
+              href="/signup"
+              className="sr-border-beam relative text-sm font-bold text-[#1a1a1a] bg-[#f5b942] rounded-full px-7 py-3.5 hover:bg-[#d4972e] hover:text-white transition w-full sm:w-auto text-center"
+            >
+              Find your matches →
+            </Link>
+            <Link
+              href="/"
+              className="text-sm font-medium text-[#1a1a1a] px-6 py-3.5 rounded-full border border-[#f0ebe0] hover:border-[#f5b942] transition w-full sm:w-auto text-center"
+            >
+              Back to home
+            </Link>
+          </div>
+        </motion.div>
       </div>
-    </div>
+    </LandingShell>
   );
 }
