@@ -218,6 +218,26 @@ export async function changePassword(currentPassword: string, newPassword: strin
   });
 }
 
+// ── Notification Preferences ───────────────────────────────────────
+
+export interface NotificationPreferences {
+  email_new_matches: boolean;
+  email_match_improvements: boolean;
+  email_deadline_reminders: boolean;
+  email_weekly_digest: boolean;
+  email_marketing: boolean;
+}
+
+export async function fetchPreferences(): Promise<NotificationPreferences> {
+  const { data } = await api.get('/api/preferences');
+  return data;
+}
+
+export async function updatePreferences(prefs: Partial<NotificationPreferences>): Promise<NotificationPreferences> {
+  const { data } = await api.put('/api/preferences', prefs);
+  return data;
+}
+
 export async function createOrUpdateProfile(profile: Partial<Profile>): Promise<Profile> {
   const { data } = await api.post('/api/profile', profile);
   return data;

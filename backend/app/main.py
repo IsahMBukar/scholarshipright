@@ -13,6 +13,7 @@ from app.api import admin_scholarships
 from app.api import admin_audit
 from app.api import admin_invites as admin_invites_module
 from app.api.notifications import router as notifications_router
+from app.api.preferences import router as preferences_router
 from app.services.deadline_checker import deadline_checker_loop
 from app.services.weekly_digest import weekly_digest_loop
 from app.services.match_auto import ensure_schema_columns
@@ -21,6 +22,7 @@ from app.models.admin_audit import ensure_audit_schema_columns
 from app.models.admin_invite import ensure_invites_schema_columns
 from app.models.password_reset import ensure_password_reset_schema_columns
 from app.models.user import ensure_email_confirm_columns
+from app.models.notification_preference import ensure_notification_preference_columns
 from app.models.profile import ensure_profile_schema_columns
 from app.models.scholarship import (
     ensure_scholarship_schema_columns,
@@ -97,6 +99,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:  # noqa: BLE001
         logger.exception("ensure_email_confirm_columns failed: %s", e)
 
+    # Startup: ensure notification_preferences table exists (idempotent).
+    try:
+        await ensure_notification_preference_columns()
+    except Exception as e:  # noqa: BLE001
+        logger.exception("ensure_notification_preference_columns failed: %s", e)
+
     # Startup: start deadline checker in background
     deadline_task = asyncio.create_task(deadline_checker_loop())
     # Startup: start weekly digest in background
@@ -131,6 +139,7 @@ app.include_router(auth.router)
 app.include_router(reminders.router, prefix="/api/reminders", tags=["reminders"])
 app.include_router(resumes.router)
 app.include_router(notifications_router)
+app.include_router(preferences_router, prefix="/api/preferences", tags=["preferences"])
 app.include_router(agent.router, prefix="/api/agent", tags=["agent"])
 app.include_router(admin_matches.router)
 app.include_router(admin_overview.router, prefix="/api/admin", tags=["admin"])

@@ -52,6 +52,12 @@ async def send_weekly_digests():
             emails_sent = 0
 
             for user in users:
+                # Check if user has weekly digest enabled
+                from app.models.notification_preference import get_or_create_preferences
+                prefs = await get_or_create_preferences(db, user.id)
+                if not prefs.email_weekly_digest:
+                    continue
+
                 # Get top N matches for this user
                 matches_result = await db.execute(
                     select(MatchScore, Scholarship)

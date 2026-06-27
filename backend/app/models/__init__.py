@@ -5,6 +5,7 @@ from app.models.saved_scholarship import SavedScholarship
 from app.models.match_score import MatchScore
 from app.models.chat_session import ChatSession
 from app.models.password_reset import PasswordResetToken
+from app.models.notification_preference import NotificationPreference
 
 __all__ = [
     "User",

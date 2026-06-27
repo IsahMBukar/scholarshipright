@@ -125,6 +125,12 @@ async def emit_match_new(
     db: AsyncSession, *, user_id: UUID, scholarship_id: UUID, score: float
 ) -> Optional[Notification]:
     """Notify the user that a new scholarship now matches them at 70%+."""
+    # Check preference
+    from app.models.notification_preference import get_or_create_preferences
+    prefs = await get_or_create_preferences(db, user_id)
+    if not prefs.email_new_matches:
+        return None
+
     sch = await _load_scholarship(db, scholarship_id)
     if not sch:
         return None
@@ -156,6 +162,12 @@ async def emit_match_improved(
     Fired when the score went up by IMPROVEMENT_MIN_DELTA+ points OR
     crossed into the 80+ tier.
     """
+    # Check preference
+    from app.models.notification_preference import get_or_create_preferences
+    prefs = await get_or_create_preferences(db, user_id)
+    if not prefs.email_match_improvements:
+        return None
+
     sch = await _load_scholarship(db, scholarship_id)
     if not sch:
         return None

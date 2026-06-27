@@ -5,8 +5,8 @@ import AppLayout from '@/components/AppLayout';
 import PageHeader from '@/components/PageHeader';
 import { useLogout } from '@/hooks/useLogout';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
-import { fetchMe, changePassword } from '@/services/api';
-import type { MeUser } from '@/services/api';
+import { fetchMe, changePassword, fetchPreferences, updatePreferences } from '@/services/api';
+import type { MeUser, NotificationPreferences } from '@/services/api';
 import PasswordField from '@/components/auth/PasswordField';
 
 export default function SettingsPage() {
@@ -23,11 +23,21 @@ export default function SettingsPage() {
   const [pwSuccess, setPwSuccess] = useState('');
   const [pwLoading, setPwLoading] = useState(false);
 
+  // Notification preferences
+  const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
+  const [prefsLoading, setPrefsLoading] = useState(true);
+  const [prefsSaving, setPrefsSaving] = useState(false);
+  const [prefsSaved, setPrefsSaved] = useState(false);
+
   useEffect(() => {
     fetchMe()
       .then(setUser)
       .catch(() => {})
       .finally(() => setLoading(false));
+    fetchPreferences()
+      .then(setPrefs)
+      .catch(() => {})
+      .finally(() => setPrefsLoading(false));
   }, []);
 
   const handlePasswordChange = async () => {
@@ -69,6 +79,24 @@ export default function SettingsPage() {
       }
     } finally {
       setPwLoading(false);
+    }
+  };
+
+  const handlePrefToggle = async (key: keyof NotificationPreferences) => {
+    if (!prefs) return;
+    const newValue = !prefs[key];
+    setPrefs({ ...prefs, [key]: newValue });
+    setPrefsSaved(false);
+    setPrefsSaving(true);
+    try {
+      await updatePreferences({ [key]: newValue });
+      setPrefsSaved(true);
+      setTimeout(() => setPrefsSaved(false), 2000);
+    } catch {
+      // Revert on error
+      setPrefs({ ...prefs, [key]: !newValue });
+    } finally {
+      setPrefsSaving(false);
     }
   };
 
@@ -189,6 +217,67 @@ export default function SettingsPage() {
               )}
             </button>
           </div>
+        </section>
+
+        {/* ─── Notification Preferences ─── */}
+        <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 md:p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+              <span className="material-symbols-outlined text-[20px] text-blue-600">notifications</span>
+            </div>
+            <div>
+              <h2 className="text-[15px] font-bold text-text-primary">Email Preferences</h2>
+              <p className="text-[12px] text-text-secondary">
+                Choose which emails you want to receive. Auth emails (verification, password reset) are always sent.
+              </p>
+            </div>
+          </div>
+
+          {prefsLoading ? (
+            <div className="space-y-3 animate-pulse">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="h-12 bg-gray-100 rounded-lg" />
+              ))}
+            </div>
+          ) : prefs ? (
+            <div className="space-y-1">
+              {[
+                { key: 'email_new_matches' as const, icon: '🎯', label: 'New match alerts', desc: 'When a new scholarship scores 70%+ against your profile' },
+                { key: 'email_match_improvements' as const, icon: '📈', label: 'Match improvements', desc: 'When an existing match score increases significantly' },
+                { key: 'email_deadline_reminders' as const, icon: '🔔', label: 'Deadline reminders', desc: '14-day, 7-day, and 2-day reminders for saved scholarships' },
+                { key: 'email_weekly_digest' as const, icon: '📬', label: 'Weekly digest', desc: 'Your top 5 matches summary, every Sunday at 9 AM' },
+                { key: 'email_marketing' as const, icon: '✨', label: 'Product updates', desc: 'New features, tips, and scholarship discovery guides' },
+              ].map((item) => (
+                <button
+                  key={item.key}
+                  onClick={() => handlePrefToggle(item.key)}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors text-left"
+                >
+                  <span className="text-lg flex-shrink-0">{item.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-text-primary">{item.label}</p>
+                    <p className="text-[11px] text-text-secondary truncate">{item.desc}</p>
+                  </div>
+                  <div className={`relative w-10 h-6 rounded-full transition-colors flex-shrink-0 ${prefs[item.key] ? 'bg-primary' : 'bg-gray-300'}`}>
+                    <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${prefs[item.key] ? 'left-[18px]' : 'left-0.5'}`} />
+                  </div>
+                </button>
+              ))}
+
+              {prefsSaved && (
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-50 border border-emerald-200 mt-2">
+                  <span className="material-symbols-outlined text-[14px] text-emerald-600">check_circle</span>
+                  <p className="text-[12px] text-emerald-700">Preferences saved</p>
+                </div>
+              )}
+              {prefsSaving && (
+                <div className="flex items-center gap-2 p-2 mt-2">
+                  <span className="w-3 h-3 border-2 border-gray-300 border-t-primary rounded-full animate-spin" />
+                  <p className="text-[12px] text-text-secondary">Saving…</p>
+                </div>
+              )}
+            </div>
+          ) : null}
         </section>
 
         {/* ─── Sign Out ─── */}
