@@ -7,10 +7,10 @@ import Link from 'next/link';
 import '@/app/landing.css';
 
 const NAV_LINKS = [
-  { href: '/#matching', label: 'Matching' },
-  { href: '/#advisor', label: 'Advisor' },
-  { href: '/#features', label: 'Features' },
-  { href: '/#proof', label: 'Proof' },
+  { href: '/scholarships/category/fully-funded', label: 'Scholarships' },
+  { href: '/features', label: 'Features' },
+  { href: '/how-it-works', label: 'How It Works' },
+  { href: '/about', label: 'About' },
 ];
 
 export default function LandingShell({ children }: { children: React.ReactNode }) {
@@ -78,18 +78,18 @@ export default function LandingShell({ children }: { children: React.ReactNode }
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Product</h4>
               <ul className="space-y-2.5">
-                <li><Link href="/#matching" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">AI Matching</Link></li>
-                <li><Link href="/#advisor" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Scholara Advisor</Link></li>
-                <li><Link href="/#features" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Features</Link></li>
-                <li><Link href="/signup" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Get started</Link></li>
+                <li><Link href="/how-it-works" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">How it works</Link></li>
+                <li><Link href="/how-it-works#matching" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">AI Matching</Link></li>
+                <li><Link href="/how-it-works#advisor" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Scholara Advisor</Link></li>
+                <li><Link href="/features" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Features</Link></li>
               </ul>
             </div>
             {/* Resources */}
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Resources</h4>
               <ul className="space-y-2.5">
-                <li><a href="#" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Scholarship database</a></li>
-                <li><a href="#" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Essay guides</a></li>
+                <li><Link href="/scholarships/category/fully-funded" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Scholarship database</Link></li>
+                <li><Link href="/faq" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">FAQ</Link></li>
                 <li><a href="#" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Blog</a></li>
                 <li><a href="#" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Help center</a></li>
               </ul>

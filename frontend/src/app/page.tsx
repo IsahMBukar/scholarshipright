@@ -89,10 +89,10 @@ const TESTIMONIALS = [
 ];
 
 const NAV_LINKS = [
-  { href: '#matching', label: 'Matching' },
-  { href: '#advisor', label: 'Advisor' },
-  { href: '#features', label: 'Features' },
-  { href: '#proof', label: 'Proof' },
+  { href: '/scholarships/category/fully-funded', label: 'Scholarships' },
+  { href: '/features', label: 'Features' },
+  { href: '/how-it-works', label: 'How It Works' },
+  { href: '/about', label: 'About' },
 ];
 
 // ── Match ring (SVG progress) ──────────────────────────────────────
@@ -202,13 +202,13 @@ export default function LandingPage() {
         <div className="w-px h-[clamp(1rem,0.7rem+0.4vw,1.25rem)] bg-[#f0ebe0] mx-[clamp(0.125rem,0.05rem+0.2vw,0.5rem)] hidden sm:block" />
         <div className="flex items-center gap-[clamp(0.25rem,0.125rem+0.5vw,0.75rem)]">
           {NAV_LINKS.map((link) => (
-            <a
+            <Link
               key={link.href}
               href={link.href}
               className="px-[clamp(0.125rem,0.05rem+0.7vw,0.75rem)] py-[clamp(0.25rem,0.2rem+0.2vw,0.375rem)] text-[clamp(0.625rem,0.55rem+0.6vw,0.875rem)] font-medium text-gray-600 hover:text-[#1a1a1a] rounded-full hover:bg-[#fdfbf7] transition whitespace-nowrap"
             >
               {link.label}
-            </a>
+            </Link>
           ))}
         </div>
         <Link
@@ -599,18 +599,18 @@ export default function LandingPage() {
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Product</h4>
               <ul className="space-y-2.5">
-                <li><a href="#matching" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">AI Matching</a></li>
-                <li><a href="#advisor" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Scholara Advisor</a></li>
-                <li><a href="#features" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Features</a></li>
-                <li><Link href="/signup" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Get started</Link></li>
+                <li><Link href="/how-it-works" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">How it works</Link></li>
+                <li><Link href="/how-it-works#matching" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">AI Matching</Link></li>
+                <li><Link href="/how-it-works#advisor" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Scholara Advisor</Link></li>
+                <li><Link href="/features" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Features</Link></li>
               </ul>
             </div>
             {/* Resources */}
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Resources</h4>
               <ul className="space-y-2.5">
-                <li><a href="#" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Scholarship database</a></li>
-                <li><a href="#" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Essay guides</a></li>
+                <li><Link href="/scholarships/category/fully-funded" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Scholarship database</Link></li>
+                <li><Link href="/faq" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">FAQ</Link></li>
                 <li><a href="#" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Blog</a></li>
                 <li><a href="#" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Help center</a></li>
               </ul>
