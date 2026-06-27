@@ -14,6 +14,7 @@ from app.api import admin_audit
 from app.api import admin_invites as admin_invites_module
 from app.api.notifications import router as notifications_router
 from app.api.preferences import router as preferences_router
+from app.api.unsubscribe import router as unsubscribe_router
 from app.services.deadline_checker import deadline_checker_loop
 from app.services.weekly_digest import weekly_digest_loop
 from app.services.match_auto import ensure_schema_columns
@@ -140,6 +141,7 @@ app.include_router(reminders.router, prefix="/api/reminders", tags=["reminders"]
 app.include_router(resumes.router)
 app.include_router(notifications_router)
 app.include_router(preferences_router, prefix="/api/preferences", tags=["preferences"])
+app.include_router(unsubscribe_router, prefix="/api/unsubscribe", tags=["unsubscribe"])
 app.include_router(agent.router, prefix="/api/agent", tags=["agent"])
 app.include_router(admin_matches.router)
 app.include_router(admin_overview.router, prefix="/api/admin", tags=["admin"])

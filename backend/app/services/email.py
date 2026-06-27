@@ -162,4 +162,13 @@ async def send_templated_email(
         return {"success": False, "error": f"template '{template}' not found"}
 
     html = _fill_template(html, variables)
+
+    # Auto-inject unsubscribe URL if template has the placeholder
+    if "{{UNSUBSCRIBE_URL}}" in html and "UNSUBSCRIBE_URL" not in variables:
+        user_id = variables.get("USER_ID", "")
+        unsub_category = variables.get("UNSUBSCRIBE_CATEGORY", "marketing")
+        if user_id:
+            from app.api.unsubscribe import make_unsubscribe_url
+            html = html.replace("{{UNSUBSCRIBE_URL}}", make_unsubscribe_url(user_id, unsub_category))
+
     return await send_email(to, subject, html, from_name)
