@@ -184,17 +184,17 @@ export default function ScholarshipsPage() {
             <NotificationBell />
           </div>
           <div className="hidden md:flex items-center gap-2 ml-auto">
-            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 w-[220px]">
-              <span className="material-symbols-outlined text-[18px] text-text-secondary">search</span>
+            <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-lg pl-3 pr-2 py-1.5 w-[240px] overflow-hidden">
+              <span className="material-symbols-outlined text-[18px] text-text-secondary flex-shrink-0">search</span>
               <input
                 type="text"
                 placeholder="Search scholarships..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="flex-1 text-[13px] bg-transparent outline-none text-text-primary placeholder-text-secondary"
+                className="flex-1 min-w-0 text-[13px] bg-transparent outline-none text-text-primary placeholder-text-secondary"
               />
             {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="text-text-secondary hover:text-text-primary">
+              <button onClick={() => setSearchQuery('')} className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 text-text-secondary hover:text-text-primary transition-colors">
                 <span className="material-symbols-outlined text-[16px]">close</span>
               </button>
             )}
