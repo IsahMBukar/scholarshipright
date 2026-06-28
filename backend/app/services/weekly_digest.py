@@ -23,17 +23,25 @@ TOP_N = 5  # Number of top matches to include in the digest
 def _build_match_card(scholarship_name: str, score: float, amount: str, deadline: str, country: str) -> str:
     """Build a single match card HTML for the digest."""
     score_rounded = round(score)
-    return f'''    <div style="background:#fdfbf7;border:1px solid #f0ebe0;border-radius:16px;padding:20px 24px;margin-bottom:12px;">
-      <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;">
-        <tr>
-          <td>
-            <div style="display:inline-block;background:#f5b942;color:#05151b;font-weight:700;font-size:11px;padding:4px 10px;border-radius:999px;margin-bottom:8px;">{score_rounded}% MATCH</div>
-            <p style="margin:0 0 4px;font-size:15px;font-weight:700;color:#1a1a1a;">{scholarship_name}</p>
-            <p style="margin:0;font-size:13px;color:#4a4a4a;">{country} &middot; {amount} &middot; Due {deadline}</p>
-          </td>
-        </tr>
-      </table>
-    </div>'''
+    return f'''    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fdfbf7;border:1px solid #f0ebe0;border-radius:12px;margin-bottom:10px;">
+      <tr>
+        <td style="padding:16px 20px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td>
+                <p style="margin:0 0 4px;font-family:'Inter',-apple-system,sans-serif;font-size:15px;font-weight:800;color:#1a1a1a;">{scholarship_name}</p>
+                <p style="margin:0;font-family:'Inter',-apple-system,sans-serif;font-size:12px;color:#999;">{country} &middot; {amount} &middot; Due {deadline}</p>
+              </td>
+              <td align="right" valign="middle" style="padding-left:12px;">
+                <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#f5b942 0%,#d4972e 100%);text-align:center;line-height:44px;">
+                  <span style="font-family:'Inter',-apple-system,sans-serif;font-size:15px;font-weight:900;color:#1a1a1a;">{score_rounded}%</span>
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>'''
 
 
 async def send_weekly_digests():

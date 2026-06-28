@@ -1,60 +1,145 @@
-<div style="font-family:'Inter',Helvetica,Arial,sans-serif;max-width:600px;margin:0 auto;background:#fdfbf7;">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body, table, td, p, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+  table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+  img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+  body { margin: 0; padding: 0; width: 100% !important; background-color: #f5f3ef; }
+  a { color: #d4972e; }
+  @media only screen and (max-width: 600px) {
+    .email-container { width: 100% !important; }
+    .mobile-pad { padding-left: 20px !important; padding-right: 20px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background-color:#f5f3ef;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f3ef;">
+<tr><td align="center" style="padding:32px 16px;">
+<table role="presentation" class="email-container" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
 
-  <!-- Header -->
-  <div style="background:linear-gradient(135deg,#05151b,#0a2932);padding:36px 40px;text-align:center;border-radius:20px 20px 0 0;">
-    <div style="display:inline-block;background:#f5b942;color:#05151b;font-weight:800;font-size:14px;padding:6px 16px;border-radius:999px;margin-bottom:16px;letter-spacing:0.5px;">SCHOLARSHIPRIGHT</div>
-    <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;">New scholarship match!</h1>
-    <p style="margin:8px 0 0;color:rgba(255,255,255,0.7);font-size:14px;">We found one that fits your profile</p>
-  </div>
+  <!-- Logo -->
+  <tr>
+    <td align="center" style="padding:24px 0 20px;">
+      <a href="{{FRONTEND_URL}}" style="text-decoration:none;">
+        <img src="{{FRONTEND_URL}}/images/logo-light.jpg" width="40" height="40" alt="SR" style="border-radius:10px;display:block;">
+      </a>
+      <p style="margin:8px 0 0;font-family:'Inter',-apple-system,sans-serif;font-size:16px;font-weight:800;color:#1a1a1a;">
+        Scholarship<span style="color:#f5b942;">Right</span>
+      </p>
+    </td>
+  </tr>
 
-  <!-- Body -->
-  <div style="padding:36px 40px;background:#ffffff;">
-    <p style="margin:0 0 20px;font-size:15px;color:#1a1a1a;line-height:1.7;">Dear <strong>{{RECIPIENT_NAME}}</strong>,</p>
-    <p style="margin:0 0 24px;font-size:15px;color:#4a4a4a;line-height:1.7;">Based on your profile, we found a scholarship that's a strong match for you:</p>
+  <!-- Card -->
+  <tr>
+    <td style="background:#ffffff;border-radius:16px;border:1px solid #f0ebe0;overflow:hidden;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        <tr><td class="mobile-pad" style="padding:36px 40px;">
 
-    <div style="background:#fdfbf7;border:1px solid #f0ebe0;border-radius:16px;padding:24px;margin-bottom:24px;">
-      <div style="display:inline-block;background:#f5b942;color:#05151b;font-weight:700;font-size:11px;padding:4px 10px;border-radius:999px;margin-bottom:12px;">{{MATCH_SCORE}}% MATCH</div>
-      <h2 style="margin:0 0 12px;font-size:18px;font-weight:700;color:#1a1a1a;">{{SCHOLARSHIP_NAME}}</h2>
-      <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;">
-        <tr>
-          <td style="padding:8px 0;border-top:1px solid #f0ebe0;">
-            <span style="font-size:12px;color:#4a4a4a;text-transform:uppercase;letter-spacing:0.5px;">Amount</span><br>
-            <span style="font-size:15px;font-weight:600;color:#1a1a1a;">{{AMOUNT}}</span>
-          </td>
-          <td style="padding:8px 0;border-top:1px solid #f0ebe0;text-align:right;">
-            <span style="font-size:12px;color:#4a4a4a;text-transform:uppercase;letter-spacing:0.5px;">Deadline</span><br>
-            <span style="font-size:15px;font-weight:600;color:#d4972e;">{{DEADLINE}}</span>
-          </td>
-        </tr>
-        <tr>
-          <td colspan="2" style="padding:8px 0;border-top:1px solid #f0ebe0;">
-            <span style="font-size:12px;color:#4a4a4a;text-transform:uppercase;letter-spacing:0.5px;">Country</span><br>
-            <span style="font-size:14px;color:#1a1a1a;">{{COUNTRY}}</span>
-          </td>
-        </tr>
+          <!-- Badge -->
+          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 20px;">
+            <tr>
+              <td style="background:#f5b942;border-radius:20px;padding:6px 16px;">
+                <p style="margin:0;font-family:'Inter',-apple-system,sans-serif;font-size:11px;font-weight:700;color:#1a1a1a;text-transform:uppercase;letter-spacing:1px;">
+                  🎯 New Match
+                </p>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Heading -->
+          <h1 style="margin:0 0 8px;font-family:'Inter',-apple-system,sans-serif;font-size:26px;font-weight:800;color:#1a1a1a;text-align:center;letter-spacing:-0.5px;line-height:1.2;">
+            New scholarship match!
+          </h1>
+          <p style="margin:0 0 28px;font-family:'Inter',-apple-system,sans-serif;font-size:14px;color:#666;text-align:center;line-height:1.6;">
+            Hi {{RECIPIENT_NAME}}, a new scholarship just scored 70%+ against your profile.
+          </p>
+
+          <!-- Match Card -->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fdfbf7;border:1px solid #f0ebe0;border-radius:12px;">
+            <tr>
+              <td style="padding:20px 24px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td>
+                      <p style="margin:0 0 4px;font-family:'Inter',-apple-system,sans-serif;font-size:17px;font-weight:800;color:#1a1a1a;">
+                        {{SCHOLARSHIP_NAME}}
+                      </p>
+                      <p style="margin:0;font-family:'Inter',-apple-system,sans-serif;font-size:13px;color:#888;">
+                        {{COUNTRY}}
+                      </p>
+                    </td>
+                    <td align="right" valign="top" style="padding-left:16px;">
+                      <!-- Score Ring -->
+                      <table role="presentation" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#f5b942 0%,#d4972e 100%);text-align:center;vertical-align:middle;">
+                            <p style="margin:0;font-family:'Inter',-apple-system,sans-serif;font-size:20px;font-weight:900;color:#1a1a1a;line-height:56px;">
+                              {{MATCH_SCORE}}%
+                            </p>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Details Row -->
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;">
+                  <tr>
+                    <td style="padding:10px 0;border-top:1px solid #f0ebe0;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td width="33%" style="font-family:'Inter',-apple-system,sans-serif;font-size:12px;color:#999;">Amount</td>
+                          <td width="33%" style="font-family:'Inter',-apple-system,sans-serif;font-size:12px;color:#999;">Deadline</td>
+                          <td width="33%" style="font-family:'Inter',-apple-system,sans-serif;font-size:12px;color:#999;">Fit</td>
+                        </tr>
+                        <tr>
+                          <td style="font-family:'Inter',-apple-system,sans-serif;font-size:14px;font-weight:700;color:#d4972e;">{{AMOUNT}}</td>
+                          <td style="font-family:'Inter',-apple-system,sans-serif;font-size:14px;font-weight:700;color:#1a1a1a;">{{DEADLINE}}</td>
+                          <td style="font-family:'Inter',-apple-system,sans-serif;font-size:14px;font-weight:700;color:#f5b942;">Strong</td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+
+          <!-- CTA -->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;">
+            <tr>
+              <td align="center">
+                <a href="{{FRONTEND_URL}}/scholarships" style="display:inline-block;background:#f5b942;color:#1a1a1a;font-family:'Inter',-apple-system,sans-serif;font-size:14px;font-weight:700;text-decoration:none;padding:14px 32px;border-radius:50px;">
+                  View your matches →
+                </a>
+              </td>
+            </tr>
+          </table>
+
+        </td></tr>
       </table>
-    </div>
-
-    <div style="text-align:center;margin-bottom:8px;">
-      <div style="display:inline-block;background:#f5b942;color:#05151b;padding:14px 40px;border-radius:999px;font-size:15px;font-weight:700;letter-spacing:0.3px;">View Details</div>
-    </div>
-    <p style="text-align:center;margin:0;font-size:12px;color:#4a4a4a;">Visit scholarshipright.com to see full details</p>
-  </div>
+    </td>
+  </tr>
 
   <!-- Footer -->
-  <div style="padding:28px 40px;background:#05151b;border-radius:0 0 20px 20px;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-      <tr>
-        <td>
-          <p style="margin:0 0 4px;font-size:14px;font-weight:700;color:#f5b942;">ScholarshipRight</p>
-          <p style="margin:0 0 16px;font-size:12px;color:rgba(255,255,255,0.5);">Your path to educational success</p>
-          <p style="margin:0;font-size:12px;color:rgba(255,255,255,0.4);line-height:1.8;">
-            hello@scholarshipright.com · scholarshipright.com<br>
-            <a href="{{UNSUBSCRIBE_URL}}" style="color:rgba(255,255,255,0.5);text-decoration:underline;font-size:11px;">Unsubscribe</a> from this type of email · <a href="{{FRONTEND_URL}}/settings" style="color:rgba(255,255,255,0.5);text-decoration:underline;font-size:11px;">Manage preferences</a>
-          </p>
-        </td>
-      </tr>
-    </table>
-  </div>
+  <tr>
+    <td align="center" style="padding:24px 20px;">
+      <p style="margin:0 0 4px;font-family:'Inter',-apple-system,sans-serif;font-size:13px;font-weight:700;color:#f5b942;">ScholarshipRight</p>
+      <p style="margin:0 0 12px;font-family:'Inter',-apple-system,sans-serif;font-size:11px;color:#999;">AI matching for fully funded scholarships</p>
+      <p style="margin:0;font-family:'Inter',-apple-system,sans-serif;font-size:11px;color:#bbb;line-height:1.8;">
+        hello@scholarshipright.com · <a href="{{FRONTEND_URL}}" style="color:#d4972e;text-decoration:none;">scholarshipright.com</a><br>
+        <a href="{{UNSUBSCRIBE_URL}}" style="color:#bbb;text-decoration:underline;">Unsubscribe</a> ·
+        <a href="{{FRONTEND_URL}}/settings" style="color:#bbb;text-decoration:underline;">Email preferences</a>
+      </p>
+      <p style="margin:12px 0 0;font-family:'Inter',-apple-system,sans-serif;font-size:10px;color:#ccc;">© {{YEAR}} ScholarshipRight. All rights reserved.</p>
+    </td>
+  </tr>
 
-</div>
+</table>
+</td></tr></table>
+</body>
+</html>
