@@ -15,6 +15,8 @@
     --color-text-primary: #1a1a1a;
     --color-text-secondary: #4a4a4a;
     --color-text-inverse: #ffffff;
+    --color-surface-app: #f3f4f6;
+    --color-surface-brand: #fdfbf7;
   }
 
   body {

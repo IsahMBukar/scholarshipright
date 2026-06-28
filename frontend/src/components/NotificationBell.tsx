@@ -1,26 +1,14 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import {
-  fetchNotifications,
-  markNotificationRead,
-  markAllNotificationsRead,
-  deleteNotification,
-} from '@/services/api';
+import { useNotifications } from '@/hooks/useNotifications';
 import type { Notification } from '@/services/api';
 
 export default function NotificationBell() {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const { notifications, unreadCount, loading, load, markRead, markAllRead, remove } = useNotifications();
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
-
-  // Fetch on mount
-  useEffect(() => {
-    loadNotifications();
-  }, []);
 
   // Close on outside click
   useEffect(() => {
@@ -33,56 +21,13 @@ export default function NotificationBell() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
 
-  async function loadNotifications() {
-    setLoading(true);
-    try {
-      const data = await fetchNotifications();
-      setNotifications(data.items);
-      setUnreadCount(data.unread_count);
-    } catch {} finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleMarkRead(id: string) {
-    await markNotificationRead(id).catch(() => {});
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
-    );
-    setUnreadCount((prev) => Math.max(0, prev - 1));
-  }
-
-  async function handleMarkAllRead() {
-    await markAllNotificationsRead().catch(() => {});
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-    setUnreadCount(0);
-  }
-
-  async function handleDelete(id: string) {
-    await deleteNotification(id).catch(() => {});
-    const wasUnread = notifications.find((n) => n.id === id && !n.is_read);
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-    if (wasUnread) setUnreadCount((prev) => Math.max(0, prev - 1));
-  }
-
-  function timeAgo(dateStr: string): string {
-    const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-    if (seconds < 60) return 'just now';
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
-    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  }
-
   return (
     <div className="relative" ref={panelRef}>
       {/* Bell button */}
       <button
-        onClick={() => { setOpen(!open); if (!open) loadNotifications(); }}
+        onClick={() => { setOpen(!open); if (!open) load(); }}
         className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors"
+        aria-label={unreadCount > 0 ? `${unreadCount} unread notifications` : 'Notifications'}
       >
         <span className="material-symbols-outlined text-[22px] text-text-secondary">
           {unreadCount > 0 ? 'notifications_active' : 'notifications'}
@@ -102,7 +47,7 @@ export default function NotificationBell() {
             <h3 className="text-[15px] font-bold text-text-primary">Notifications</h3>
             {unreadCount > 0 && (
               <button
-                onClick={handleMarkAllRead}
+                onClick={markAllRead}
                 className="text-[12px] text-primary font-medium hover:underline"
               >
                 Mark all read
@@ -143,13 +88,13 @@ export default function NotificationBell() {
                     {n.link ? (
                       <Link
                         href={n.link}
-                        onClick={() => { handleMarkRead(n.id); setOpen(false); }}
+                        onClick={() => { markRead(n.id); setOpen(false); }}
                         className="block"
                       >
                         <NotificationContent n={n} />
                       </Link>
                     ) : (
-                      <div onClick={() => handleMarkRead(n.id)} className="cursor-pointer">
+                      <div onClick={() => markRead(n.id)} className="cursor-pointer">
                         <NotificationContent n={n} />
                       </div>
                     )}
@@ -158,7 +103,7 @@ export default function NotificationBell() {
 
                   {/* Delete button */}
                   <button
-                    onClick={() => handleDelete(n.id)}
+                    onClick={() => remove(n.id)}
                     className="opacity-0 group-hover:opacity-100 p-1 self-start mt-1 hover:bg-red-50 rounded transition-all"
                   >
                     <span className="material-symbols-outlined text-[16px] text-red-400">close</span>
@@ -182,4 +127,16 @@ function NotificationContent({ n }: { n: Notification }) {
       <p className="text-[12px] text-text-secondary mt-0.5 line-clamp-2">{n.message}</p>
     </>
   );
+}
+
+function timeAgo(dateStr: string): string {
+  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }

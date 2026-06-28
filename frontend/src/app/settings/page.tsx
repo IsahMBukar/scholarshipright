@@ -28,11 +28,12 @@ export default function SettingsPage() {
   const [prefsLoading, setPrefsLoading] = useState(true);
   const [prefsSaving, setPrefsSaving] = useState(false);
   const [prefsSaved, setPrefsSaved] = useState(false);
+  const [prefsError, setPrefsError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMe()
       .then(setUser)
-      .catch(() => {})
+      .catch(() => setUser(null))
       .finally(() => setLoading(false));
     fetchPreferences()
       .then(setPrefs)
@@ -87,6 +88,7 @@ export default function SettingsPage() {
     const newValue = !prefs[key];
     setPrefs({ ...prefs, [key]: newValue });
     setPrefsSaved(false);
+    setPrefsError(null);
     setPrefsSaving(true);
     try {
       await updatePreferences({ [key]: newValue });
@@ -95,6 +97,7 @@ export default function SettingsPage() {
     } catch {
       // Revert on error
       setPrefs({ ...prefs, [key]: !newValue });
+      setPrefsError('Failed to save preference. Please try again.');
     } finally {
       setPrefsSaving(false);
     }
@@ -131,7 +134,7 @@ export default function SettingsPage() {
               <p className="text-[12px] text-text-secondary">
                 Signed in as{' '}
                 <span className="font-mono text-text-primary">
-                  {user?.email || '—'}
+                  {user?.email || 'Unable to load account info'}
                 </span>
               </p>
             </div>
@@ -202,19 +205,14 @@ export default function SettingsPage() {
             <button
               onClick={handlePasswordChange}
               disabled={pwLoading}
-              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-white text-[13px] font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-btn bg-primary text-white text-[13px] font-bold hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {pwLoading ? (
-                <>
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Saving…
-                </>
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
-                <>
-                  <span className="material-symbols-outlined text-[16px]">save</span>
-                  Update Password
-                </>
+                <span className="material-symbols-outlined text-[16px]">save</span>
               )}
+              {pwLoading ? 'Saving…' : 'Update Password'}
             </button>
           </div>
         </section>
@@ -251,12 +249,15 @@ export default function SettingsPage() {
                 <button
                   key={item.key}
                   onClick={() => handlePrefToggle(item.key)}
+                  role="switch"
+                  aria-checked={prefs[item.key]}
+                  aria-label={`${item.label}: ${prefs[item.key] ? 'on' : 'off'}`}
                   className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors text-left"
                 >
                   <span className="text-lg flex-shrink-0">{item.icon}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-text-primary">{item.label}</p>
-                    <p className="text-[11px] text-text-secondary truncate">{item.desc}</p>
+                    <p className="text-[11px] text-text-secondary line-clamp-2">{item.desc}</p>
                   </div>
                   <div className={`relative w-10 h-6 rounded-full transition-colors flex-shrink-0 ${prefs[item.key] ? 'bg-primary' : 'bg-gray-300'}`}>
                     <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${prefs[item.key] ? 'left-[18px]' : 'left-0.5'}`} />
@@ -264,6 +265,15 @@ export default function SettingsPage() {
                 </button>
               ))}
 
+              {prefsError && (
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-red-50 border border-red-200 mt-2">
+                  <span className="material-symbols-outlined text-[14px] text-red-500">error</span>
+                  <p className="flex-1 text-[12px] text-red-700">{prefsError}</p>
+                  <button onClick={() => setPrefsError(null)} className="text-red-400 hover:text-red-600">
+                    <span className="material-symbols-outlined text-[16px]">close</span>
+                  </button>
+                </div>
+              )}
               {prefsSaved && (
                 <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-50 border border-emerald-200 mt-2">
                   <span className="material-symbols-outlined text-[14px] text-emerald-600">check_circle</span>

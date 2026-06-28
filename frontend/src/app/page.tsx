@@ -289,7 +289,7 @@ export default function LandingPage() {
             </div>
             <div className="mt-3 sm:mt-4 pt-2.5 sm:pt-3 border-t border-[#f0ebe0] flex items-center justify-between">
               <p className="text-[10px] sm:text-[11px] text-gray-500">+ 96 more scored</p>
-              <span className="text-[10px] sm:text-[11px] font-bold text-[#d4972e]">View all →</span>
+              <Link href="/scholarships" className="text-[10px] sm:text-[11px] font-bold text-[#d4972e] hover:underline">View all →</Link>
             </div>
           </div>
 
@@ -431,8 +431,8 @@ export default function LandingPage() {
                     <div className="bg-white border border-[#f0ebe0] rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm max-w-[85%]">
                       Great match. Next: draft your motivation letter. I&apos;ve pulled DAAD&apos;s actual criteria — want me to write the first draft from your profile?
                       <div className="mt-2.5 flex gap-2 flex-wrap">
-                        <button className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#f5b942]/15 text-[#d4972e]">✍ Draft letter</button>
-                        <button className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-[#f0ebe0] text-gray-600">See criteria</button>
+                        <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#f5b942]/15 text-[#d4972e] pointer-events-none">✍ Draft letter</span>
+                        <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-[#f0ebe0] text-gray-600 pointer-events-none">See criteria</span>
                       </div>
                     </div>
                   </div>
@@ -584,15 +584,15 @@ export default function LandingPage() {
                 AI matching + advisor for fully funded scholarships. Stop scrolling lists. Start getting matched.
               </p>
               <div className="flex gap-2">
-                <a href="#" className="w-9 h-9 rounded-full border border-[#f0ebe0] flex items-center justify-center text-gray-500 hover:border-[#f5b942] hover:text-[#d4972e] transition text-sm font-bold" aria-label="X">
+                <span className="w-9 h-9 rounded-full border border-[#f0ebe0] flex items-center justify-center text-gray-400 opacity-50 cursor-not-allowed text-sm font-bold" title="Coming soon" aria-label="X (coming soon)">
                   𝕏
-                </a>
-                <a href="#" className="w-9 h-9 rounded-full border border-[#f0ebe0] flex items-center justify-center text-gray-500 hover:border-[#f5b942] hover:text-[#d4972e] transition text-xs font-bold" aria-label="LinkedIn">
+                </span>
+                <span className="w-9 h-9 rounded-full border border-[#f0ebe0] flex items-center justify-center text-gray-400 opacity-50 cursor-not-allowed text-xs font-bold" title="Coming soon" aria-label="LinkedIn (coming soon)">
                   in
-                </a>
-                <a href="#" className="w-9 h-9 rounded-full border border-[#f0ebe0] flex items-center justify-center text-gray-500 hover:border-[#f5b942] hover:text-[#d4972e] transition text-sm" aria-label="Instagram">
+                </span>
+                <span className="w-9 h-9 rounded-full border border-[#f0ebe0] flex items-center justify-center text-gray-400 opacity-50 cursor-not-allowed text-sm" title="Coming soon" aria-label="Instagram (coming soon)">
                   ◯
-                </a>
+                </span>
               </div>
             </div>
             {/* Product */}
@@ -611,7 +611,7 @@ export default function LandingPage() {
               <ul className="space-y-2.5">
                 <li><Link href="/scholarships/category/fully-funded" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Scholarship database</Link></li>
                 <li><Link href="/faq" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">FAQ</Link></li>
-                <li><a href="#" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Blog</a></li>
+                <li><span className="text-sm text-gray-400 cursor-not-allowed" title="Coming soon">Blog</span></li>
                 <li><Link href="/faq" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Help center</Link></li>
               </ul>
             </div>

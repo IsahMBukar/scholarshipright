@@ -46,10 +46,6 @@ function ConfirmEmailForm() {
 
         if (res.ok) {
           setStatus('success');
-          // Auto-redirect to onboarding after 1.5s
-          setTimeout(() => {
-            if (!cancelled) router.push('/onboarding');
-          }, 1500);
         } else {
           const data = await res.json().catch(() => ({}));
           setStatus('error');
@@ -84,7 +80,7 @@ function ConfirmEmailForm() {
             <div>
               <h1 className="text-lg font-semibold text-text-primary">Email confirmed!</h1>
               <p className="text-xs text-text-secondary">
-                Redirecting you to get started…
+                Your email has been verified. Click below to continue.
               </p>
             </div>
           </div>

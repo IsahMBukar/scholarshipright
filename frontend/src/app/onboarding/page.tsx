@@ -166,7 +166,7 @@ export default function OnboardingPage() {
 
       {ob.slideIndex === 4 && (
         <ScholaraIntroSlide
-          onComplete={() => router.push('/chat')}
+          onComplete={() => router.push('/scholarships')}
           onSkip={() => {
             // No resetSlides — slideIndex stays at 4, completion is
             // derived from hasResume && hasProfile in the redirect effect.

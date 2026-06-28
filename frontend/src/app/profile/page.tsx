@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import AppLayout from '@/components/AppLayout';
 import PageHeader from '@/components/PageHeader';
@@ -233,13 +233,20 @@ function EmptyState({ icon, message }: { icon: string; message: string }) {
 }
 
 /* ─── Modal Shell ─── */
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function Modal({ title, onClose, children, dirty }: { title: string; onClose: () => void; children: React.ReactNode; dirty?: boolean }) {
+  function handleClose() {
+    if (dirty) {
+      if (!window.confirm('You have unsaved changes. Discard them?')) return;
+    }
+    onClose();
+  }
+
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={handleClose}>
       <div className="bg-white rounded-xl p-6 max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-xl border border-primary/20" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-[18px] font-bold text-text-primary">{title}</h3>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg">
+          <button onClick={handleClose} className="p-1 hover:bg-gray-100 rounded-lg">
             <span className="material-symbols-outlined text-[18px] text-text-secondary">close</span>
           </button>
         </div>
@@ -249,27 +256,8 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
   );
 }
 
-/* ─── Form Field ─── */
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="text-[13px] font-semibold text-text-primary block mb-1">{label}</label>
-      {children}
-    </div>
-  );
-}
-
-function Input({ value, onChange, placeholder, type = 'text' }: { value: string; onChange: (v: string) => void; placeholder?: string; type?: string }) {
-  return <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none" />;
-}
-
-function Select({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
-  return (
-    <select value={value} onChange={e => onChange(e.target.value)} className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none">
-      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
-  );
-}
+/* ─── Form Field (from shared components/form/FormHelpers) ─── */
+import { Field, Input, Select } from '@/components/form/FormHelpers';
 
 function SaveButton({ onClick, loading }: { onClick: () => void; loading?: boolean }) {
   return (
@@ -335,6 +323,13 @@ function ProfilePageInner() {
 
   // Edit form states
   const [editForm, setEditForm] = useState<any>({});
+  const editFormSnapshot = useRef<any>({});
+
+  // Compute dirty by comparing current form to snapshot
+  const isFormDirty = () => {
+    const snap = editFormSnapshot.current;
+    return JSON.stringify(editForm) !== JSON.stringify(snap);
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -356,8 +351,10 @@ function ProfilePageInner() {
   }, []);
 
   const openEdit = (section: string, data?: any) => {
+    const formData = data || {};
+    editFormSnapshot.current = JSON.parse(JSON.stringify(formData));
     setEditing(section);
-    setEditForm(data || {});
+    setEditForm(formData);
   };
 
   const saveProfile = async (data: Record<string, any>) => {

@@ -111,8 +111,8 @@ export default function RightPanel() {
         <h4 className="text-[12px] font-bold uppercase tracking-wider text-text-secondary">Quick Stats</h4>
         {[
           { label: 'Matched', value: scholarshipCount, icon: 'school', href: '/scholarships' },
-          { label: 'Saved', value: savedCount, icon: 'bookmark', href: '/saved' },
-          { label: 'Applied', value: appliedCount, icon: 'send', href: '/saved' },
+          { label: 'Saved', value: savedCount, icon: 'bookmark', href: '/scholarships' },
+          { label: 'Applied', value: appliedCount, icon: 'send', href: '/scholarships' },
         ].map((stat) => (
           <button
             key={stat.label}

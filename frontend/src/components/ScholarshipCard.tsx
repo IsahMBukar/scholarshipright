@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import type { Scholarship } from '@/services/api';
+import { daysUntil, ScholarshipLogo, DegreeChips, FundingBadge } from '@/components/scholarship/ScholarshipAtoms';
 
 interface ScholarshipCardProps {
   scholarship: Scholarship;
@@ -40,9 +41,7 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved, savedSta
   const realScore = showMatchScore && scholarship.match_score != null
     ? scholarship.match_score
     : null;
-  const daysUntilDeadline = Math.max(0, Math.ceil(
-    (new Date(scholarship.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-  ));
+  const daysUntilDeadline = daysUntil(scholarship.deadline);
   const isUrgent = daysUntilDeadline <= 30;
 
   return (
@@ -53,13 +52,7 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved, savedSta
         {/* Top row: Logo + Verified left | Match label + score right (or profile CTA) */}
         <div className="flex items-center justify-between px-4 pt-4 pb-2">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0 border border-gray-200">
-              {scholarship.logo_url ? (
-                <img src={scholarship.logo_url} alt="" className="w-7 h-7 object-contain" />
-              ) : (
-                <span className="material-symbols-outlined text-[22px] text-text-secondary">school</span>
-              )}
-            </div>
+            <ScholarshipLogo scholarship={scholarship} size="md" />
             {scholarship.is_verified && (
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-[8px] bg-primary-light text-[12px] font-medium text-primary">
                 <span className="material-symbols-outlined text-[13px]">verified</span>
@@ -165,6 +158,7 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved, savedSta
           <a
             href={scholarship.official_url}
             target="_blank"
+            rel="noopener noreferrer"
             onClick={() => onApplyNow?.(scholarship.id)}
             className="px-5 py-2 bg-primary text-white text-[13px] font-semibold rounded-btn hover:brightness-110 transition-all"
           >
@@ -176,13 +170,7 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved, savedSta
       {/* ===== DESKTOP LAYOUT ===== */}
       <div className="hidden md:flex p-6 gap-4">
         {/* Logo */}
-        <div className="flex w-16 h-16 rounded-chip bg-gray-100 items-center justify-center flex-shrink-0">
-          {scholarship.logo_url ? (
-            <img src={scholarship.logo_url} alt="" className="w-10 h-10 object-contain" />
-          ) : (
-            <span className="material-symbols-outlined text-3xl text-text-secondary">school</span>
-          )}
-        </div>
+        <ScholarshipLogo scholarship={scholarship} size="lg" />
 
         <div className="flex-1 min-w-0">
           {/* Status badge */}
@@ -269,6 +257,7 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved, savedSta
           <a
             href={scholarship.official_url}
             target="_blank"
+            rel="noopener noreferrer"
             onClick={() => onApplyNow?.(scholarship.id)}
             className="w-full text-center py-2 bg-primary text-white text-[13px] font-semibold rounded-btn hover:brightness-110 transition-all"
           >
@@ -277,6 +266,7 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved, savedSta
           <button
             onClick={() => onSave?.(scholarship.id)}
             className="w-full text-center py-1.5 border border-gray-600 text-gray-300 text-[12px] font-medium rounded-btn hover:border-primary hover:text-primary transition-all"
+            aria-label={isSaved ? 'Remove from saved' : 'Save this scholarship'}
           >
             {isSaved ? '★ Saved' : '☆ Save'}
           </button>

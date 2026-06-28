@@ -65,7 +65,7 @@ export default function AuthCallbackPage() {
           <p className="text-sm text-red-600 mb-4">{error}</p>
           <button
             onClick={() => router.push('/login')}
-            className="text-primary-readable font-semibold text-sm hover:underline"
+            className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-btn hover:brightness-110 transition-all"
           >
             ← Back to sign in
           </button>

@@ -63,15 +63,15 @@ export default function LandingShell({ children }: { children: React.ReactNode }
                 AI matching + advisor for fully funded scholarships. Stop scrolling lists. Start getting matched.
               </p>
               <div className="flex gap-2">
-                <a href="#" className="w-9 h-9 rounded-full border border-[#f0ebe0] flex items-center justify-center text-gray-500 hover:border-[#f5b942] hover:text-[#d4972e] transition text-sm font-bold" aria-label="X">
+                <span className="w-9 h-9 rounded-full border border-[#f0ebe0] flex items-center justify-center text-gray-400 opacity-50 cursor-not-allowed text-sm font-bold" title="Coming soon" aria-label="X (coming soon)">
                   𝕏
-                </a>
-                <a href="#" className="w-9 h-9 rounded-full border border-[#f0ebe0] flex items-center justify-center text-gray-500 hover:border-[#f5b942] hover:text-[#d4972e] transition text-xs font-bold" aria-label="LinkedIn">
+                </span>
+                <span className="w-9 h-9 rounded-full border border-[#f0ebe0] flex items-center justify-center text-gray-400 opacity-50 cursor-not-allowed text-xs font-bold" title="Coming soon" aria-label="LinkedIn (coming soon)">
                   in
-                </a>
-                <a href="#" className="w-9 h-9 rounded-full border border-[#f0ebe0] flex items-center justify-center text-gray-500 hover:border-[#f5b942] hover:text-[#d4972e] transition text-sm" aria-label="Instagram">
+                </span>
+                <span className="w-9 h-9 rounded-full border border-[#f0ebe0] flex items-center justify-center text-gray-400 opacity-50 cursor-not-allowed text-sm" title="Coming soon" aria-label="Instagram (coming soon)">
                   ◯
-                </a>
+                </span>
               </div>
             </div>
             {/* Product */}
@@ -90,7 +90,7 @@ export default function LandingShell({ children }: { children: React.ReactNode }
               <ul className="space-y-2.5">
                 <li><Link href="/scholarships/category/fully-funded" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Scholarship database</Link></li>
                 <li><Link href="/faq" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">FAQ</Link></li>
-                <li><a href="#" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Blog</a></li>
+                <li><span className="text-sm text-gray-400 cursor-not-allowed" title="Coming soon">Blog</span></li>
                 <li><Link href="/faq" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Help center</Link></li>
               </ul>
             </div>

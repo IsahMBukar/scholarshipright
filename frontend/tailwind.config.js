@@ -11,6 +11,8 @@ module.exports = {
         'text-primary': '#1a1a1a',
         'text-secondary': '#4a4a4a',
         'text-inverse': '#ffffff',
+        'surface-app': '#f3f4f6',   /* neutral utility surface (auth, dashboard) */
+        'surface-brand': '#fdfbf7', /* warm brand surface (landing, marketing) */
       },
       borderRadius: {
         card: '24px',

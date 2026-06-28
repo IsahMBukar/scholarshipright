@@ -8,6 +8,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth, type PendingAction } from '@/hooks/useAuth';
 import GoogleButton from '@/components/auth/GoogleButton';
+import PasswordField from '@/components/auth/PasswordField';
+import Button from '@/components/admin/ui/Button';
 
 export default function AuthModal() {
   const { pendingAction, setPendingAction, login, refresh } = useAuth();
@@ -138,51 +140,51 @@ export default function AuthModal() {
 
           {mode === 'signup' && (
             <div>
-              <label className="text-[12px] font-semibold text-text-secondary block mb-1">Full Name</label>
+              <label htmlFor="auth-fullname" className="text-[12px] font-semibold text-text-secondary block mb-1">Full Name</label>
               <input
+                id="auth-fullname"
+                name="full_name"
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="Your name"
-                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none"
+                className="w-full h-10 px-3 bg-gray-50 border border-gray-200 rounded-btn text-sm text-text-primary focus:ring-2 focus:ring-primary/40 focus:border-primary outline-none"
                 required
               />
             </div>
           )}
           <div>
-            <label className="text-[12px] font-semibold text-text-secondary block mb-1">Email</label>
+            <label htmlFor="auth-email" className="text-[12px] font-semibold text-text-secondary block mb-1">Email</label>
             <input
+              id="auth-email"
+              name="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
-              className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none"
+              className="w-full h-10 px-3 bg-gray-50 border border-gray-200 rounded-btn text-sm text-text-primary focus:ring-2 focus:ring-primary/40 focus:border-primary outline-none"
               required
               autoFocus
             />
           </div>
-          <div>
-            <label className="text-[12px] font-semibold text-text-secondary block mb-1">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none"
-              required
-              minLength={8}
-            />
-          </div>
-          <button
+          <PasswordField
+            id="auth-password"
+            label="Password"
+            value={password}
+            onChange={setPassword}
+            placeholder="••••••••"
+            autoComplete="current-password"
+            required
+          />
+          <Button
             type="submit"
-            disabled={submitting}
-            className="w-full py-3 bg-primary text-white text-[14px] font-bold rounded-btn hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            variant="primary"
+            size="md"
+            loading={submitting}
+            className="w-full"
           >
-            {submitting ? (
-              <span className="material-symbols-outlined text-[18px] animate-spin">refresh</span>
-            ) : null}
             {mode === 'login' ? 'Sign in' : 'Create account'}
-          </button>
+          </Button>
         </form>
 
         {/* Toggle mode */}

@@ -26,6 +26,7 @@ export default function ScholarshipsPage() {
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [savedStatuses, setSavedStatuses] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -58,8 +59,10 @@ export default function ScholarshipsPage() {
       const schData = await fetchScholarships(params);
       setScholarships(schData.items || []);
       setTotal(schData.total || 0);
+      setError(null);
     } catch (err) {
       console.error('Failed to load scholarships:', err);
+      setError('Failed to load scholarships. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -221,7 +224,7 @@ export default function ScholarshipsPage() {
           <div className="absolute top-0 left-0 w-[280px] h-full bg-white shadow-xl animate-slide-in-left">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <img src="/images/logo-light.jpg" alt="ScholarshipRight" className="h-8 w-8 rounded-lg object-contain" />
-              <button onClick={() => setMenuOpen(false)} className="w-10 h-10 flex items-center justify-center">
+              <button onClick={() => setMenuOpen(false)} className="w-10 h-10 flex items-center justify-center" aria-label="Close menu">
                 <span className="material-symbols-outlined text-[24px]">close</span>
               </button>
             </div>
@@ -307,6 +310,20 @@ export default function ScholarshipsPage() {
             <p className="text-[12px] text-text-secondary">
               <strong className="text-text-primary">{total}</strong> scholarship{total !== 1 ? 's' : ''} found
             </p>
+          </div>
+        )}
+
+        {/* Error state */}
+        {error && (
+          <div className="flex items-center gap-3 p-4 mb-4 bg-red-50 border border-red-200 rounded-2xl">
+            <span className="material-symbols-outlined text-red-500 text-[20px]">error</span>
+            <p className="flex-1 text-[14px] text-red-700">{error}</p>
+            <button
+              onClick={() => loadScholarships(filters, searchQuery)}
+              className="px-3 py-1.5 bg-red-600 text-white text-[12px] font-bold rounded-btn hover:bg-red-700 transition-colors"
+            >
+              Try again
+            </button>
           </div>
         )}
 

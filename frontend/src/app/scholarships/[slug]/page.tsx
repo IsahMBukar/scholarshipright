@@ -246,8 +246,9 @@ export default function ScholarshipDetailPage() {
         {/* 1. STICKY TOP ACTION & META-BAR */}
         <div className="sticky top-0 z-40 bg-white border-b border-gray-100">
           <div className="flex justify-between items-center px-4 md:px-8 py-3">
-            <Link href="/scholarships" className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-100 transition">
-              <span className="material-symbols-outlined text-[22px] text-text-secondary">arrow_back</span>
+            <Link href="/scholarships" className="flex items-center gap-2 px-3 py-2 rounded-full hover:bg-gray-100 transition">
+              <span className="material-symbols-outlined text-[20px] text-text-secondary">arrow_back</span>
+              <span className="hidden sm:inline text-[13px] text-text-secondary font-medium">Back to scholarships</span>
             </Link>
             <div className="flex items-center gap-2">
               {/* Status badge if saved */}
@@ -526,7 +527,7 @@ export default function ScholarshipDetailPage() {
                     </div>
                     <div className="text-center">
                       <p className="text-sm font-semibold text-text-primary">Calculating your match…</p>
-                      <p className="text-[11px] text-text-secondary mt-1">We're matching this scholarship to your profile.</p>
+                      <p className="text-[11px] text-text-secondary mt-1">We&apos;re matching this scholarship to your profile.</p>
                     </div>
                   </div>
                 )}

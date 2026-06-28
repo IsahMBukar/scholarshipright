@@ -166,6 +166,7 @@ function ResumePageInner() {
   }
 
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   async function handleExportPdf(mode: 'resume' | 'cv') {
     if (!selectedResume) return;
     setExporting(true);
@@ -173,7 +174,7 @@ function ResumePageInner() {
       await exportResumePdf(selectedResume.id, mode);
     } catch (err) {
       console.error('PDF export failed:', err);
-      alert('Failed to export PDF. Please try again.');
+      setExportError('Failed to export PDF. Please try again.');
     } finally {
       setExporting(false);
     }
@@ -521,6 +522,17 @@ function ResumePageInner() {
                 </button>
               </div>
             </div>
+
+            {/* Export error banner */}
+            {exportError && (
+              <div className="flex items-center gap-3 p-4 bg-red-50 rounded-card border border-red-200 mb-4">
+                <span className="material-symbols-outlined text-[20px] text-red-500">error</span>
+                <p className="flex-1 text-[13px] text-red-700">{exportError}</p>
+                <button onClick={() => setExportError(null)} className="text-red-500 hover:text-red-700">
+                  <span className="material-symbols-outlined text-[18px]">close</span>
+                </button>
+              </div>
+            )}
 
             {/* Analyzing banner with progress */}
             {analyzing && (

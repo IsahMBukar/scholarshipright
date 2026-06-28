@@ -51,8 +51,8 @@ export default function SaveButton({ scholarshipId, size = 'md' }: SaveButtonPro
       disabled={isLoading}
       className={`${sizeClasses} rounded-full flex items-center justify-center transition-all ${
         isSaved
-          ? 'bg-primary-container text-on-primary-container'
-          : 'bg-surface-container text-on-surface-variant hover:bg-primary-light hover:text-primary'
+          ? 'bg-primary/20 text-primary'
+          : 'bg-gray-100 text-gray-600 hover:bg-primary/10 hover:text-primary'
       } ${isLoading ? 'opacity-50' : ''}`}
       title={isSaved ? 'Remove from saved' : 'Save scholarship'}
     >
