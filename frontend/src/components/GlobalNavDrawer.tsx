@@ -36,8 +36,9 @@ export default function GlobalNavDrawer({ open, onClose }: { open: boolean; onCl
                     ? 'bg-primary/10 text-primary'
                     : 'text-text-secondary hover:bg-gray-100 hover:text-text-primary'}`}
               >
-                <span className="material-symbols-outlined text-[22px]">{item.icon}</span>
-                {item.label}
+                <span className={`material-symbols-outlined text-[22px] ${item.soon ? 'opacity-40' : ''}`}>{item.icon}</span>
+                <span className={item.soon ? 'opacity-50' : ''}>{item.label}</span>
+                {item.soon && <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-text-secondary">Soon</span>}
               </a>
             );
           })}
