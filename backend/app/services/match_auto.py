@@ -212,6 +212,8 @@ async def recompute_matches_for_user(user_id: UUID, reason: str = REASON_MANUAL)
                                         "AMOUNT": getattr(sch, "amount", "See details") or "See details",
                                         "DEADLINE": deadline_str,
                                         "COUNTRY": getattr(sch, "host_country", "") or "",
+                                        "USER_ID": str(user_id),
+                                        "UNSUBSCRIBE_CATEGORY": "new_matches",
                                     },
                                     subject=f"New match: {sch.name} ({round(new_score)}%)",
                                 )

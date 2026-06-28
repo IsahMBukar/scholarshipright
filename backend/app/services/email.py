@@ -75,6 +75,7 @@ def send_email_sync(
     subject: str,
     html: str,
     from_name: str = FROM_NAME,
+    unsubscribe_url: str | None = None,
 ) -> dict:
     """Send an email synchronously via OquMail HTTP API.
 
@@ -95,6 +96,13 @@ def send_email_sync(
         "text": _html_to_plain(html),
         "fromName": from_name,
     }
+
+    # List-Unsubscribe header (Gmail/Outlook one-click unsubscribe)
+    if unsubscribe_url:
+        payload["headers"] = {
+            "List-Unsubscribe": f"<{unsubscribe_url}>",
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        }
 
     req = urllib.request.Request(
         OQUMAIL_API,
@@ -130,11 +138,12 @@ async def send_email(
     subject: str,
     html: str,
     from_name: str = FROM_NAME,
+    unsubscribe_url: str | None = None,
 ) -> dict:
     """Send an email (async wrapper — runs sync send in thread pool)."""
     import asyncio
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, lambda: send_email_sync(to, subject, html, from_name))
+    return await loop.run_in_executor(None, lambda: send_email_sync(to, subject, html, from_name, unsubscribe_url))
 
 
 async def send_templated_email(
@@ -156,6 +165,8 @@ async def send_templated_email(
     # Auto-inject common variables
     variables.setdefault("YEAR", str(datetime.datetime.now().year))
     variables.setdefault("RECIPIENT_NAME", "Student")
+    from app.core.config import get_settings
+    variables.setdefault("FRONTEND_URL", get_settings().frontend_url.rstrip("/"))
 
     html = _load_template(template)
     if not html:
@@ -164,11 +175,15 @@ async def send_templated_email(
     html = _fill_template(html, variables)
 
     # Auto-inject unsubscribe URL if template has the placeholder
+    unsub_url = None
     if "{{UNSUBSCRIBE_URL}}" in html and "UNSUBSCRIBE_URL" not in variables:
         user_id = variables.get("USER_ID", "")
         unsub_category = variables.get("UNSUBSCRIBE_CATEGORY", "marketing")
         if user_id:
             from app.api.unsubscribe import make_unsubscribe_url
-            html = html.replace("{{UNSUBSCRIBE_URL}}", make_unsubscribe_url(user_id, unsub_category))
+            unsub_url = make_unsubscribe_url(user_id, unsub_category)
+            html = html.replace("{{UNSUBSCRIBE_URL}}", unsub_url)
+    elif "UNSUBSCRIBE_URL" in variables:
+        unsub_url = variables["UNSUBSCRIBE_URL"]
 
-    return await send_email(to, subject, html, from_name)
+    return await send_email(to, subject, html, from_name, unsubscribe_url=unsub_url)

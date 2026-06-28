@@ -99,6 +99,8 @@ async def send_weekly_digests():
                     variables={
                         "RECIPIENT_NAME": user.full_name or "Student",
                         "MATCH_CARDS": match_cards_html,
+                        "USER_ID": str(user.id),
+                        "UNSUBSCRIBE_CATEGORY": "weekly_digest",
                     },
                     subject="Your weekly scholarship matches",
                 )

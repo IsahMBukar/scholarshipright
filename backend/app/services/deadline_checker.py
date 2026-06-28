@@ -106,6 +106,8 @@ async def check_deadlines():
                                     "URGENCY_COLOR": color,
                                     "URGENCY_BADGE": badge,
                                     "URGENCY_MESSAGE": msg,
+                                    "USER_ID": str(user.id),
+                                    "UNSUBSCRIBE_CATEGORY": "deadline_reminders",
                                 },
                                 subject=f"{badge}: {scholarship.name}",
                             )

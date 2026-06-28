@@ -148,7 +148,11 @@ async def register(body: RegisterRequest, response: Response, db: AsyncSession =
     await send_templated_email(
         to=email,
         template="welcome",
-        variables={"RECIPIENT_NAME": body.full_name.strip() or "Student"},
+        variables={
+            "RECIPIENT_NAME": body.full_name.strip() or "Student",
+            "USER_ID": str(user.id),
+            "UNSUBSCRIBE_CATEGORY": "marketing",
+        },
         subject="Welcome to ScholarshipRight!",
     )
 
@@ -821,7 +825,11 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)):
         await send_templated_email(
             to=email,
             template="welcome",
-            variables={"RECIPIENT_NAME": name or "Student"},
+            variables={
+                "RECIPIENT_NAME": name or "Student",
+                "USER_ID": str(user.id),
+                "UNSUBSCRIBE_CATEGORY": "marketing",
+            },
             subject="Welcome to ScholarshipRight!",
         )
 
