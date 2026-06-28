@@ -192,14 +192,12 @@ async def recompute_matches_for_user(user_id: UUID, reason: str = REASON_MANUAL)
             # Send new-match emails (after commit, fire-and-forget)
             if notif_new > 0:
                 from app.services.email import send_templated_email
-                from app.models.user import User
-                from app.models.scholarship import Scholarship as SchModel
                 user_row = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
                 if user_row:
                     for sch_id, new_score in new_scores.items():
                         old_score = old_scores.get(sch_id)
                         if old_score is None and is_new_match(new_score):
-                            sch = (await db.execute(select(SchModel).where(SchModel.id == sch_id))).scalar_one_or_none()
+                            sch = (await db.execute(select(Scholarship).where(Scholarship.id == sch_id))).scalar_one_or_none()
                             if sch:
                                 deadline_str = sch.deadline.strftime("%b %d, %Y") if sch.deadline else "Open"
                                 await send_templated_email(
