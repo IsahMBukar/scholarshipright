@@ -15,7 +15,6 @@ import type { NextRequest } from 'next/server';
 const PROTECTED_ROUTES = [
   '/resume',
   '/profile',
-  '/saved',
   '/settings',
   '/chat',
   '/coaching',

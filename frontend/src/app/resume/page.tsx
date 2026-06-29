@@ -29,9 +29,7 @@ export default function ResumePage() {
       fallback={
         <AppLayout showRightPanel={false}>
           <PageHeader title="RESUME" />
-          <div className="min-h-[60vh] flex items-center justify-center text-text-secondary text-sm">
-            Loading…
-          </div>
+          <ResumeListSkeleton />
         </AppLayout>
       }
     >

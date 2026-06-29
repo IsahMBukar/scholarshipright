@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams, useRouter } from 'next/navigation';
 import AppLayout from '@/components/AppLayout';
 import ScholarshipCard from '@/components/ScholarshipCard';
 import FilterPanel, { EMPTY_FILTERS, activeFilterCount, type FilterState } from '@/components/FilterPanel';
@@ -22,7 +22,11 @@ import { NAV_ITEMS } from '@/lib/nav-items';
 const TABS = ['Recommended', 'Saved', 'Applied', 'External'];
 
 export default function ScholarshipsListClient() {
-  const [activeTab, setActiveTab] = useState('Recommended');
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const tabFromUrl = searchParams.get('tab');
+  const initialTab = TABS.find(t => t.toLowerCase() === tabFromUrl?.toLowerCase()) || 'Recommended';
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [scholarships, setScholarships] = useState<Scholarship[]>([]);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [savedStatuses, setSavedStatuses] = useState<Record<string, string>>({});
@@ -219,7 +223,13 @@ export default function ScholarshipsListClient() {
             {TABS.map((tab) => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => {
+                  setActiveTab(tab);
+                  const params = new URLSearchParams(searchParams.toString());
+                  if (tab === 'Recommended') params.delete('tab');
+                  else params.set('tab', tab.toLowerCase());
+                  router.replace(`/scholarships${params.toString() ? '?' + params.toString() : ''}`, { scroll: false });
+                }}
                 className={`text-[13px] md:text-[15px] font-semibold pb-3 transition-colors relative whitespace-nowrap
                   ${activeTab === tab
                     ? 'text-text-primary border-b-[3px] border-black'
@@ -258,7 +268,7 @@ export default function ScholarshipsListClient() {
           <FilterPanel
             filters={filters}
             onChange={setFilters}
-            resultCount={total}
+            resultCount={activeTab === 'Saved' || activeTab === 'Applied' ? displayScholarships.length : total}
           />
         </div>
       </div>

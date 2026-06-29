@@ -183,8 +183,9 @@ export default function LandingClient() {
 
   if (checking) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#fdfbf7]">
-        <div className="animate-pulse text-gray-500 font-medium text-sm">Loading…</div>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#fdfbf7]">
+        <img src="/images/logo-light.jpg" alt="ScholarshipRight" className="w-12 h-12 rounded-xl mb-4 animate-pulse" />
+        <div className="w-5 h-5 border-2 border-[#f5b942]/30 border-t-[#f5b942] rounded-full animate-spin" />
       </div>
     );
   }

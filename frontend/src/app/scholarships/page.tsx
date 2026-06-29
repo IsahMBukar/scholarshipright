@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import ScholarshipsListClient from './ScholarshipsListClient';
 
@@ -24,5 +25,9 @@ export const metadata: Metadata = {
 };
 
 export default function ScholarshipsPage() {
-  return <ScholarshipsListClient />;
+  return (
+    <Suspense fallback={null}>
+      <ScholarshipsListClient />
+    </Suspense>
+  );
 }

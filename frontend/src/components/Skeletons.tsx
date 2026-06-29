@@ -140,28 +140,28 @@ export function ScholarshipDetailSkeleton() {
 export function ResumeListSkeleton({ count = 3 }: { count?: number }) {
   return (
     <div className="px-4 md:px-6 py-6 max-w-[900px]">
-      {/* Page header */}
-      <div className="flex items-center justify-between mb-6">
+      {/* Page header — stacked on mobile, row on desktop */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div className="space-y-2">
           <Pulse className="w-36 h-7 rounded" />
           <Pulse className="w-56 h-4 rounded" />
         </div>
-        <Pulse className="w-28 h-10 rounded-btn" />
+        <Pulse className="w-full sm:w-28 h-10 rounded-btn" />
       </div>
 
       {/* Resume cards */}
       <div className="flex flex-col gap-3">
         {Array.from({ length: count }).map((_, i) => (
           <div key={i} className="bg-white rounded-card border border-gray-200 p-4 md:p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1 space-y-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div className="flex-1 min-w-0 space-y-2.5">
                 {/* Title + badges */}
                 <div className="flex items-center gap-2">
                   <Pulse className="w-40 h-5 rounded" />
                   <Pulse className="w-16 h-5 rounded-[6px]" />
                 </div>
                 {/* Subtitle */}
-                <Pulse className="w-64 h-3.5 rounded" />
+                <Pulse className="w-64 max-w-full h-3.5 rounded" />
                 {/* Score bar */}
                 <div className="flex items-center gap-2">
                   <Pulse className="w-24 h-1.5 rounded-full" />
@@ -173,11 +173,11 @@ export function ResumeListSkeleton({ count = 3 }: { count?: number }) {
                   <Pulse className="w-16 h-5 rounded-[6px]" />
                 </div>
               </div>
-              {/* Action buttons */}
-              <div className="flex flex-col gap-2 flex-shrink-0">
-                <Pulse className="w-14 h-8 rounded-btn" />
-                <Pulse className="w-20 h-8 rounded-btn" />
-                <Pulse className="w-14 h-8 rounded-btn" />
+              {/* Action buttons — horizontal on mobile, vertical on desktop */}
+              <div className="flex flex-row sm:flex-col gap-2 flex-shrink-0">
+                <Pulse className="flex-1 sm:flex-none w-14 h-8 rounded-btn" />
+                <Pulse className="flex-1 sm:flex-none w-20 h-8 rounded-btn" />
+                <Pulse className="flex-1 sm:flex-none w-14 h-8 rounded-btn" />
               </div>
             </div>
           </div>
