@@ -29,6 +29,7 @@ from app.models.user import User
 from app.models.profile import Profile
 from app.models.resume import Resume
 from app.services.match_engine import compute_match_score
+from app.services.eligibility import passes_country_gate
 from app.services.notifications import (
     emit_match_new,
     emit_match_improved,
@@ -137,8 +138,21 @@ async def recompute_matches_for_user(user_id: UUID, reason: str = REASON_MANUAL)
             await db.execute(delete(MatchScore).where(MatchScore.user_id == user_id))
 
             computed = 0
+            skipped_gate = 0
             new_scores: dict[UUID, float] = {}
             for sch in scholarships:
+                # Country eligibility is a boolean gate — evaluated BEFORE
+                # soft fit scoring. If user fails the gate, skip entirely.
+                if not passes_country_gate(
+                    user_nationality=getattr(profile, "nationality_code", None),
+                    user_residency=getattr(profile, "residency_code", None),
+                    eligibility_basis=getattr(sch, "eligibility_basis", "either") or "either",
+                    resolved_countries=list(getattr(sch, "resolved_countries", []) or []),
+                    eligibility_unresolved=bool(getattr(sch, "eligibility_unresolved", False)),
+                ):
+                    skipped_gate += 1
+                    continue
+
                 result = compute_match_score(profile, sch, resume=resume)
                 if result["score"] > 0:
                     db.add(MatchScore(
@@ -217,13 +231,14 @@ async def recompute_matches_for_user(user_id: UUID, reason: str = REASON_MANUAL)
                                 )
 
             logger.info(
-                "recompute ok user=%s reason=%s matches=%s new_notifs=%s improved_notifs=%s",
-                user_id, reason, computed, notif_new, notif_improved,
+                "recompute ok user=%s reason=%s matches=%s skipped_gate=%s new_notifs=%s improved_notifs=%s",
+                user_id, reason, computed, skipped_gate, notif_new, notif_improved,
             )
             return {
                 "status": "computed",
                 "reason": reason,
                 "matches": computed,
+                "skipped_gate": skipped_gate,
                 "total_scholarships": len(scholarships),
                 "resume_used": bool(resume),
                 "notifs_new": notif_new,

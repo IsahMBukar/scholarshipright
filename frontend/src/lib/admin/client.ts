@@ -20,7 +20,7 @@ export class AdminApiError extends Error {
 }
 
 interface RequestOpts {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   body?: unknown;
   params?: Record<string, string | number | boolean | undefined | null> | object;
   signal?: AbortSignal;

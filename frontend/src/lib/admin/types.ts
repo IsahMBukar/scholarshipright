@@ -337,3 +337,48 @@ export interface AdminInviteResponse {
   expires_at: string;
   created_at: string;
 }
+
+// ── Country Groups ────────────────────────────────────────────────
+
+export interface CountryGroupMember {
+  code: string;
+  name: string;
+}
+
+export interface AdminCountryGroup {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  source_url: string | null;
+  source_date: string | null;
+  status: 'active' | 'deprecated';
+  member_count: number;
+  members: CountryGroupMember[];
+  scholarship_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GroupCreateRequest {
+  code: string;
+  name: string;
+  description?: string;
+  source_url?: string;
+  source_date?: string;
+  members: string[]; // ISO alpha-2 codes
+}
+
+export interface GroupUpdateRequest {
+  name?: string;
+  description?: string;
+  source_url?: string;
+  source_date?: string;
+  members?: string[]; // ISO alpha-2 codes (replaces current)
+}
+
+export interface CountryOption {
+  code: string;
+  name: string;
+  iso3?: string;
+}

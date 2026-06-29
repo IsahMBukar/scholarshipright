@@ -16,6 +16,10 @@ import type {
   AdminInviteResponse,
   AdminRole,
   PaginatedResponse,
+  AdminCountryGroup,
+  GroupCreateRequest,
+  GroupUpdateRequest,
+  CountryOption,
 } from './types';
 
 // Re-export common types for callers.
@@ -123,6 +127,53 @@ export const adminApi = {
 
   revokeInvite: (id: string) =>
     adminFetch<{ ok: true }>(`/api/admin/invites/${id}`, { method: 'DELETE' }),
+
+  // Country Groups
+  listGroups: (params: { status?: string; search?: string } = {}) =>
+    adminFetch<{ items: AdminCountryGroup[]; total: number }>('/api/admin/groups', { params }),
+
+  getGroup: (code: string) =>
+    adminFetch<AdminCountryGroup>(`/api/admin/groups/${code}`),
+
+  createGroup: (body: GroupCreateRequest) =>
+    adminFetch<AdminCountryGroup>('/api/admin/groups', {
+      method: 'POST',
+      body,
+    }),
+
+  updateGroup: (code: string, body: GroupUpdateRequest) =>
+    adminFetch<AdminCountryGroup>(`/api/admin/groups/${code}`, {
+      method: 'PUT',
+      body,
+    }),
+
+  deleteGroup: (code: string) =>
+    adminFetch<{ deprecated: boolean }>(`/api/admin/groups/${code}`, {
+      method: 'DELETE',
+    }),
+
+  getGroupUsage: (code: string) =>
+    adminFetch<{ group_code: string; group_name: string; scholarship_count: number; scholarships: any[] }>(
+      `/api/admin/groups/${code}/usage`
+    ),
+
+  // Countries (for pickers)
+  listCountries: (search?: string) =>
+    adminFetch<CountryOption[]>('/api/admin/countries', {
+      params: search ? { search } : {},
+    }),
+
+  // Eligibility preview
+  previewEligibility: (body: {
+    included_groups?: string[];
+    included_countries?: string[];
+    excluded_groups?: string[];
+    excluded_countries?: string[];
+  }) =>
+    adminFetch<{ resolved_count: number; unresolved: boolean; countries: { code: string; name: string }[] }>(
+      '/api/admin/groups/preview',
+      { method: 'POST', body }
+    ),
 };
 
 // ── Admin identity (returned by /api/auth/me) ─────────────────────

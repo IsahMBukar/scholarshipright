@@ -11,6 +11,7 @@ from app.api import admin_overview
 from app.api import admin_users
 from app.api import admin_scholarships
 from app.api import admin_audit
+from app.api import admin_groups
 from app.api import admin_invites as admin_invites_module
 from app.api.notifications import router as notifications_router
 from app.api.preferences import router as preferences_router
@@ -28,6 +29,7 @@ from app.models.profile import ensure_profile_schema_columns
 from app.models.scholarship import (
     ensure_scholarship_schema_columns,
     ensure_required_documents_schema_columns,
+    ensure_eligibility_schema_columns,
 )
 
 settings = get_settings()
@@ -106,6 +108,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:  # noqa: BLE001
         logger.exception("ensure_notification_preference_columns failed: %s", e)
 
+    # Startup: ensure eligibility system tables + columns exist (idempotent).
+    # Creates countries, groups, group_members tables and seeds initial data.
+    try:
+        await ensure_eligibility_schema_columns()
+    except Exception as e:  # noqa: BLE001
+        logger.exception("ensure_eligibility_schema_columns failed: %s", e)
+
     # Startup: start deadline checker in background
     deadline_task = asyncio.create_task(deadline_checker_loop())
     # Startup: start weekly digest in background
@@ -148,6 +157,7 @@ app.include_router(admin_overview.router, prefix="/api/admin", tags=["admin"])
 app.include_router(admin_users.router, prefix="/api/admin", tags=["admin"])
 app.include_router(admin_scholarships.router, prefix="/api/admin", tags=["admin"])
 app.include_router(admin_audit.router, prefix="/api/admin", tags=["admin"])
+app.include_router(admin_groups.router, prefix="/api/admin", tags=["admin"])
 # admin_invites has both /api/admin/invites/* AND /api/auth/accept-invite
 # so we mount each sub-router with the right prefix.
 app.include_router(admin_invites_module.admin_invites_router, prefix="/api/admin", tags=["admin"])

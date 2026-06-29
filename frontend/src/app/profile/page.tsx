@@ -8,6 +8,7 @@ import { ProfileSkeleton } from '@/components/Skeletons';
 import OnboardingProgress from '@/components/OnboardingProgress';
 import { fetchResumes, fetchProfile, createOrUpdateProfile, updateResume, createManualResume } from '@/services/api';
 import type { Profile, Resume } from '@/services/api';
+import { COUNTRY_NAMES } from '@/data/countries';
 
 import {
   getMissingCriticalFields,
@@ -17,7 +18,7 @@ import {
 
 const DEGREE_OPTIONS = ['bachelor', 'master', 'phd'];
 const CURRENT_EDUCATION_OPTIONS = ['high_school', 'bachelor', 'master', 'phd'];
-const COUNTRIES = ['Nigeria', 'Ghana', 'Kenya', 'South Africa', 'Ethiopia', 'Tanzania', 'Uganda', 'Egypt', 'Morocco', 'Senegal', 'Cameroon', 'Rwanda', 'Other'];
+const COUNTRIES = COUNTRY_NAMES;
 const FIELDS = ['computer_science', 'engineering', 'medicine', 'business', 'law', 'natural_sciences', 'social_sciences', 'arts', 'education', 'agriculture', 'public_health', 'economics', 'mathematics', 'physics', 'chemistry', 'biology'];
 const LANGUAGES_LIST = ['English', 'French', 'Arabic', 'Portuguese', 'Swahili', 'Spanish', 'German', 'Japanese', 'Chinese', 'Korean', 'Turkish'];
 const TARGET_COUNTRIES = ['Germany', 'United Kingdom', 'United States', 'Canada', 'Japan', 'Australia', 'France', 'Sweden', 'Netherlands', 'Switzerland', 'South Korea', 'China', 'Turkey', 'Belgium'];

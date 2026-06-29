@@ -127,6 +127,17 @@ class AdminScholarshipResponse(BaseModel):
     fields_of_study: List[str] = []
     eligible_nationalities: List[str] = []
     eligible_regions: List[str] = []
+    # ── Structured eligibility ──
+    eligibility_display: Optional[str] = None
+    eligibility_basis: str = "either"
+    included_groups: List[str] = []
+    included_countries: List[str] = []
+    excluded_groups: List[str] = []
+    excluded_countries: List[str] = []
+    resolved_countries: List[str] = []
+    eligibility_unresolved: bool = False
+    groups_resolved_at: Optional[datetime] = None
+    # ── end eligibility ──
     funding_type: str
     covers_tuition: bool = True
     covers_living: bool = False
@@ -200,6 +211,14 @@ class AdminScholarshipCreate(BaseModel):
     fields_of_study: Optional[List[str]] = None
     eligible_nationalities: Optional[List[str]] = None
     eligible_regions: Optional[List[str]] = None
+    # ── Structured eligibility ──
+    eligibility_display: Optional[str] = None
+    eligibility_basis: Optional[str] = None  # 'citizenship' | 'residency' | 'either'
+    included_groups: Optional[List[str]] = None
+    included_countries: Optional[List[str]] = None
+    excluded_groups: Optional[List[str]] = None
+    excluded_countries: Optional[List[str]] = None
+    # resolved_countries is computed server-side — never set by client
     covers_tuition: Optional[bool] = None
     covers_living: Optional[bool] = None
     covers_flight: Optional[bool] = None
@@ -254,6 +273,13 @@ class AdminScholarshipPatch(BaseModel):
     fields_of_study: Optional[List[str]] = None
     eligible_nationalities: Optional[List[str]] = None
     eligible_regions: Optional[List[str]] = None
+    # ── Structured eligibility ──
+    eligibility_display: Optional[str] = None
+    eligibility_basis: Optional[str] = None
+    included_groups: Optional[List[str]] = None
+    included_countries: Optional[List[str]] = None
+    excluded_groups: Optional[List[str]] = None
+    excluded_countries: Optional[List[str]] = None
     funding_type: Optional[str] = None
     covers_tuition: Optional[bool] = None
     covers_living: Optional[bool] = None

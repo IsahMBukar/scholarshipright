@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { Profile } from '@/services/api';
+import { COUNTRY_NAMES } from '@/data/countries';
 
 /**
  * ProfileSlide — slide 2 of the onboarding carousel.
@@ -35,12 +36,7 @@ const CURRENT_EDUCATION_OPTIONS = [
   { value: 'phd', label: 'PhD' },
 ];
 
-const COUNTRIES_OF_ORIGIN = [
-  'Nigeria', 'Ghana', 'Kenya', 'South Africa', 'Egypt', 'Ethiopia',
-  'India', 'Pakistan', 'Bangladesh', 'Indonesia', 'Philippines', 'Vietnam',
-  'Brazil', 'Mexico', 'Colombia', 'Argentina',
-  'United States', 'United Kingdom', 'Canada', 'Germany', 'Other',
-];
+const COUNTRIES_OF_ORIGIN = COUNTRY_NAMES;
 
 const TARGET_COUNTRIES = [
   'United States', 'United Kingdom', 'Canada', 'Germany', 'France',

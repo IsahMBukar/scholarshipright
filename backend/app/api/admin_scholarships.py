@@ -42,6 +42,7 @@ from app.services.match_auto import (
     REASON_SCHOLARSHIP_DATA_CHANGED,
     mark_all_users_dirty,
 )
+from app.services.eligibility import resolve_eligibility, resolve_all_scholarships
 
 import logging
 
@@ -51,6 +52,62 @@ logger = logging.getLogger("scholara.admin")
 # Fields that accept date strings (ISO YYYY-MM-DD) in PATCH
 _DATE_FIELDS = {"open_date", "deadline", "program_start_date"}
 _DECIMAL_FIELDS = {"min_ielts_score", "min_cgpa"}
+
+# Eligibility fields that can trigger a re-resolution
+_ELIGIBILITY_FIELDS = {
+    "eligibility_display", "eligibility_basis",
+    "included_groups", "included_countries",
+    "excluded_groups", "excluded_countries",
+}
+
+
+async def _resolve_scholarship_eligibility(db: AsyncSession, sch: Scholarship) -> None:
+    """Run the eligibility resolver on a scholarship and persist the results.
+
+    Called after create and after any patch that touches eligibility fields.
+    Does nothing if the scholarship has no structured eligibility data (all
+    arrays empty + no display text).
+    """
+    inc_groups = list(sch.included_groups or [])
+    inc_countries = list(sch.included_countries or [])
+    exc_groups = list(sch.excluded_groups or [])
+    exc_countries = list(sch.excluded_countries or [])
+
+    # If there's display text but no structured data, mark as unresolved
+    if not inc_groups and not inc_countries and not exc_groups and not exc_countries:
+        if sch.eligibility_display:
+            sch.eligibility_unresolved = True
+            sch.resolved_countries = []
+            sch.groups_resolved_at = None
+        else:
+            # No eligibility data at all — open to all (resolved = empty = all)
+            sch.resolved_countries = []
+            sch.eligibility_unresolved = False
+            from datetime import datetime, timezone
+            sch.groups_resolved_at = datetime.now(timezone.utc)
+        await db.commit()
+        await db.refresh(sch)
+        return
+
+    resolved, unresolved = await resolve_eligibility(
+        included_groups=inc_groups,
+        included_countries=inc_countries,
+        excluded_groups=exc_groups,
+        excluded_countries=exc_countries,
+        db=db,
+    )
+
+    sch.resolved_countries = resolved
+    sch.eligibility_unresolved = unresolved
+    from datetime import datetime, timezone
+    sch.groups_resolved_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(sch)
+
+    logger.info(
+        "Resolved eligibility for scholarship %s: %d countries, unresolved=%s",
+        sch.id, len(resolved), unresolved,
+    )
 
 
 def _coerce_patch(patch_dict: dict) -> tuple[dict, list[str]]:
@@ -213,6 +270,9 @@ async def create_scholarship(
         ) from e
     await db.refresh(s)
 
+    # Resolve eligibility (compute resolved_countries from structured fields)
+    await _resolve_scholarship_eligibility(db, s)
+
     await log_admin_action(
         db,
         admin_id=admin.id,
@@ -272,6 +332,7 @@ async def patch_scholarship(
 
     changes: dict = {}
     is_active_flipped_on = False
+    eligibility_changed = False
     for k, v in coerced.items():
         if not hasattr(s, k):
             continue
@@ -281,12 +342,20 @@ async def patch_scholarship(
             # Detect false→true flip on is_active specifically
             if k == "is_active" and old is False and v is True:
                 is_active_flipped_on = True
+            # Track eligibility field changes
+            if k in _ELIGIBILITY_FIELDS:
+                eligibility_changed = True
             setattr(s, k, v)
 
     if changes:
         s.updated_at = datetime.now(timezone.utc)
         await db.commit()
         await db.refresh(s)
+
+        # Re-resolve eligibility if any eligibility fields changed
+        if eligibility_changed:
+            await _resolve_scholarship_eligibility(db, s)
+
         await log_admin_action(
             db,
             admin_id=admin.id,
@@ -356,3 +425,39 @@ async def delete_scholarship(
     await db.commit()
 
     return {"deleted": True, "id": str(sch_id), "name": name}
+
+
+# ── manual resolve eligibility ─────────────────────────────────────
+
+
+@router.post("/scholarships/{sch_id}/resolve-eligibility", response_model=AdminScholarshipResponse)
+async def resolve_scholarship_eligibility(
+    sch_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """Manually trigger eligibility re-resolution for a single scholarship.
+
+    Debugging/ops use — normally resolution happens automatically on create/edit.
+    """
+    s = (await db.execute(select(Scholarship).where(Scholarship.id == sch_id))).scalar_one_or_none()
+    if not s:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "scholarship_not_found", "user_message": "Scholarship not found."},
+        )
+    await _resolve_scholarship_eligibility(db, s)
+    return AdminScholarshipResponse.model_validate(apply_auto_defaults(s))
+
+
+@router.post("/scholarships/resolve-all-eligibility")
+async def resolve_all_eligibility(
+    _admin: User = Depends(require_super_admin),
+):
+    """Re-resolve eligibility for ALL scholarships.
+
+    Super admin only. Used for backfill after initial migration or bulk
+    group changes.
+    """
+    stats = await resolve_all_scholarships()
+    return stats

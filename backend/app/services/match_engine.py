@@ -488,10 +488,11 @@ def compute_match_score(profile: Any, scholarship: Any, resume: Any = None) -> d
             _as_list(getattr(profile, "target_fields", None)) or _as_list(getattr(profile, "field_of_study", None)),
             _as_list(getattr(scholarship, "fields_of_study", None)),
         ),
-        "country": country_eligibility_score(
-            getattr(profile, "country_of_origin", "") or "",
-            _as_list(getattr(scholarship, "eligible_nationalities", None)),
-        ),
+        # Country eligibility is now a boolean gate (passes_country_gate)
+        # evaluated BEFORE compute_match_score. Scholarships that fail the
+        # gate are skipped entirely and never reach this function. This 0
+        # is a placeholder for breakdown compatibility.
+        "country": 0,
         "degree": degree_match_score(
             getattr(profile, "target_degree", "") or getattr(profile, "degree_level", "") or "",
             _as_list(getattr(scholarship, "degree_levels", None)),
@@ -511,10 +512,9 @@ def compute_match_score(profile: Any, scholarship: Any, resume: Any = None) -> d
 
     total = sum(v for v in bonuses.values() if isinstance(v, (int, float)))
 
-    # Clear ineligibility should still hurt hard, but don't erase all positive evidence.
+    # Hard flags — country gate is no longer here (it's a pass/fail gate
+    # in match_auto before this function is called).
     hard_flags = []
-    if bonuses["country"] <= -25:
-        hard_flags.append("nationality_not_listed")
     if bonuses["degree"] <= -25:
         hard_flags.append("degree_level_mismatch")
     if bonuses["academic"] <= -12:
@@ -533,7 +533,7 @@ def compute_match_score(profile: Any, scholarship: Any, resume: Any = None) -> d
             "resume_keyword_details": keyword_details,
             "research_experience_details": research_details,
             "hard_flags": hard_flags,
-            "scoring_version": "smart_resume_requirement_v2",
+            "scoring_version": "country_gate_v1",
         },
     }
 

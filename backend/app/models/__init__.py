@@ -6,6 +6,8 @@ from app.models.match_score import MatchScore
 from app.models.chat_session import ChatSession
 from app.models.password_reset import PasswordResetToken
 from app.models.notification_preference import NotificationPreference
+from app.models.country import Country
+from app.models.group import Group, GroupMember
 
 __all__ = [
     "User",
@@ -15,4 +17,7 @@ __all__ = [
     "MatchScore",
     "ChatSession",
     "PasswordResetToken",
+    "Country",
+    "Group",
+    "GroupMember",
 ]

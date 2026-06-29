@@ -14,6 +14,8 @@ class ProfileBase(BaseModel):
     graduation_year: Optional[int] = None
     university: Optional[str] = None
     country_of_origin: Optional[str] = None
+    nationality_code: Optional[str] = None   # ISO 3166-1 alpha-2
+    residency_code: Optional[str] = None     # ISO 3166-1 alpha-2
     research_interests: Optional[List[str]] = []
     work_experience_years: Optional[int] = None
     target_degree: Optional[str] = None

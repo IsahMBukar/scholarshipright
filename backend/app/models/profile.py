@@ -20,6 +20,13 @@ class Profile(Base):
     graduation_year = Column(Integer, nullable=True)
     university = Column(String, nullable=True)
     country_of_origin = Column(String, nullable=True)
+    # ISO 3166-1 alpha-2 codes for eligibility gate checks.
+    # nationality_code = citizenship country code (e.g. "NG")
+    # residency_code = current residence country code (e.g. "DE")
+    # These are set when the user picks their country from a country picker
+    # (which provides the ISO code). Falls back to None if not yet set.
+    nationality_code = Column(String(2), nullable=True)
+    residency_code = Column(String(2), nullable=True)
 
     # Research & experience
     research_interests = Column(ARRAY(String), default=[])
@@ -58,7 +65,9 @@ async def ensure_profile_schema_columns() -> None:
     logger = logging.getLogger(__name__)
 
     try:
-        async with engine.begin() as conn:
+        from app.db.session import AsyncSessionLocal
+        async with AsyncSessionLocal() as session:
+            conn = await session.connection()
             await conn.execute(
                 text(
                     "ALTER TABLE profiles "
@@ -66,6 +75,20 @@ async def ensure_profile_schema_columns() -> None:
                     "NOT NULL DEFAULT FALSE"
                 )
             )
+            # ISO codes for eligibility gate
+            await conn.execute(
+                text(
+                    "ALTER TABLE profiles "
+                    "ADD COLUMN IF NOT EXISTS nationality_code VARCHAR(2)"
+                )
+            )
+            await conn.execute(
+                text(
+                    "ALTER TABLE profiles "
+                    "ADD COLUMN IF NOT EXISTS residency_code VARCHAR(2)"
+                )
+            )
+            await session.commit()
     except Exception as e:  # noqa: BLE001
         # Never crash startup — the waiver signal will just be missing
         # until the migration succeeds. Log loudly.

@@ -23,6 +23,24 @@ class Scholarship(Base):
     eligible_nationalities = Column(ARRAY(String), default=[])
     eligible_regions = Column(ARRAY(String), default=[])
 
+    # ── Structured eligibility (composable, resolved-at-write-time) ──
+    # Original human-readable wording, e.g. "All Commonwealth countries except Pakistan"
+    eligibility_display = Column(Text, nullable=True)
+    # What the eligibility gates on: 'citizenship' | 'residency' | 'either'
+    eligibility_basis = Column(String, nullable=False, default="either")
+    # Group codes to include/exclude (composable set operations)
+    included_groups = Column(ARRAY(String), default=[])
+    included_countries = Column(ARRAY(String), default=[])     # ISO 3166-1 alpha-2
+    excluded_groups = Column(ARRAY(String), default=[])
+    excluded_countries = Column(ARRAY(String), default=[])     # ISO 3166-1 alpha-2
+    # Computed by resolver — the final flat list of eligible country codes.
+    # Match engine does a pure lookup against this. Never hand-edited.
+    resolved_countries = Column(ARRAY(String), default=[])
+    # True if data was incomplete/missing during resolution (fail-open in match)
+    eligibility_unresolved = Column(Boolean, default=False)
+    # Timestamp of last resolution — compared against groups.updated_at
+    groups_resolved_at = Column(DateTime(timezone=True), nullable=True)
+
     # Funding
     funding_type = Column(String, nullable=False)
     covers_tuition = Column(Boolean, default=True)
@@ -299,3 +317,220 @@ async def ensure_required_documents_schema_columns() -> None:
         logging.getLogger(__name__).exception(
             "ensure_required_documents_schema_columns failed: %s", e
         )
+
+
+# ── Eligibility columns runtime migration ──────────────────────────
+#
+# Adds the structured eligibility columns to the scholarships table.
+# Also creates the countries, groups, and group_members tables, and
+# seeds the initial country + group data.
+
+_ELIGIBILITY_COLUMNS: list[tuple[str, str]] = [
+    ("eligibility_display",     "TEXT"),
+    ("eligibility_basis",       "VARCHAR(16) NOT NULL DEFAULT 'either'"),
+    ("included_groups",         "VARCHAR(64)[] NOT NULL DEFAULT '{}'"),
+    ("included_countries",      "VARCHAR(2)[] NOT NULL DEFAULT '{}'"),
+    ("excluded_groups",         "VARCHAR(64)[] NOT NULL DEFAULT '{}'"),
+    ("excluded_countries",      "VARCHAR(2)[] NOT NULL DEFAULT '{}'"),
+    ("resolved_countries",      "VARCHAR(2)[] NOT NULL DEFAULT '{}'"),
+    ("eligibility_unresolved",  "BOOLEAN NOT NULL DEFAULT FALSE"),
+    ("groups_resolved_at",      "TIMESTAMPTZ"),
+]
+
+
+async def ensure_eligibility_schema_columns() -> None:
+    """Idempotent runtime migration for the country eligibility system.
+
+    Creates countries, groups, group_members tables if missing.
+    Adds eligibility columns to scholarships.
+    Seeds countries + initial groups.
+    """
+    from sqlalchemy import text
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    # 1. Create the new tables
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS countries (
+                    code VARCHAR(2) PRIMARY KEY,
+                    name VARCHAR NOT NULL,
+                    iso3 VARCHAR(3)
+                )
+            """))
+            await conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS groups (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    code VARCHAR UNIQUE NOT NULL,
+                    name VARCHAR NOT NULL,
+                    description TEXT,
+                    source_url VARCHAR,
+                    source_date DATE,
+                    status VARCHAR NOT NULL DEFAULT 'active',
+                    created_by UUID,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            """))
+            await conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS group_members (
+                    group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
+                    country_code VARCHAR(2) REFERENCES countries(code),
+                    PRIMARY KEY (group_id, country_code)
+                )
+            """))
+            # Index for reverse lookups (which groups contain a country)
+            await conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_group_members_country "
+                "ON group_members(country_code)"
+            ))
+    except Exception as e:
+        logger.exception("ensure_eligibility_schema_columns (tables) failed: %s", e)
+        return
+
+    # 2. Add columns to scholarships
+    try:
+        async with engine.begin() as conn:
+            for col_name, col_def in _ELIGIBILITY_COLUMNS:
+                await conn.execute(
+                    text(
+                        f"ALTER TABLE scholarships "
+                        f"ADD COLUMN IF NOT EXISTS {col_name} {col_def}"
+                    )
+                )
+    except Exception as e:
+        logger.exception("ensure_eligibility_schema_columns (columns) failed: %s", e)
+        return
+
+    # 3. Seed countries + groups (idempotent)
+    try:
+        from app.seeds.run_all import run_all_seeds
+        result = await run_all_seeds()
+        if result["countries_inserted"] or result["groups_created"]:
+            logger.info("eligibility seed: %s", result)
+    except Exception as e:
+        logger.exception("ensure_eligibility_schema_columns (seeds) failed: %s", e)
+
+    # 4. Backfill existing scholarships: move old raw text to eligibility_display,
+    # best-effort map to structured fields, mark unresolved where ambiguous.
+    try:
+        from app.db.session import AsyncSessionLocal
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                text(
+                    "SELECT id, name, eligible_nationalities, eligible_regions, "
+                    "eligibility_display, included_groups, included_countries "
+                    "FROM scholarships "
+                    "WHERE eligibility_display IS NULL "
+                    "AND (array_length(eligible_nationalities, 1) > 0 "
+                    "     OR array_length(eligible_regions, 1) > 0)"
+                )
+            )
+            rows = result.fetchall()
+            backfilled = 0
+
+            # Simple keyword → group code mapping for best-effort backfill
+            _KEYWORD_GROUPS = {
+                "niied": "NIIED",
+                "gks": "NIIED",
+                "korean government": "NIIED",
+                "commonwealth": "COMMONWEALTH",
+                "eu ": "EU",
+                "european union": "EU",
+                "asean": "ASEAN",
+                "oecd": "OECD",
+                "african union": "AU",
+                "ecowas": "ECOWAS",
+                "arab league": "ARAB_LEAGUE",
+                "arab": "ARAB_LEAGUE",
+                "saarc": "SAARC",
+                "erasmus": "ERASMUS_PARTNER",
+                "eea": "EEA",
+            }
+            _KEYWORD_REGIONS = {
+                "africa": "AU",
+                "asia": None,    # too broad, no single group
+                "europe": "EU",
+                "eu ": "EU",
+                "middle east": "ARAB_LEAGUE",
+                "south asia": "SAARC",
+                "southeast asia": "ASEAN",
+                "latin america": None,
+                "caribbean": None,
+                "pacific": None,
+            }
+
+            for row in rows:
+                sch_id = row[0]
+                sch_name = row[1]
+                nat_list = list(row[2] or [])
+                reg_list = list(row[3] or [])
+                existing_display = row[4]
+                existing_inc_groups = list(row[5] or [])
+                existing_inc_countries = list(row[6] or [])
+
+                # Build display text from old data
+                display_parts = nat_list + reg_list
+                display_text = ", ".join(display_parts) if display_parts else None
+
+                # Skip if already has structured data
+                if existing_inc_groups or existing_inc_countries:
+                    if not existing_display:
+                        await db.execute(
+                            text("UPDATE scholarships SET eligibility_display = :disp WHERE id = :id"),
+                            {"disp": display_text, "id": str(sch_id)},
+                        )
+                    continue
+
+                # Best-effort: try to match keywords to groups
+                matched_groups = set()
+                full_text = " ".join(display_parts).lower()
+
+                for keyword, group_code in _KEYWORD_GROUPS.items():
+                    if keyword in full_text and group_code:
+                        matched_groups.add(group_code)
+
+                for keyword, group_code in _KEYWORD_REGIONS.items():
+                    if keyword in full_text and group_code:
+                        matched_groups.add(group_code)
+
+                # Check for "all" / "international" / "worldwide" patterns
+                is_open = any(
+                    term in full_text
+                    for term in ["all", "any nationality", "international", "worldwide", "all countries"]
+                )
+
+                if matched_groups and not is_open:
+                    # We confidently mapped to groups
+                    await db.execute(
+                        text(
+                            "UPDATE scholarships SET "
+                            "eligibility_display = :disp, "
+                            "included_groups = :groups, "
+                            "eligibility_unresolved = FALSE "
+                            "WHERE id = :id"
+                        ),
+                        {"disp": display_text, "groups": sorted(matched_groups), "id": str(sch_id)},
+                    )
+                else:
+                    # Ambiguous — mark as unresolved for admin review
+                    await db.execute(
+                        text(
+                            "UPDATE scholarships SET "
+                            "eligibility_display = :disp, "
+                            "eligibility_unresolved = TRUE "
+                            "WHERE id = :id"
+                        ),
+                        {"disp": display_text, "id": str(sch_id)},
+                    )
+
+                backfilled += 1
+
+            if backfilled:
+                await db.commit()
+                logger.info("eligibility backfill: %d scholarships processed", backfilled)
+
+    except Exception as e:
+        logger.exception("ensure_eligibility_schema_columns (backfill) failed: %s", e)
