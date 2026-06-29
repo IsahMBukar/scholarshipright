@@ -121,8 +121,19 @@ def _is_section_present(resume: dict, section: str) -> bool:
     - For JSONB list fields (`education`, `experience`, `projects`, …):
       at least one entry
     - For `skills` (ARRAY of strings): at least one entry
+
+    Special case: `projects` is also satisfied when `research_projects`
+    has entries, because the resume analyzer puts all project types
+    (personal, software, capstone, research) into `research_projects`.
     """
     value = resume.get(section)
+
+    # Special case: projects can be satisfied by research_projects
+    if section == "projects" and not value:
+        rp = resume.get("research_projects")
+        if isinstance(rp, (list, tuple)) and len(rp) > 0:
+            return True
+
     if value is None:
         return False
     if isinstance(value, str):

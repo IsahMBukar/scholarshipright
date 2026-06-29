@@ -1,0 +1,16 @@
+{
+  "name": "ScholarshipRight",
+  "short_name": "ScholarshipRight",
+  "description": "AI-powered scholarship discovery platform. Find fully funded international scholarships matched to your profile.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fdfbf7",
+  "theme_color": "#f5b942",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    }
+  ]
+}

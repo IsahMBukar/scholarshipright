@@ -271,17 +271,30 @@ def trigger_recompute(
     reason: str,
     background_tasks: Optional[BackgroundTasks] = None,
 ) -> None:
-    """Schedule a recompute. FastAPI's BackgroundTasks is preferred because the
-    task runs after the response is flushed and shares the event loop. When
-    called outside a request (CLI, scheduler) we use a fire-and-forget asyncio
-    task. We mark the user dirty first so the next GET reflects the staleness
-    even if the recompute fails.
+    """Schedule a recompute via Redis task queue (preferred) or fallback.
+
+    Priority:
+      1. Redis task queue — picked up by the separate worker process.
+      2. FastAPI BackgroundTasks — runs after response flush (legacy).
+      3. Fire-and-forget asyncio task — best-effort.
+      4. Mark dirty only — next GET will recompute synchronously.
     """
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         loop = None
 
+    # Try Redis task queue first (non-blocking, survives restarts)
+    if loop is not None:
+        try:
+            from app.core.task_queue import enqueue_match_recompute
+            loop.create_task(enqueue_match_recompute(str(user_id), reason))
+            loop.create_task(mark_user_dirty(user_id, reason))
+            return
+        except Exception:
+            pass  # fall through to legacy paths
+
+    # Fallback: BackgroundTasks or asyncio
     if background_tasks is not None:
         background_tasks.add_task(mark_user_dirty, user_id, reason)
         background_tasks.add_task(recompute_matches_for_user, user_id, reason)
@@ -289,8 +302,6 @@ def trigger_recompute(
         loop.create_task(mark_user_dirty(user_id, reason))
         loop.create_task(recompute_matches_for_user(user_id, reason))
     else:
-        # No loop available — just mark dirty and let the next read trigger
-        # a synchronous recompute via the GET endpoint.
         asyncio.run(mark_user_dirty(user_id, reason))
 
 

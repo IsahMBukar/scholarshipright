@@ -5,6 +5,69 @@ import { AuthProvider } from '@/hooks/useAuth';
 import { SessionExpiryHandler } from '@/components/SessionExpiryHandler';
 import AuthModal from '@/components/AuthModal';
 
+const SITE_URL = 'https://scholarshipright.com';
+const SITE_NAME = 'ScholarshipRight';
+const DEFAULT_DESC = 'AI-powered scholarship discovery platform. Find fully funded international scholarships matched to your profile.';
+
+export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: 'ScholarshipRight — Find Fully Funded Scholarships',
+    template: '%s — ScholarshipRight',
+  },
+  description: DEFAULT_DESC,
+  keywords: [
+    'scholarships', 'fully funded scholarships', 'international scholarships',
+    'study abroad', 'graduate scholarships', 'PhD scholarships', 'master scholarships',
+    'scholarship finder', 'AI scholarship matching', 'free education',
+  ],
+  authors: [{ name: 'ScholarshipRight' }],
+  creator: 'ScholarshipRight',
+  publisher: 'ScholarshipRight',
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
+  openGraph: {
+    type: 'website',
+    locale: 'en_US',
+    url: SITE_URL,
+    siteName: SITE_NAME,
+    title: 'ScholarshipRight — Find Fully Funded Scholarships',
+    description: DEFAULT_DESC,
+    images: [
+      {
+        url: '/og-default.png',
+        width: 1200,
+        height: 630,
+        alt: 'ScholarshipRight — Find Fully Funded Scholarships',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'ScholarshipRight — Find Fully Funded Scholarships',
+    description: DEFAULT_DESC,
+    images: ['/og-default.png'],
+  },
+  icons: {
+    icon: '/favicon.ico',
+    shortcut: '/favicon-16x16.png',
+    apple: '/apple-touch-icon.png',
+  },
+  manifest: '/site.webmanifest',
+  alternates: {
+    canonical: SITE_URL,
+  },
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
@@ -21,6 +84,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Skip to content
         </a>
+        {/* Organization structured data */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'Organization',
+              name: SITE_NAME,
+              url: SITE_URL,
+              description: DEFAULT_DESC,
+              sameAs: [
+                'https://x.com/scholarshipright',
+                'https://instagram.com/scholarshipright',
+                'https://facebook.com/scholarshipright',
+                'https://linkedin.com/company/scholarshipright',
+                'https://tiktok.com/@scholarshipright',
+                'https://youtube.com/@scholarshipright',
+              ],
+            }),
+          }}
+        />
         <AuthProvider>
           <SessionExpiryHandler />
           <AuthModal />
@@ -30,8 +114,3 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
-
-export const metadata: Metadata = {
-  title: 'ScholarshipRight — Find Fully Funded Scholarships',
-  description: 'AI-powered scholarship discovery platform. Find fully funded international scholarships matched to your profile.',
-};

@@ -187,6 +187,16 @@ export default function AuthModal() {
           </Button>
         </form>
 
+        {/* Consent text — only in signup mode */}
+        {mode === 'signup' && (
+          <p className="px-6 pb-1 text-center text-[11px] text-text-secondary">
+            By creating an account, you agree to our{' '}
+            <a href="/terms" className="text-primary-readable hover:underline">Terms of Service</a>
+            {' '}and{' '}
+            <a href="/privacy" className="text-primary-readable hover:underline">Privacy Policy</a>.
+          </p>
+        )}
+
         {/* Toggle mode */}
         <div className="px-6 py-4 text-center text-[13px] text-text-secondary">
           {mode === 'login' ? (

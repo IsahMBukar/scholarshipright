@@ -4,6 +4,8 @@ from sqlalchemy import select, func, or_
 from typing import Optional, List
 from datetime import date
 from uuid import UUID
+import hashlib
+import json
 
 from app.db.session import get_db
 from app.models.scholarship import Scholarship
@@ -14,6 +16,7 @@ from app.api.users import COOKIE_NAME
 from app.api.auth import decode_token
 from app.models.user import User
 from app.services.match_auto import recompute_matches_for_user, REASON_MANUAL
+from app.core.cache import cache_get, cache_set, cache_invalidate, CacheKeys, invalidate_scholarship_caches
 
 router = APIRouter()
 
@@ -33,16 +36,20 @@ async def _optional_user_id(request: Request) -> Optional[UUID]:
 
 
 def _scholarship_response(scholarship: Scholarship, match_score: Optional[float] = None, match_breakdown: Optional[dict] = None) -> ScholarshipResponse:
-    # Materialise the 5 "cement + flexible" doc-defaults fields +
-    # accepted_english_tests before validation. Without this, legacy
-    # rows (or freshly-created rows from the admin POST path that
-    # skipped the lazy backfill) would surface as NULL and fail
-    # ScholarshipResponse's strict pydantic schema with 500s.
     apply_auto_defaults(scholarship)
     data = ScholarshipResponse.model_validate(scholarship).model_dump()
     data["match_score"] = float(match_score) if match_score is not None else None
     data["match_breakdown"] = match_breakdown
     return ScholarshipResponse.model_validate(data)
+
+
+def _cache_key_for_list(params: dict) -> str:
+    """Build a stable cache key from query params (excluding user-specific data)."""
+    # Remove user-specific and pagination-stable keys
+    stable = {k: v for k, v in sorted(params.items()) if v is not None}
+    raw = json.dumps(stable, sort_keys=True, default=str)
+    h = hashlib.md5(raw.encode()).hexdigest()[:12]
+    return f"anon:{h}"
 
 
 @router.get("", response_model=ScholarshipListResponse)
@@ -66,11 +73,28 @@ async def list_scholarships(
     db: AsyncSession = Depends(get_db),
 ):
     user_id = await _optional_user_id(request)
+
+    # ── Cache: anonymous users (no match scores) ──────────────────
+    # Authenticated users get personalised results (match scores), so
+    # we only cache the anonymous path. This covers SEO bots, landing
+    # page loads, and unauthenticated browsing.
+    if not user_id:
+        cache_key = CacheKeys.scholarship_list(_cache_key_for_list({
+            "degree": degree, "field": field, "country": country,
+            "funding": funding, "language_test": language_test,
+            "verified": verified, "min_stipend": min_stipend,
+            "no_ielts": no_ielts, "no_fee": no_fee,
+            "deadline_before": str(deadline_before) if deadline_before else None,
+            "deadline_after": str(deadline_after) if deadline_after else None,
+            "search": search, "page": page, "limit": limit, "sort": sort,
+        }))
+        cached = await cache_get(cache_key)
+        if cached is not None:
+            return ScholarshipListResponse(**cached)
+
     query = select(Scholarship).where(Scholarship.is_active == True)
 
     # Safety net: if logged-in user has 0 match_scores, recompute on the fly.
-    # This catches cases where the background trigger didn't execute (e.g.
-    # orphaned BackgroundTasks, race condition, or server restart mid-flow).
     if user_id:
         from sqlalchemy import func as _func
         ms_count = (await db.execute(
@@ -99,17 +123,12 @@ async def list_scholarships(
     if language_test:
         tests = [t.strip() for t in language_test.split(",") if t.strip()]
         if tests:
-            # Overlap: returns rows where accepted_english_tests shares at
-            # least one element with the requested set. Backed by the GIN
-            # index added in ensure_scholarship_schema_columns().
             query = query.where(Scholarship.accepted_english_tests.overlap(tests))
 
     if verified is not None:
         query = query.where(Scholarship.is_verified == verified)
 
     if min_stipend is not None:
-        # NULL monthly_stipend_usd is excluded by SQL three-valued logic,
-        # so scholarships without a recorded stipend don't match a min.
         query = query.where(Scholarship.monthly_stipend_usd >= min_stipend)
 
     if no_ielts:
@@ -149,8 +168,7 @@ async def list_scholarships(
             match_subq, match_subq.c.scholarship_id == Scholarship.id
         )
 
-    # Sort. The Scholarships page is labelled Recommended, so authenticated users
-    # should see the same persisted MatchScore ordering the agent uses.
+    # Sort
     if sort == "newest":
         query = query.order_by(Scholarship.created_at.desc())
     elif user_id:
@@ -174,13 +192,19 @@ async def list_scholarships(
             apply_auto_defaults(sch)
             items.append(ScholarshipResponse.model_validate(sch))
 
-    return ScholarshipListResponse(
+    response = ScholarshipListResponse(
         items=items,
         total=total,
         page=page,
         limit=limit,
         pages=(total + limit - 1) // limit,
     )
+
+    # ── Cache: store anonymous result ─────────────────────────────
+    if not user_id:
+        await cache_set(cache_key, response.model_dump(), CacheKeys.SCHOLARSHIP_LIST_TTL)
+
+    return response
 
 
 @router.get("/featured", response_model=List[ScholarshipResponse])
@@ -224,6 +248,11 @@ async def filter_metadata(db: AsyncSession = Depends(get_db)):
     data) plus the static filter labels (English tests, funding
     types, degree classes) that don't change with data.
     """
+    # ── Cache: filter metadata changes rarely ─────────────────────
+    cached = await cache_get(CacheKeys.FILTER_META)
+    if cached is not None:
+        return cached
+
     # Distinct host countries, sorted
     country_rows = await db.execute(
         select(Scholarship.host_country)
@@ -256,14 +285,11 @@ async def filter_metadata(db: AsyncSession = Depends(get_db)):
     )
     funding_types = [r[0] for r in funding_rows.all() if r[0]]
 
-    return {
+    result = {
         "countries": countries,
         "fields": fields,
         "degrees": degrees,
         "funding_types": funding_types,
-        # Static lists — the filter supports these values even if no
-        # scholarships currently use them, so the user can still see
-        # the option and discover the gap.
         "english_tests": ["IELTS", "TOEFL", "PTE", "Duolingo", "Cambridge"],
         "degree_labels": {
             "bachelor": "BSc / Bachelor",
@@ -278,16 +304,26 @@ async def filter_metadata(db: AsyncSession = Depends(get_db)):
         },
     }
 
+    await cache_set(CacheKeys.FILTER_META, result, CacheKeys.FILTER_META_TTL)
+    return result
+
 
 @router.get("/{slug}", response_model=ScholarshipResponse)
 async def get_scholarship(slug: str, request: Request, db: AsyncSession = Depends(get_db)):
+    # ── Cache: individual scholarship (anonymous) ─────────────────
+    user_id = await _optional_user_id(request)
+
+    if not user_id:
+        cached = await cache_get(CacheKeys.scholarship_detail(slug))
+        if cached is not None:
+            return ScholarshipResponse.model_validate(cached)
+
     query = select(Scholarship).where(Scholarship.slug == slug)
     result = await db.execute(query)
     scholarship = result.scalar_one_or_none()
     if not scholarship:
         raise HTTPException(status_code=404, detail="Scholarship not found")
 
-    user_id = await _optional_user_id(request)
     if user_id:
         # Safety net: recompute if user has 0 match_scores
         from sqlalchemy import func as _func
@@ -309,9 +345,18 @@ async def get_scholarship(slug: str, request: Request, db: AsyncSession = Depend
             return _scholarship_response(scholarship, match.score, match.breakdown)
 
     # Materialise the 5 "cement + flexible" fields from degree_levels
-    # so the public response never has nulls for those.
     apply_auto_defaults(scholarship)
-    return ScholarshipResponse.model_validate(scholarship)
+    response = ScholarshipResponse.model_validate(scholarship)
+
+    # Cache the anonymous detail
+    if not user_id:
+        await cache_set(
+            CacheKeys.scholarship_detail(slug),
+            response.model_dump(),
+            CacheKeys.SCHOLARSHIP_DETAIL_TTL,
+        )
+
+    return response
 
 
 @router.post("/{slug}/view")

@@ -353,6 +353,13 @@ function LoginForm() {
         </form>
 
         <p className="text-[11px] text-text-secondary text-center mt-4">
+          By signing in, you agree to our{' '}
+          <Link href="/terms" className="text-primary-readable hover:underline">Terms of Service</Link>
+          {' '}and{' '}
+          <Link href="/privacy" className="text-primary-readable hover:underline">Privacy Policy</Link>.
+        </p>
+
+        <p className="text-[11px] text-text-secondary text-center mt-3">
           Don&apos;t have an account?{' '}
           <Link href="/signup" className="text-primary-readable font-semibold hover:underline">
             Sign up
