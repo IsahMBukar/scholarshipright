@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import AppLayout from '@/components/AppLayout';
 import PageHeader from '@/components/PageHeader';
 import { ResumeListSkeleton } from '@/components/Skeletons';
@@ -51,7 +51,9 @@ function ResumePageInner() {
   // `?onboarding=1` puts a "Return to onboarding" banner at the top of
   // the page so the user doesn't get lost after leaving the hub.
   const searchParams = useSearchParams();
+  const router = useRouter();
   const fromOnboarding = searchParams.get('onboarding') === '1';
+  const editId = searchParams.get('edit');
 
   // Upload form
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -74,7 +76,12 @@ function ResumePageInner() {
     try {
       const data = await fetchResumes();
       setResumes(data);
-      if (data.length === 0) setView('upload');
+      if (data.length === 0) {
+        setView('upload');
+      } else if (editId) {
+        const match = data.find((r: Resume) => r.id === editId);
+        if (match) openEditor(match);
+      }
     } catch (err) {
       console.error('Failed to load resumes:', err);
     } finally {
@@ -142,10 +149,22 @@ function ResumePageInner() {
     setEditData(resume);
     setView('editor');
     setActiveEditorTab('overview');
+    // Persist in URL so reload restores the editor
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('edit', resume.id);
+    router.replace(`/resume?${params.toString()}`, { scroll: false });
     if (resume.status === 'analyzing') {
       setAnalyzing(true);
       pollForCompletion(resume.id);
     }
+  }
+
+  function goToList() {
+    setView('list');
+    setSelectedResume(null);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('edit');
+    router.replace(`/resume${params.toString() ? '?' + params.toString() : ''}`, { scroll: false });
   }
 
   async function handleSave() {
@@ -206,7 +225,7 @@ function ResumePageInner() {
       setResumes(prev => prev.filter(r => r.id !== id));
       if (selectedResume?.id === id) {
         setSelectedResume(null);
-        setView('list');
+        goToList();
       }
     } catch (err) {
       console.error('Delete failed:', err);
@@ -352,7 +371,7 @@ function ResumePageInner() {
         {/* ===== UPLOAD VIEW ===== */}
         {view === 'upload' && (
           <>
-            <button onClick={() => setView('list')} className="flex items-center gap-1 text-[14px] text-text-secondary hover:text-text-primary mb-4 transition-colors">
+            <button onClick={goToList} className="flex items-center gap-1 text-[14px] text-text-secondary hover:text-text-primary mb-4 transition-colors">
               <span className="material-symbols-outlined text-[18px]">arrow_back</span>
               Back to resumes
             </button>
@@ -455,7 +474,7 @@ function ResumePageInner() {
         {/* ===== EDITOR VIEW ===== */}
         {view === 'editor' && selectedResume && (
           <>
-            <button onClick={() => { setView('list'); setSelectedResume(null); }} className="flex items-center gap-1 text-[14px] text-text-secondary hover:text-text-primary mb-4 transition-colors">
+            <button onClick={goToList} className="flex items-center gap-1 text-[14px] text-text-secondary hover:text-text-primary mb-4 transition-colors">
               <span className="material-symbols-outlined text-[18px]">arrow_back</span>
               Back to resumes
             </button>
