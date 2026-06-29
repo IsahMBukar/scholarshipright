@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import type { Profile } from '@/services/api';
 import { COUNTRY_NAMES } from '@/data/countries';
 
@@ -38,7 +38,7 @@ const CURRENT_EDUCATION_OPTIONS = [
 
 const COUNTRIES_OF_ORIGIN = COUNTRY_NAMES;
 
-const TARGET_COUNTRIES = [
+const POPULAR_TARGET_COUNTRIES = [
   'United States', 'United Kingdom', 'Canada', 'Germany', 'France',
   'Netherlands', 'Sweden', 'Switzerland', 'Australia', 'Japan',
   'South Korea', 'China', 'Turkey', 'Belgium', 'Singapore',
@@ -75,6 +75,91 @@ const GRAD_YEAR = (() => {
   for (let i = y - 10; i <= y + 6; i++) out.push(i);
   return out;
 })();
+
+/* ─── Searchable "Other" country picker ─── */
+function TargetCountryOther({
+  onSelect,
+  excludeSet,
+}: {
+  onSelect: (country: string) => void;
+  excludeSet: Set<string>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase().trim();
+    return COUNTRY_NAMES
+      .filter(c => !excludeSet.has(c) && (q === '' || c.toLowerCase().includes(q)))
+      .slice(0, 20);
+  }, [query, excludeSet]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  useEffect(() => {
+    if (open && inputRef.current) inputRef.current.focus();
+  }, [open]);
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="px-3 py-1.5 rounded-full text-[12px] font-semibold transition-all bg-white border border-primary/30 text-primary hover:bg-primary/5 flex items-center gap-0.5"
+      >
+        <span className="material-symbols-outlined text-[13px]">add</span>
+        Other…
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 mt-1 w-[260px] bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
+          <div className="p-2 border-b border-gray-100">
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search countries…"
+              className="w-full px-3 py-1.5 text-[12px] bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-primary"
+            />
+          </div>
+          <div className="max-h-[200px] overflow-y-auto">
+            {filtered.length === 0 ? (
+              <p className="px-3 py-2 text-[11px] text-text-secondary">No countries found</p>
+            ) : (
+              filtered.map(c => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => {
+                    onSelect(c);
+                    setQuery('');
+                    setOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-[12px] text-text-primary hover:bg-primary/5 transition-colors"
+                >
+                  {c}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ProfileSlide({
   initialProfile,
@@ -270,7 +355,7 @@ export default function ProfileSlide({
             Where do you want to study? <span className="text-text-secondary/60 normal-case font-normal">({targets.length} selected)</span>
           </label>
           <div className="flex flex-wrap gap-1.5 p-2.5 bg-gray-50 border border-gray-200 rounded-btn min-h-[80px]">
-            {TARGET_COUNTRIES.map(c => {
+            {POPULAR_TARGET_COUNTRIES.map(c => {
               const on = targets.includes(c);
               return (
                 <button
@@ -288,6 +373,23 @@ export default function ProfileSlide({
                 </button>
               );
             })}
+            {/* Custom-selected countries (not in popular list) */}
+            {targets.filter(c => !POPULAR_TARGET_COUNTRIES.includes(c)).map(c => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => toggleTarget(c)}
+                className="px-3 py-1.5 rounded-full text-[12px] font-semibold transition-all bg-primary text-text-inverse shadow-sm flex items-center gap-0.5"
+              >
+                {c}
+                <span className="material-symbols-outlined text-[12px] opacity-70">close</span>
+              </button>
+            ))}
+            {/* "Other…" chip */}
+            <TargetCountryOther
+              onSelect={c => toggleTarget(c)}
+              excludeSet={new Set(targets)}
+            />
           </div>
         </div>
 

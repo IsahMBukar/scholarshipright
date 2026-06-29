@@ -208,7 +208,7 @@ export default function ScholarshipDetailPage() {
   // (eligibility + academics + research) instead of all 12 to keep the card
   // compact. Each criterion has known (min, max) from the match engine.
   const CRITERIA: Array<{ key: keyof MatchBreakdown; label: string; max: number; min: number; icon: string }> = [
-    { key: 'country', label: 'Country Eligibility', max: 10, min: -25, icon: 'public' },
+    { key: 'country', label: 'Country Eligibility', max: 10, min: -35, icon: 'public' },
     { key: 'degree', label: 'Degree Match', max: 12, min: -25, icon: 'workspace_premium' },
     { key: 'field', label: 'Field Match', max: 15, min: 0, icon: 'school' },
     { key: 'academic', label: 'Academic Standing', max: 10, min: -12, icon: 'grade' },
@@ -444,6 +444,16 @@ export default function ScholarshipDetailPage() {
                           <span className="font-medium">{HARD_FLAG_LABELS[flag]}</span>
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Country eligibility warning */}
+                  {breakdown?.country_eligible === false && breakdown?.country_reason && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                      <div className="flex items-start gap-1.5 text-[11px] text-amber-800 leading-snug">
+                        <span className="material-symbols-outlined text-[14px] flex-shrink-0 mt-0.5">block</span>
+                        <span className="font-medium">Not eligible — {breakdown.country_reason}</span>
+                      </div>
                     </div>
                   )}
 

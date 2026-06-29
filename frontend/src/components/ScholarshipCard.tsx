@@ -18,6 +18,8 @@ interface ScholarshipCardProps {
   showMatchScore?: boolean;
   /** Whether the current user is authenticated. Affects the no-score CTA. */
   isAuthenticated?: boolean;
+  /** Called when user clicks "Apply Anyway" on an ineligible scholarship. */
+  onApplyIneligible?: (id: string, reason: string) => void;
 }
 
 function getMatchLabel(score: number): string {
@@ -34,7 +36,7 @@ function getMatchColor(score: number): string {
   return 'text-text-secondary';
 }
 
-export default function ScholarshipCard({ scholarship, onSave, isSaved, savedStatus, onApplyNow, showMatchScore = true, isAuthenticated = false }: ScholarshipCardProps) {
+export default function ScholarshipCard({ scholarship, onSave, isSaved, savedStatus, onApplyNow, showMatchScore = true, isAuthenticated = false, onApplyIneligible }: ScholarshipCardProps) {
   // Only show a real score if both the caller asked for it AND the backend
   // returned one. Never fall back to a deterministic pseudo-score — that
   // would mislead users who haven't completed onboarding.
@@ -43,6 +45,11 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved, savedSta
     : null;
   const daysUntilDeadline = daysUntil(scholarship.deadline);
   const isUrgent = daysUntilDeadline <= 30;
+
+  // Country eligibility — from match_breakdown (set by the scoring engine)
+  const breakdown = scholarship.match_breakdown;
+  const isEligible = breakdown?.country_eligible !== false;
+  const eligibilityReason = breakdown?.country_reason || null;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-[1fr_140px] rounded-card bg-white shadow-[0_2px_10px_rgba(0,0,0,0.04)] overflow-hidden">
@@ -88,6 +95,15 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved, savedSta
             <div className="mb-2">
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-[8px] bg-red-50 text-[12px] font-medium text-red-500">
                 Closes in {daysUntilDeadline}d
+              </span>
+            </div>
+          )}
+          {/* Eligibility badge */}
+          {!isEligible && eligibilityReason && (
+            <div className="mb-2">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-[8px] bg-amber-50 text-[12px] font-medium text-amber-700" title={eligibilityReason}>
+                <span className="material-symbols-outlined text-[14px]">block</span>
+                Not eligible — {eligibilityReason.length > 60 ? eligibilityReason.slice(0, 57) + '...' : eligibilityReason}
               </span>
             </div>
           )}
@@ -159,10 +175,21 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved, savedSta
             href={scholarship.official_url}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={() => onApplyNow?.(scholarship.id)}
-            className="px-5 py-2 bg-primary text-white text-[13px] font-semibold rounded-btn hover:brightness-110 transition-all"
+            onClick={(e) => {
+              if (!isEligible && eligibilityReason) {
+                e.preventDefault();
+                onApplyIneligible?.(scholarship.id, eligibilityReason);
+              } else {
+                onApplyNow?.(scholarship.id);
+              }
+            }}
+            className={`px-5 py-2 text-[13px] font-semibold rounded-btn transition-all ${
+              !isEligible
+                ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                : 'bg-primary text-white hover:brightness-110'
+            }`}
           >
-            {savedStatus === 'applying' ? 'Continue Now' : 'Apply Now'}
+            {!isEligible ? 'Apply Anyway' : savedStatus === 'applying' ? 'Continue Now' : 'Apply Now'}
           </a>
         </div>
       </div>
@@ -196,6 +223,13 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved, savedSta
                 'bg-gray-100 text-gray-600'
               }`}>
                 {savedStatus.charAt(0).toUpperCase() + savedStatus.slice(1)}
+              </span>
+            )}
+            {/* Eligibility badge */}
+            {!isEligible && eligibilityReason && (
+              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-[10px] bg-amber-50 text-[12px] font-medium text-amber-700" title={eligibilityReason}>
+                <span className="material-symbols-outlined text-[14px]">block</span>
+                Not eligible
               </span>
             )}
           </div>
@@ -258,10 +292,21 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved, savedSta
             href={scholarship.official_url}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={() => onApplyNow?.(scholarship.id)}
-            className="w-full text-center py-2 bg-primary text-white text-[13px] font-semibold rounded-btn hover:brightness-110 transition-all"
+            onClick={(e) => {
+              if (!isEligible && eligibilityReason) {
+                e.preventDefault();
+                onApplyIneligible?.(scholarship.id, eligibilityReason);
+              } else {
+                onApplyNow?.(scholarship.id);
+              }
+            }}
+            className={`w-full text-center py-2 text-[13px] font-semibold rounded-btn transition-all ${
+              !isEligible
+                ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                : 'bg-primary text-white hover:brightness-110'
+            }`}
           >
-            {savedStatus === 'applying' ? 'Continue Now' : 'Apply Now'}
+            {!isEligible ? 'Apply Anyway' : savedStatus === 'applying' ? 'Continue Now' : 'Apply Now'}
           </a>
           <button
             onClick={() => onSave?.(scholarship.id)}

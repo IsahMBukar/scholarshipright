@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, Suspense } from 'react';
+import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import AppLayout from '@/components/AppLayout';
 import PageHeader from '@/components/PageHeader';
@@ -21,7 +21,7 @@ const CURRENT_EDUCATION_OPTIONS = ['high_school', 'bachelor', 'master', 'phd'];
 const COUNTRIES = COUNTRY_NAMES;
 const FIELDS = ['computer_science', 'engineering', 'medicine', 'business', 'law', 'natural_sciences', 'social_sciences', 'arts', 'education', 'agriculture', 'public_health', 'economics', 'mathematics', 'physics', 'chemistry', 'biology'];
 const LANGUAGES_LIST = ['English', 'French', 'Arabic', 'Portuguese', 'Swahili', 'Spanish', 'German', 'Japanese', 'Chinese', 'Korean', 'Turkish'];
-const TARGET_COUNTRIES = ['Germany', 'United Kingdom', 'United States', 'Canada', 'Japan', 'Australia', 'France', 'Sweden', 'Netherlands', 'Switzerland', 'South Korea', 'China', 'Turkey', 'Belgium'];
+const POPULAR_TARGET_COUNTRIES = ['Germany', 'United Kingdom', 'United States', 'Canada', 'Japan', 'Australia', 'France', 'Sweden', 'Netherlands', 'Switzerland', 'South Korea', 'China', 'Turkey', 'Belgium'];
 
 const TABS = ['Personal', 'Education', 'Work Experience', 'Research & Projects', 'Skills'];
 
@@ -271,14 +271,128 @@ function SaveButton({ onClick, loading }: { onClick: () => void; loading?: boole
 }
 
 /* ─── Tag Multi-Select ─── */
-function TagSelect({ options, selected, onToggle }: { options: string[]; selected: string[]; onToggle: (v: string) => void }) {
+function TagSelect({
+  options,
+  selected,
+  onToggle,
+  allOptions,
+  placeholder = 'Other…',
+}: {
+  options: string[];
+  selected: string[];
+  onToggle: (v: string) => void;
+  /** Full option list for searchable "Other" dropdown. When provided,
+   *  any selected items NOT in `options` are shown as extra chips,
+   *  and an "Other…" chip opens a searchable dropdown from this list. */
+  allOptions?: string[];
+  placeholder?: string;
+}) {
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Custom selections (in selected but not in the popular options list)
+  const popularSet = new Set(options);
+  const customSelected = selected.filter(s => !popularSet.has(s));
+
+  // Filtered results from the full list
+  const filteredOptions = useMemo(() => {
+    if (!allOptions) return [];
+    const selectedSet = new Set(selected);
+    const q = query.toLowerCase().trim();
+    return allOptions
+      .filter(o => !selectedSet.has(o) && (q === '' || o.toLowerCase().includes(q)))
+      .slice(0, 20); // max 20 results
+  }, [allOptions, selected, query]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!searchOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setSearchOpen(false);
+        setQuery('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [searchOpen]);
+
+  // Focus input when dropdown opens
+  useEffect(() => {
+    if (searchOpen && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [searchOpen]);
+
   return (
-    <div className="flex flex-wrap gap-2">
-      {options.map(o => (
-        <button key={o} onClick={() => onToggle(o)} className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors border ${selected.includes(o) ? 'bg-primary text-text-inverse border-primary' : 'bg-gray-50 text-text-secondary border-gray-200 hover:border-primary/30'}`}>
-          {o.replace(/_/g, ' ')}
-        </button>
-      ))}
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {/* Popular options */}
+        {options.map(o => (
+          <button key={o} onClick={() => onToggle(o)} className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors border ${selected.includes(o) ? 'bg-primary text-text-inverse border-primary' : 'bg-gray-50 text-text-secondary border-gray-200 hover:border-primary/30'}`}>
+            {o.replace(/_/g, ' ')}
+          </button>
+        ))}
+
+        {/* Custom-selected items (not in popular list) */}
+        {customSelected.map(o => (
+          <button key={o} onClick={() => onToggle(o)} className="px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors border bg-primary text-text-inverse border-primary flex items-center gap-1">
+            {o.replace(/_/g, ' ')}
+            <span className="material-symbols-outlined text-[12px] opacity-70">close</span>
+          </button>
+        ))}
+
+        {/* "Other…" chip — opens searchable dropdown */}
+        {allOptions && (
+          <div className="relative" ref={dropdownRef}>
+            <button
+              type="button"
+              onClick={() => setSearchOpen(!searchOpen)}
+              className="px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors border bg-gray-50 text-primary border-primary/30 hover:bg-primary/5 flex items-center gap-1"
+            >
+              <span className="material-symbols-outlined text-[13px]">add</span>
+              Other…
+            </button>
+
+            {searchOpen && (
+              <div className="absolute top-full left-0 mt-1 w-[260px] bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
+                <div className="p-2 border-b border-gray-100">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                    placeholder={placeholder}
+                    className="w-full px-3 py-1.5 text-[12px] bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-primary"
+                  />
+                </div>
+                <div className="max-h-[200px] overflow-y-auto">
+                  {filteredOptions.length === 0 ? (
+                    <p className="px-3 py-2 text-[11px] text-text-secondary">No countries found</p>
+                  ) : (
+                    filteredOptions.map(o => (
+                      <button
+                        key={o}
+                        type="button"
+                        onClick={() => {
+                          onToggle(o);
+                          setQuery('');
+                          setSearchOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-1.5 text-[12px] text-text-primary hover:bg-primary/5 transition-colors"
+                      >
+                        {o}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -716,7 +830,7 @@ function ProfilePageInner() {
                   <Select value={editForm.field_of_study || ''} onChange={v => setEditForm({ ...editForm, field_of_study: v })} options={[{ value: '', label: 'Select' }, ...FIELDS.map(f => ({ value: f, label: f.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }))]} />
                 </Field>
                 <Field label="Target countries">
-                  <TagSelect options={TARGET_COUNTRIES} selected={editForm.target_countries || []} onToggle={c => setEditForm({ ...editForm, target_countries: toggleArr(editForm.target_countries || [], c) })} />
+                  <TagSelect options={POPULAR_TARGET_COUNTRIES} selected={editForm.target_countries || []} onToggle={c => setEditForm({ ...editForm, target_countries: toggleArr(editForm.target_countries || [], c) })} allOptions={COUNTRY_NAMES} placeholder="Search countries…" />
                 </Field>
               </div>
             </div>
@@ -906,7 +1020,7 @@ function ProfilePageInner() {
               <Select value={editForm.target_degree || ''} onChange={v => setEditForm({ ...editForm, target_degree: v })} options={[{ value: '', label: 'Select' }, { value: 'master', label: "Master's" }, { value: 'phd', label: 'PhD' }]} />
             </Field>
             <Field label="Target Countries">
-              <TagSelect options={TARGET_COUNTRIES} selected={editForm.target_countries || []} onToggle={c => setEditForm({ ...editForm, target_countries: toggleArr(editForm.target_countries || [], c) })} />
+              <TagSelect options={POPULAR_TARGET_COUNTRIES} selected={editForm.target_countries || []} onToggle={c => setEditForm({ ...editForm, target_countries: toggleArr(editForm.target_countries || [], c) })} allOptions={COUNTRY_NAMES} placeholder="Search countries…" />
             </Field>
             <Field label="Target Fields">
               <TagSelect options={FIELDS} selected={editForm.target_fields || []} onToggle={f => setEditForm({ ...editForm, target_fields: toggleArr(editForm.target_fields || [], f) })} />

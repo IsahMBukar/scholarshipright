@@ -217,7 +217,7 @@ def country_eligibility_score(user_country: str, eligible_nationalities: list[st
 
 
 def degree_match_score(user_target: str, scholarship_degrees: list[str]) -> float:
-    """Score degree match: +12 exact, +7 adjacent/umbrella, -25 clear hard fail."""
+    """Score degree match: +12 exact, 0 adjacent/umbrella, -25 clear hard fail."""
     if not scholarship_degrees:
         return 4
     if not user_target:
@@ -235,7 +235,7 @@ def degree_match_score(user_target: str, scholarship_degrees: list[str]) -> floa
         if target_rank in sch_ranks:
             return 12
         if any(abs(target_rank - r) == 1 for r in sch_ranks):
-            return 7
+            return 0
         return -25
 
     return 0
@@ -469,12 +469,27 @@ def target_country_score(profile: Any, scholarship: Any) -> float:
 
 # ── Main API ──────────────────────────────────────────────────────
 
-def compute_match_score(profile: Any, scholarship: Any, resume: Any = None) -> dict:
+def compute_match_score(profile: Any, scholarship: Any, resume: Any = None, eligibility_info: dict | None = None) -> dict:
     """
     Compute match score between a user profile/resume and scholarship.
 
+    Args:
+        profile: user profile
+        scholarship: scholarship object
+        resume: optional resume
+        eligibility_info: optional result from passes_country_gate().
+            When provided and eligibility fails, applies a -35 penalty
+            and stores the reason in the breakdown for UI display.
+
     Returns: {"score": float, "breakdown": {...}}
     """
+    # ── Country eligibility (soft penalty, not hard gate) ──────────
+    country_passes = True
+    country_reason = None
+    if eligibility_info is not None:
+        country_passes = eligibility_info.get("passes", True)
+        country_reason = eligibility_info.get("reason")
+
     semantic = 0.0
     if getattr(profile, "embedding", None) is not None and getattr(scholarship, "embedding", None) is not None:
         semantic = max(0.0, cosine_similarity(profile.embedding, scholarship.embedding)) * 30
@@ -488,11 +503,11 @@ def compute_match_score(profile: Any, scholarship: Any, resume: Any = None) -> d
             _as_list(getattr(profile, "target_fields", None)) or _as_list(getattr(profile, "field_of_study", None)),
             _as_list(getattr(scholarship, "fields_of_study", None)),
         ),
-        # Country eligibility is now a boolean gate (passes_country_gate)
-        # evaluated BEFORE compute_match_score. Scholarships that fail the
-        # gate are skipped entirely and never reach this function. This 0
-        # is a placeholder for breakdown compatibility.
-        "country": 0,
+        # Country eligibility: +10 reward for eligible, -35 penalty for ineligible.
+        # The gate is no longer hard — we score everyone but penalize heavily.
+        "country": -35 if not country_passes else 10,
+        "country_eligible": country_passes,
+        "country_reason": country_reason,
         "degree": degree_match_score(
             getattr(profile, "target_degree", "") or getattr(profile, "degree_level", "") or "",
             _as_list(getattr(scholarship, "degree_levels", None)),

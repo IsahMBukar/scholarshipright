@@ -12,6 +12,7 @@ import { useOnboarding } from '@/hooks/useOnboarding';
 import { useAuth } from '@/hooks/useAuth';
 import { logoutAndRedirect } from '@/hooks/useLogout';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
+import EligibilityWarningModal from '@/components/EligibilityWarningModal';
 import { fetchFilterMetadata } from '@/services/api';
 import { fetchScholarships, saveScholarship, removeSavedScholarship, fetchSavedScholarships, updateSavedScholarship } from '@/services/api';
 import type { Scholarship, ScholarshipListResponse, FilterMetadata } from '@/services/api';
@@ -36,6 +37,14 @@ export default function ScholarshipsPage() {
   const showConfirm = useConfirm();
   const pathname = usePathname();
   const { isAuthenticated, setPendingAction } = useAuth();
+
+  // Eligibility warning modal state
+  const [eligibilityModal, setEligibilityModal] = useState<{
+    isOpen: boolean;
+    reason: string;
+    scholarshipUrl: string;
+    scholarshipId: string;
+  }>({ isOpen: false, reason: '', scholarshipUrl: '', scholarshipId: '' });
 
   // Match scores are only meaningful once the user has a complete profile.
   // Until then, hide them (and the deterministic placeholder) so we don't
@@ -147,6 +156,44 @@ export default function ScholarshipsPage() {
     }
     // Set status to applying
     await updateSavedScholarship(id, { status: 'applying' }).catch(() => {});
+    setSavedStatuses((prev) => ({ ...prev, [id]: 'applying' }));
+  }
+
+  function handleApplyIneligible(id: string, reason: string) {
+    const sch = scholarships.find((s) => s.id === id);
+    if (!sch) return;
+    // Action gating for guests
+    if (!isAuthenticated) {
+      setPendingAction({
+        type: 'apply',
+        label: `Apply to "${sch.name || 'this scholarship'}"`,
+        onReplay: async () => {
+          setEligibilityModal({
+            isOpen: true,
+            reason,
+            scholarshipUrl: sch.official_url,
+            scholarshipId: id,
+          });
+        },
+      });
+      return;
+    }
+    setEligibilityModal({
+      isOpen: true,
+      reason,
+      scholarshipUrl: sch.official_url,
+      scholarshipId: id,
+    });
+  }
+
+  function handleEligibilityConfirm() {
+    const id = eligibilityModal.scholarshipId;
+    // Auto-save and set status to applying (same as handleApplyNow)
+    if (!savedIds.has(id)) {
+      saveScholarship(id).catch(() => {});
+      setSavedIds((prev) => new Set(prev).add(id));
+    }
+    updateSavedScholarship(id, { status: 'applying' }).catch(() => {});
     setSavedStatuses((prev) => ({ ...prev, [id]: 'applying' }));
   }
 
@@ -341,6 +388,7 @@ export default function ScholarshipsPage() {
                 isSaved={savedIds.has(sch.id)}
                 savedStatus={savedStatuses[sch.id]}
                 onApplyNow={handleApplyNow}
+                onApplyIneligible={handleApplyIneligible}
                 showMatchScore={showMatchScores}
                 isAuthenticated={isAuthenticated}
               />
@@ -364,6 +412,15 @@ export default function ScholarshipsPage() {
           </div>
         )}
       </div>
+
+      {/* Eligibility warning modal */}
+      <EligibilityWarningModal
+        isOpen={eligibilityModal.isOpen}
+        reason={eligibilityModal.reason}
+        scholarshipUrl={eligibilityModal.scholarshipUrl}
+        onClose={() => setEligibilityModal((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={handleEligibilityConfirm}
+      />
     </AppLayout>
   );
 }

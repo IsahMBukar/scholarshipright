@@ -151,8 +151,12 @@ def passes_country_gate(
     eligibility_basis: str,
     resolved_countries: list[str],
     eligibility_unresolved: bool,
-) -> bool:
-    """Boolean pass/fail gate evaluated BEFORE soft fit scoring.
+    eligibility_display: Optional[str] = None,
+) -> dict:
+    """Evaluate country eligibility and return a structured result.
+
+    Previously returned a plain bool. Now returns a dict so the match engine
+    can apply a soft penalty and the UI can explain WHY the user is ineligible.
 
     Args:
         user_nationality: ISO 3166-1 alpha-2 code of user's citizenship
@@ -160,18 +164,26 @@ def passes_country_gate(
         eligibility_basis: 'citizenship', 'residency', or 'either'
         resolved_countries: list of eligible ISO codes from scholarship
         eligibility_unresolved: True if data was incomplete
+        eligibility_display: human-readable eligibility text from scholarship
 
     Returns:
-        True if user passes the gate (eligible or unresolved/missing data).
-        False only if resolved data clearly excludes the user.
+        {
+            "passes": bool,           # True if eligible
+            "reason": str | None,     # short reason for UI (e.g. "restricted to EU citizens")
+            "details": {
+                "basis": str,
+                "user_candidates": list[str],
+                "eligible_count": int,
+            }
+        }
     """
     # Fail-open for unresolved — flag in admin, don't silently exclude
     if eligibility_unresolved:
-        return True
+        return {"passes": True, "reason": None, "details": {"basis": eligibility_basis, "unresolved": True}}
 
     # No restrictions → open to all
     if not resolved_countries:
-        return True
+        return {"passes": True, "reason": None, "details": {"basis": eligibility_basis, "open": True}}
 
     candidates = []
     nat = (user_nationality or "").upper()
@@ -183,10 +195,43 @@ def passes_country_gate(
         candidates.append(res)
 
     if not candidates:
-        return True  # no user data → fail open
+        # no user data → fail open but flag it
+        return {"passes": True, "reason": None, "details": {"basis": eligibility_basis, "no_user_data": True}}
 
     resolved_set = set(resolved_countries)
-    return any(c in resolved_set for c in candidates)
+    is_eligible = any(c in resolved_set for c in candidates)
+
+    if is_eligible:
+        return {
+            "passes": True,
+            "reason": None,
+            "details": {"basis": eligibility_basis, "user_candidates": candidates},
+        }
+
+    # Build a human-readable reason for the UI
+    basis_label = {
+        "citizenship": "citizens",
+        "residency": "residents",
+        "either": "citizens or residents",
+    }.get(eligibility_basis, "eligible applicants")
+
+    if eligibility_display:
+        reason = eligibility_display
+    elif len(resolved_countries) <= 5:
+        names = ", ".join(resolved_countries)
+        reason = f"restricted to {basis_label} of {names}"
+    else:
+        reason = f"restricted to {basis_label} of {len(resolved_countries)} countries"
+
+    return {
+        "passes": False,
+        "reason": reason,
+        "details": {
+            "basis": eligibility_basis,
+            "user_candidates": candidates,
+            "eligible_count": len(resolved_countries),
+        },
+    }
 
 
 # ── Re-resolution job ──────────────────────────────────────────────

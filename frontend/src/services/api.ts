@@ -14,7 +14,7 @@ export interface MatchBreakdown {
   // Numeric criterion scores
   semantic?: number;          // max 30 (cosine sim × 30)
   field?: number;             // max 15, min 0
-  country?: number;           // max 10, min -25
+  country?: number;           // max 10, min -35 (reward for eligible, penalty for ineligible)
   degree?: number;            // max 12, min -25
   academic?: number;          // max 10, min -12
   language?: number;          // max 8, min -8
@@ -24,6 +24,9 @@ export interface MatchBreakdown {
   target_country?: number;    // max 4, min 0
   start_date?: number;        // max 4, min 0
   fee?: number;               // max 3, min -5
+  // Country eligibility (soft gate)
+  country_eligible?: boolean; // false = user is ineligible, -35 penalty applied
+  country_reason?: string;    // human-readable reason (e.g. "restricted to EU citizens")
   // Diagnostics
   resume_keyword_details?: {
     overlap: string[];
