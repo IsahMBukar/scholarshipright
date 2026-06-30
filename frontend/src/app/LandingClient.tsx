@@ -20,10 +20,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { motion } from 'framer-motion';
 import './landing.css';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_URL } from '@/lib/env';
 
 // ── Reveal animation preset ────────────────────────────────────────
 const fadeUp = {
@@ -184,7 +185,7 @@ export default function LandingClient() {
   if (checking) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#fdfbf7]">
-        <img src="/images/logo-light.jpg" alt="ScholarshipRight" className="w-12 h-12 rounded-xl mb-4 animate-pulse" />
+        <Image src="/images/logo-light.jpg" alt="ScholarshipRight" width={48} height={48} priority className="w-12 h-12 rounded-xl mb-4 animate-pulse" />
         <div className="w-5 h-5 border-2 border-[#f5b942]/30 border-t-[#f5b942] rounded-full animate-spin" />
       </div>
     );
@@ -195,7 +196,7 @@ export default function LandingClient() {
       {/* ═══ FLOATING NAV (V4 DNA) ═══ all links visible, button has real width ═══ */}
       <nav className="fixed left-1/2 -translate-x-1/2 z-50 bg-white/80 backdrop-blur-xl border border-[#f0ebe0] rounded-full flex items-center shadow-[0_8px_24px_-8px_rgba(0,0,0,0.08)] w-max max-w-[calc(100vw-1rem)] top-[clamp(0.5rem,0.4rem+0.3vw,1rem)] px-[clamp(0.5rem,0.25rem+0.6vw,1rem)] py-[clamp(0.25rem,0.2rem+0.2vw,0.5rem)] gap-[clamp(0.25rem,0.125rem+0.5vw,0.75rem)]">
         <Link href="/" className="flex items-center flex-shrink-0 gap-[clamp(0.25rem,0.2rem+0.3vw,0.5rem)] px-[clamp(0.125rem,0.05rem+0.3vw,0.5rem)]">
-          <img src="/images/logo-light.jpg" alt="ScholarshipRight" className="h-[clamp(1.25rem,0.5rem+1vw,2rem)] w-[clamp(1.25rem,0.5rem+1vw,2rem)] rounded-lg object-contain" />
+          <Image src="/images/logo-light.jpg" alt="ScholarshipRight" width={32} height={32} priority className="h-[clamp(1.25rem,0.5rem+1vw,2rem)] w-[clamp(1.25rem,0.5rem+1vw,2rem)] rounded-lg object-contain" />
           <span className="text-sm font-extrabold hidden sm:block">
             Scholarship<span className="text-[#f5b942]">Right</span>
           </span>
@@ -432,8 +433,8 @@ export default function LandingClient() {
                     <div className="bg-white border border-[#f0ebe0] rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm max-w-[85%]">
                       Great match. Next: draft your motivation letter. I&apos;ve pulled DAAD&apos;s actual criteria — want me to write the first draft from your profile?
                       <div className="mt-2.5 flex gap-2 flex-wrap">
-                        <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#f5b942]/15 text-[#d4972e] pointer-events-none">✍ Draft letter</span>
-                        <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-[#f0ebe0] text-gray-600 pointer-events-none">See criteria</span>
+                        <span aria-hidden="true" className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#f5b942]/15 text-[#d4972e] pointer-events-none">✍ Draft letter</span>
+                        <span aria-hidden="true" className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-[#f0ebe0] text-gray-600 pointer-events-none">See criteria</span>
                       </div>
                     </div>
                   </div>
@@ -576,7 +577,7 @@ export default function LandingClient() {
             {/* Brand column */}
             <div className="col-span-2 md:col-span-2">
               <Link href="/" className="flex items-center gap-2.5 mb-4">
-                <img src="/images/logo-light.jpg" alt="ScholarshipRight" className="h-9 w-9 rounded-lg object-contain" />
+                <Image src="/images/logo-light.jpg" alt="ScholarshipRight" width={36} height={36} className="h-9 w-9 rounded-lg object-contain" />
                 <span className="text-lg font-extrabold">
                   Scholarship<span className="text-[#f5b942]">Right</span>
                 </span>

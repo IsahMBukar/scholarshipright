@@ -8,7 +8,7 @@
 //   <GoogleButton />
 //   <GoogleButton label="Sign up with Google" />
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_URL } from '@/lib/env';
 
 interface GoogleButtonProps {
   label?: string;

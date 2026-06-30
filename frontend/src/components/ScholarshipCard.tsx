@@ -175,6 +175,7 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved, savedSta
             href={scholarship.official_url}
             target="_blank"
             rel="noopener noreferrer"
+            aria-label={`${!isEligible ? 'Apply anyway' : savedStatus === 'applying' ? 'Continue application' : 'Apply now'} for ${scholarship.name} (opens in new tab)`}
             onClick={(e) => {
               if (!isEligible && eligibilityReason) {
                 e.preventDefault();
@@ -292,6 +293,7 @@ export default function ScholarshipCard({ scholarship, onSave, isSaved, savedSta
             href={scholarship.official_url}
             target="_blank"
             rel="noopener noreferrer"
+            aria-label={`${!isEligible ? 'Apply anyway' : savedStatus === 'applying' ? 'Continue application' : 'Apply now'} for ${scholarship.name} (opens in new tab)`}
             onClick={(e) => {
               if (!isEligible && eligibilityReason) {
                 e.preventDefault();

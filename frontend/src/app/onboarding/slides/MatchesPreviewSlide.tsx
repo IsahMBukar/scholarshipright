@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import {
   fetchMatches,
   fetchFeaturedScholarships,
@@ -89,7 +90,7 @@ function MatchPreview({ m }: { m: Match }) {
         {/* Logo / placeholder */}
         <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0 border border-gray-200">
           {s.logo_url ? (
-            <img src={s.logo_url} alt="" className="w-8 h-8 object-contain" />
+            <Image src={s.logo_url} alt="" width={32} height={32} unoptimized className="w-8 h-8 object-contain" />
           ) : (
             <span className="material-symbols-outlined text-[22px] text-text-secondary">school</span>
           )}
@@ -198,6 +199,7 @@ export default function MatchesPreviewSlide({
               list = featured.map((s: Scholarship) => ({
                 scholarship: s,
                 score: (s as Scholarship & { match_score?: number }).match_score ?? 0,
+                breakdown: {} as Record<string, number>,
               }));
             }
           } catch {

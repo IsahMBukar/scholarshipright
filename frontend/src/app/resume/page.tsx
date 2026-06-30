@@ -11,7 +11,11 @@ import {
   fetchResumes, fetchResume, uploadResume, updateResume, deleteResume,
   setPrimaryResume, rewriteField, reanalyzeResume, exportResumePdf,
 } from '@/services/api';
-import type { Resume, ResumeIssue } from '@/services/api';
+import type {
+  Resume, ResumeIssue, ResumeEducation, ResumeExperience,
+  ResumeResearchProject, ResumeCertification, ResumePublication,
+  ResumeLanguageObject, ResumeReference,
+} from '@/services/api';
 
 const DEGREE_OPTIONS = ['bachelor', 'master', 'phd', 'diploma', 'short_course', 'certificate'];
 const FIELDS = ['computer_science', 'engineering', 'medicine', 'business', 'law', 'natural_sciences', 'social_sciences', 'arts', 'education', 'agriculture', 'public_health', 'economics', 'mathematics', 'physics', 'chemistry', 'biology'];
@@ -247,7 +251,7 @@ function ResumePageInner() {
     }
   }
 
-  function updateField(field: string, value: any) {
+  function updateField<K extends keyof Resume>(field: K, value: Resume[K]) {
     setEditData(prev => ({ ...prev, [field]: value }));
   }
 
@@ -625,25 +629,25 @@ function ResumePageInner() {
                 <div className="bg-white rounded-card border border-gray-200 p-4 md:p-5">
                   <h3 className="text-[16px] font-bold text-text-primary mb-3">Personal Information</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {[
+                    {([
                       { key: 'full_name', label: 'Full Name', icon: 'person' },
                       { key: 'email', label: 'Email', icon: 'email' },
                       { key: 'phone', label: 'Phone', icon: 'phone' },
                       { key: 'location', label: 'Location', icon: 'location_on' },
                       { key: 'linkedin_url', label: 'LinkedIn', icon: 'link' },
                       { key: 'portfolio_url', label: 'Portfolio', icon: 'language' },
-                    ].map(field => (
+                    ] as const).map(field => (
                       <div key={field.key}>
                         <label className="text-[12px] font-semibold text-text-secondary block mb-1">{field.label}</label>
                         <div className="flex gap-1">
                           <input
                             type="text"
-                            value={(editData as any)[field.key] || ''}
+                            value={(editData[field.key] as string | null | undefined) || ''}
                             onChange={(e) => updateField(field.key, e.target.value)}
                             className="flex-1 p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none"
                           />
                           <button
-                            onClick={() => handleAIRewrite(field.key, (editData as any)[field.key] || '')}
+                            onClick={() => handleAIRewrite(field.key, (editData[field.key] as string | null | undefined) || '')}
                             disabled={rewritingField === field.key}
                             className="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
                             title="AI Improve"
@@ -731,7 +735,7 @@ function ResumePageInner() {
             {/* EDUCATION TAB */}
             {activeEditorTab === 'education' && (
               <div className="space-y-3">
-                {(editData.education || []).map((edu: any, idx: number) => (
+                {(editData.education || []).map((edu: ResumeEducation, idx: number) => (
                   <div key={idx} className="bg-white rounded-card border border-gray-200 p-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {['institution', 'degree', 'field', 'gpa', 'start_date', 'end_date'].map(key => (
@@ -750,7 +754,7 @@ function ResumePageInner() {
                         </div>
                       ))}
                     </div>
-                    <button onClick={() => updateField('education', (editData.education || []).filter((_: any, i: number) => i !== idx))} className="mt-2 text-[12px] text-red-500 font-medium hover:underline">
+                    <button onClick={() => updateField('education', (editData.education || []).filter((_: ResumeEducation, i: number) => i !== idx))} className="mt-2 text-[12px] text-red-500 font-medium hover:underline">
                       Remove
                     </button>
                   </div>
@@ -767,11 +771,11 @@ function ResumePageInner() {
             {/* WORK EXPERIENCE TAB */}
             {activeEditorTab === 'experience' && (
               <div className="space-y-3">
-                {(editData.experience || []).map((exp: any, idx: number) => (
+                {(editData.experience || []).map((exp: ResumeExperience, idx: number) => (
                   <div key={idx} className="bg-white rounded-card border border-gray-200 p-4">
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-[13px] font-semibold text-primary">💼 Work Experience</span>
-                      <button onClick={() => updateField('experience', (editData.experience || []).filter((_: any, i: number) => i !== idx))} className="text-[12px] text-red-500 font-medium hover:underline">
+                      <button onClick={() => updateField('experience', (editData.experience || []).filter((_: ResumeExperience, i: number) => i !== idx))} className="text-[12px] text-red-500 font-medium hover:underline">
                         Remove
                       </button>
                     </div>
@@ -839,7 +843,7 @@ function ResumePageInner() {
             {/* RESEARCH / PROJECTS TAB */}
             {activeEditorTab === 'research' && (
               <div className="space-y-3">
-                {(editData.research_projects || []).map((rp: any, idx: number) => (
+                {(editData.research_projects || []).map((rp: ResumeResearchProject, idx: number) => (
                   <div key={idx} className="bg-white rounded-card border border-gray-200 p-4">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex gap-2">
@@ -861,7 +865,7 @@ function ResumePageInner() {
                           </button>
                         ))}
                       </div>
-                      <button onClick={() => updateField('research_projects', (editData.research_projects || []).filter((_: any, i: number) => i !== idx))} className="text-[12px] text-red-500 font-medium hover:underline">
+                      <button onClick={() => updateField('research_projects', (editData.research_projects || []).filter((_: ResumeResearchProject, i: number) => i !== idx))} className="text-[12px] text-red-500 font-medium hover:underline">
                         Remove
                       </button>
                     </div>
@@ -974,14 +978,17 @@ function ResumePageInner() {
                 {/* Languages */}
                 <div className="bg-white rounded-card border border-gray-200 p-4 md:p-5">
                   <h3 className="text-[16px] font-bold text-text-primary mb-3">Languages</h3>
-                  {(editData.languages || []).map((lang: any, idx: number) => (
+                  {(editData.languages || []).map((lang, idx: number) => {
+                    const langObj: ResumeLanguageObject = typeof lang === 'string' ? { language: lang } : lang;
+                    return (
                     <div key={idx} className="flex items-center gap-2 mb-2">
                       <input
                         type="text"
-                        value={lang.language || lang}
+                        value={langObj.language || ''}
                         onChange={(e) => {
                           const updated = [...(editData.languages || [])];
-                          updated[idx] = typeof updated[idx] === 'string' ? e.target.value : { ...updated[idx], language: e.target.value };
+                          const cur = updated[idx];
+                          updated[idx] = typeof cur === 'string' ? e.target.value : { ...cur, language: e.target.value };
                           updateField('languages', updated);
                         }}
                         className="flex-1 p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none"
@@ -989,20 +996,23 @@ function ResumePageInner() {
                       />
                       <input
                         type="text"
-                        value={lang.proficiency || ''}
+                        value={langObj.proficiency || ''}
                         onChange={(e) => {
                           const updated = [...(editData.languages || [])];
-                          updated[idx] = { ...updated[idx], proficiency: e.target.value };
+                          const cur = updated[idx];
+                          const base: ResumeLanguageObject = typeof cur === 'string' ? { language: cur } : cur;
+                          updated[idx] = { ...base, proficiency: e.target.value };
                           updateField('languages', updated);
                         }}
                         className="w-32 p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-[14px] text-text-primary focus:ring-2 focus:ring-primary outline-none"
                         placeholder="Level"
                       />
-                      <button onClick={() => updateField('languages', (editData.languages || []).filter((_: any, i: number) => i !== idx))} className="text-red-500">
+                      <button onClick={() => updateField('languages', (editData.languages || []).filter((_, i: number) => i !== idx))} className="text-red-500">
                         <span className="material-symbols-outlined text-[18px]">delete</span>
                       </button>
                     </div>
-                  ))}
+                    );
+                  })}
                   <button
                     onClick={() => updateField('languages', [...(editData.languages || []), { language: '', proficiency: '' }])}
                     className="text-[13px] font-medium text-primary hover:underline mt-1"

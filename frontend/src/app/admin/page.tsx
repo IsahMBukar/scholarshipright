@@ -9,15 +9,24 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import AdminLayout from '@/components/admin/AdminLayout';
 import StatCard from '@/components/admin/ui/StatCard';
 import { StatCardSkeleton, ChartCardSkeleton } from '@/components/admin/ui/Skeleton';
-import LineChart, { type LinePoint } from '@/components/admin/charts/LineChart';
-import BarChart, { type BarDatum } from '@/components/admin/charts/BarChart';
 import { adminApi } from '@/lib/admin/api';
 import { AdminApiError } from '@/lib/admin/client';
 import { CHART_COLORS } from '@/components/admin/charts/colors';
 import type { KpiFormat } from '@/lib/admin/types';
+import type { LinePoint } from '@/components/admin/charts/LineChart';
+import type { BarDatum } from '@/components/admin/charts/BarChart';
+
+// Lazy-load visx charts — only imported when /admin route is visited
+const LineChart = dynamic(() => import('@/components/admin/charts/LineChart'), {
+  loading: () => <ChartCardSkeleton />,
+});
+const BarChart = dynamic(() => import('@/components/admin/charts/BarChart'), {
+  loading: () => <ChartCardSkeleton />,
+});
 
 function formatKpiValue(value: number, format: KpiFormat): string {
   switch (format) {

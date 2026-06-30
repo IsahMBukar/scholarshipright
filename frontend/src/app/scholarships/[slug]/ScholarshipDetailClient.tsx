@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import AppLayout from '@/components/AppLayout';
 import { ScholarshipDetailSkeleton } from '@/components/Skeletons';
 import { useAuth } from '@/hooks/useAuth';
@@ -11,6 +12,7 @@ import type { Scholarship, MatchBreakdown } from '@/services/api';
 
 export default function ScholarshipDetailClient() {
   const params = useParams();
+  const router = useRouter();
   const [scholarship, setScholarship] = useState<Scholarship | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSaved, setIsSaved] = useState(false);
@@ -22,7 +24,7 @@ export default function ScholarshipDetailClient() {
   const { isAuthenticated, setPendingAction } = useAuth();
 
   function handleShare() {
-    const url = window.location.href;
+    const url = typeof window !== 'undefined' ? window.location.href : '';
     const title = scholarship?.name || 'Scholarship';
     if (navigator.share) {
       navigator.share({ title, url }).catch(() => {});
@@ -42,9 +44,9 @@ export default function ScholarshipDetailClient() {
         fetchSavedScholarships().catch(() => []),
       ]).then(([sch, saved]) => {
         setScholarship(sch);
-        const found = saved.find((s: any) => (s.scholarship_id || s.id) === sch.id);
+        const found = saved.find((s: { scholarship_id?: string; id: string; status?: string }) => (s.scholarship_id || s.id) === sch.id);
         setIsSaved(!!found);
-        if (found) setSavedStatus((found as any).status || 'saved');
+        if (found) setSavedStatus(found.status || 'saved');
       }).catch((err) => {
         console.error(err);
         if (err?.status === 404 || err?.message?.includes('404')) {
@@ -133,7 +135,7 @@ export default function ScholarshipDetailClient() {
     );
   }
 
-  if (!scholarship && !loading) {
+  if (!scholarship) {
     return (
       <AppLayout>
         <div className="p-6 text-center py-20">
@@ -150,7 +152,7 @@ export default function ScholarshipDetailClient() {
           </p>
           {loadError === 'network' ? (
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => router.refresh()}
               className="text-primary-readable font-semibold hover:underline"
             >
               Try again
@@ -246,8 +248,12 @@ export default function ScholarshipDetailClient() {
         {/* 1. STICKY TOP ACTION & META-BAR */}
         <div className="sticky top-0 z-40 bg-white border-b border-gray-100">
           <div className="flex justify-between items-center px-4 md:px-8 py-3">
-            <Link href="/scholarships" className="flex items-center gap-2 px-3 py-2 rounded-full hover:bg-gray-100 transition">
-              <span className="material-symbols-outlined text-[20px] text-text-secondary">arrow_back</span>
+            <Link
+              href="/scholarships"
+              aria-label="Back to scholarships"
+              className="flex items-center gap-2 px-3 py-2 rounded-full hover:bg-gray-100 transition"
+            >
+              <span aria-hidden="true" className="material-symbols-outlined text-[20px] text-text-secondary">arrow_back</span>
               <span className="hidden sm:inline text-[13px] text-text-secondary font-medium">Back to scholarships</span>
             </Link>
             <div className="flex items-center gap-2">
@@ -318,7 +324,7 @@ export default function ScholarshipDetailClient() {
                 <div className="flex items-center space-x-3">
                   <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center border border-gray-200">
                     {scholarship.logo_url ? (
-                      <img src={scholarship.logo_url} alt={scholarship.provider || ''} className="w-10 h-10 object-contain" />
+                      <Image src={scholarship.logo_url} alt={scholarship.provider || ''} width={40} height={40} unoptimized className="w-10 h-10 object-contain" />
                     ) : (
                       <span className="text-xl font-bold text-primary">{(scholarship.provider || scholarship.host_country || 'S').charAt(0)}</span>
                     )}
@@ -725,7 +731,7 @@ export default function ScholarshipDetailClient() {
                     </div>
                   </div>
                 )}
-                {(scholarship as any).requires_gre && (
+                {(scholarship as { requires_gre?: boolean }).requires_gre && (
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-primary text-[18px]">assignment</span>
                     <div>
@@ -734,7 +740,7 @@ export default function ScholarshipDetailClient() {
                     </div>
                   </div>
                 )}
-                {(scholarship as any).requires_application_fee && (
+                {scholarship.requires_application_fee && (
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-primary text-[18px]">payments</span>
                     <div>
@@ -1043,7 +1049,7 @@ export default function ScholarshipDetailClient() {
               <div className="flex items-center gap-4 p-5 bg-gray-50 rounded-xl border border-gray-200">
                 <div className="w-16 h-16 bg-gray-100 rounded-xl flex items-center justify-center border border-gray-200">
                   {scholarship.logo_url ? (
-                    <img src={scholarship.logo_url} alt="" className="w-14 h-14 object-contain" />
+                    <Image src={scholarship.logo_url} alt="" width={56} height={56} unoptimized className="w-14 h-14 object-contain" />
                   ) : (
                     <span className="text-2xl font-bold text-primary">{(scholarship.provider || 'S').charAt(0)}</span>
                   )}
@@ -1077,7 +1083,7 @@ export default function ScholarshipDetailClient() {
             <div className="flex items-center gap-4 p-5 bg-gray-50 rounded-xl border border-gray-200">
               <div className="w-16 h-16 bg-gray-100 rounded-xl flex items-center justify-center border border-gray-200">
                 {scholarship.logo_url ? (
-                  <img src={scholarship.logo_url} alt="" className="w-14 h-14 object-contain" />
+                  <Image src={scholarship.logo_url} alt="" width={56} height={56} unoptimized className="w-14 h-14 object-contain" />
                 ) : (
                   <span className="text-2xl font-bold text-primary">{(scholarship.provider || 'S').charAt(0)}</span>
                 )}
@@ -1135,7 +1141,7 @@ export default function ScholarshipDetailClient() {
                     onClick={() => setPendingAction({
                       type: 'match',
                       label: 'Get your match score',
-                      onReplay: () => { window.location.href = '/onboarding'; },
+                      onReplay: () => { router.push('/onboarding'); },
                     })}
                     className="px-5 py-2.5 bg-primary text-white text-[13px] font-bold rounded-btn hover:brightness-110 transition-all"
                   >

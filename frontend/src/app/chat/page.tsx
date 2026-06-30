@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import AppLayout from '@/components/AppLayout';
 import MobileNav from '@/components/MobileNav';
-import { EligibilityCard, ReadinessCard, RoadmapCard, DiscoverCard, DocumentCard } from '@/components/AgentCards';
+import { EligibilityCard, ReadinessCard, RoadmapCard, DiscoverCard, DocumentCard, type EligibilityCardData, type ReadinessCardData, type RoadmapCardData, type DiscoverCardData, type DocumentCardData } from '@/components/AgentCards';
 import OnboardingGate from '@/components/OnboardingGate';
 import {
   fetchAgentContext,
@@ -42,7 +42,7 @@ interface ReasoningStep {
   type: 'thinking' | 'tool_call' | 'tool_result';
   content: string;
   toolName?: string;
-  toolResult?: any;
+  toolResult?: unknown;
 }
 
 interface ChatMessage {
@@ -50,7 +50,7 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   content?: string;
   action?: string;
-  data?: any;
+  data?: unknown;
   timestamp: Date;
   reasoning?: ReasoningStep[];
   isStreaming?: boolean;
@@ -251,7 +251,8 @@ export default function AgentPage() {
         ));
       },
       onDone: (result) => {
-        if (result?._session_id) setSessionId(result._session_id);
+        const sid = result?._session_id;
+        if (typeof sid === 'string') setSessionId(sid);
         // Check if it's a structured response
         if (result && result.type && result.type !== 'text') {
           setMessages((prev) => prev.map(m =>
@@ -265,7 +266,10 @@ export default function AgentPage() {
             } : m
           ));
         } else {
-          const finalContent = result?.content || streamingContent.current;
+          const rawContent = result?.content;
+          const finalContent = typeof rawContent === 'string' && rawContent
+            ? rawContent
+            : streamingContent.current;
           setMessages((prev) => prev.map(m =>
             m.id === assistantId ? {
               ...m,
@@ -433,15 +437,15 @@ export default function AgentPage() {
 
           {/* Structured responses */}
           {msg.action === 'eligibility' && msg.data ? (
-            <EligibilityCard data={msg.data} />
+            <EligibilityCard data={msg.data as EligibilityCardData} />
           ) : msg.action === 'readiness' && msg.data ? (
-            <ReadinessCard data={msg.data} />
+            <ReadinessCard data={msg.data as ReadinessCardData} />
           ) : msg.action === 'roadmap' && msg.data ? (
-            <RoadmapCard data={msg.data} />
+            <RoadmapCard data={msg.data as RoadmapCardData} />
           ) : msg.action === 'discover' && msg.data ? (
-            <DiscoverCard data={msg.data} />
+            <DiscoverCard data={msg.data as DiscoverCardData} />
           ) : msg.action === 'generate' && msg.data ? (
-            <DocumentCard data={msg.data} />
+            <DocumentCard data={msg.data as DocumentCardData} />
           ) : (
             <div className="px-4 py-3 rounded-2xl rounded-bl-sm bg-white border border-gray-200 text-[14px] leading-relaxed text-text-primary">
               {msg.content ? <MarkdownText content={msg.content} /> : (msg.isStreaming ? (

@@ -33,7 +33,7 @@ import PasswordField from '@/components/auth/PasswordField';
 import GoogleButton from '@/components/auth/GoogleButton';
 import { useAuth } from '@/hooks/useAuth';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_URL } from '@/lib/env';
 
 
 // Only allow internal paths as the ?next= target. Block absolute URLs and

@@ -4,7 +4,7 @@ import { CATEGORY_BY_SLUG, ALL_CATEGORY_SLUGS } from '@/lib/scholarship-categori
 import type { Scholarship, ScholarshipListResponse } from '@/services/api';
 import CategoryContent from './CategoryContent';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_URL } from '@/lib/env';
 
 interface PageProps {
   params: Promise<{ slug: string }>;

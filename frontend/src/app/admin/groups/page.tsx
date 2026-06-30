@@ -14,7 +14,7 @@ import Drawer from '@/components/admin/ui/Drawer';
 import { useToast } from '@/components/admin/ui/Toast';
 import { useConfirm } from '@/components/admin/ui/ConfirmDialog';
 import { adminApi } from '@/lib/admin/api';
-import type { AdminCountryGroup, CountryOption } from '@/lib/admin/types';
+import type { AdminCountryGroup, CountryOption, GroupCreateRequest, GroupUpdateRequest } from '@/lib/admin/types';
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -151,7 +151,7 @@ function GroupDrawer({
   group: AdminCountryGroup | null;
   countries: CountryOption[];
   onClose: () => void;
-  onSave: (data: any) => void;
+  onSave: (data: GroupCreateRequest | GroupUpdateRequest) => void;
 }) {
   const isEdit = !!group;
   const [code, setCode] = useState(group?.code || '');
@@ -169,20 +169,24 @@ function GroupDrawer({
     setSaving(true);
     try {
       if (isEdit) {
+        const trimmedDesc = description.trim();
+        const trimmedUrl = sourceUrl.trim();
         await onSave({
           name: name.trim(),
-          description: description.trim() || null,
-          source_url: sourceUrl.trim() || null,
-          source_date: sourceDate || null,
+          description: trimmedDesc || undefined,
+          source_url: trimmedUrl || undefined,
+          source_date: sourceDate || undefined,
           members,
         });
       } else {
+        const trimmedDesc = description.trim();
+        const trimmedUrl = sourceUrl.trim();
         await onSave({
           code: code.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_'),
           name: name.trim(),
-          description: description.trim() || null,
-          source_url: sourceUrl.trim() || null,
-          source_date: sourceDate || null,
+          description: trimmedDesc || undefined,
+          source_url: trimmedUrl || undefined,
+          source_date: sourceDate || undefined,
           members,
         });
       }
@@ -310,26 +314,26 @@ export default function AdminGroupsPage() {
 
   // Create mutation
   const createGroup = useMutation({
-    mutationFn: (body: any) => adminApi.createGroup(body),
+    mutationFn: (body: GroupCreateRequest) => adminApi.createGroup(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'groups'] });
       setShowCreate(false);
       toast.success('Group created');
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error('Failed to create group', err?.message);
     },
   });
 
   // Update mutation
   const updateGroup = useMutation({
-    mutationFn: ({ code, body }: { code: string; body: any }) => adminApi.updateGroup(code, body),
+    mutationFn: ({ code, body }: { code: string; body: GroupUpdateRequest }) => adminApi.updateGroup(code, body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin', 'groups'] });
       setEditingGroup(null);
       toast.success('Group updated');
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error('Failed to update group', err?.message);
     },
   });
@@ -341,7 +345,7 @@ export default function AdminGroupsPage() {
       qc.invalidateQueries({ queryKey: ['admin', 'groups'] });
       toast.success('Group deprecated');
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error('Failed to deprecate group', err?.message);
     },
   });
@@ -392,7 +396,7 @@ export default function AdminGroupsPage() {
           </div>
           <select
             value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value as any)}
+            onChange={e => setStatusFilter(e.target.value as 'active' | 'deprecated' | '')}
             className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary outline-none"
           >
             <option value="">All statuses</option>
@@ -413,7 +417,7 @@ export default function AdminGroupsPage() {
         {/* Error */}
         {groups.isError && (
           <div className="p-4 bg-red-50 text-red-700 rounded-lg text-sm">
-            Failed to load groups. {(groups.error as any)?.message || ''}
+            Failed to load groups. {(groups.error as Error | null)?.message || ''}
           </div>
         )}
 
@@ -532,7 +536,7 @@ export default function AdminGroupsPage() {
           group={null}
           countries={countryOptions}
           onClose={() => setShowCreate(false)}
-          onSave={(data) => createGroup.mutateAsync(data)}
+          onSave={(data) => createGroup.mutateAsync(data as GroupCreateRequest)}
         />
       )}
 

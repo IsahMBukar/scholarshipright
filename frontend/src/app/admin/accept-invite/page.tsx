@@ -29,8 +29,7 @@ import { ShieldCheck, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react'
 import Button from '@/components/admin/ui/Button';
 import PasswordField from '@/components/auth/PasswordField';
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_URL } from '@/lib/env';
 
 interface AcceptSuccess {
   accepted: true;

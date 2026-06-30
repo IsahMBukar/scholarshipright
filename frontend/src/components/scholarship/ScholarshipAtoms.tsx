@@ -1,6 +1,7 @@
 // Small shared atoms used by both PublicScholarshipCard and ScholarshipCard.
 // Keeps styling in sync for the bits that appear in both cards.
 
+import Image from 'next/image';
 import type { Scholarship } from '@/services/api';
 
 // ── Days until deadline ──────────────────────────────────────────
@@ -15,13 +16,14 @@ export function ScholarshipLogo({ scholarship, size = 'md' }: {
 }) {
   const dims = size === 'sm' ? 'w-8 h-8' : size === 'md' ? 'w-10 h-10' : 'w-16 h-16';
   const imgDims = size === 'sm' ? 'w-5 h-5' : size === 'md' ? 'w-6 h-6' : 'w-10 h-10';
+  const imgPx = size === 'sm' ? 20 : size === 'md' ? 24 : 40;
   const fallbackIcon = size === 'lg' ? 'school' : 'school';
   const fallbackSize = size === 'lg' ? 'text-3xl' : 'text-lg';
 
   return (
     <div className={`${dims} rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0 border border-gray-200`}>
       {scholarship.logo_url ? (
-        <img src={scholarship.logo_url} alt="" className={`${imgDims} object-contain`} />
+        <Image src={scholarship.logo_url} alt="" width={imgPx} height={imgPx} className={`${imgDims} object-contain`} unoptimized />
       ) : (
         <span className={`material-symbols-outlined ${fallbackSize} text-text-secondary`}>{fallbackIcon}</span>
       )}

@@ -1,5 +1,3 @@
-'use client';
-
 // Empty state primitive. Big icon + title + body + optional action.
 
 import { type ReactNode } from 'react';

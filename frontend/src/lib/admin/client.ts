@@ -5,8 +5,7 @@
 //
 // Pattern mirrors existing frontend pages: fetch with `credentials: 'include'`.
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_URL } from '@/lib/env';
 
 export class AdminApiError extends Error {
   status: number;

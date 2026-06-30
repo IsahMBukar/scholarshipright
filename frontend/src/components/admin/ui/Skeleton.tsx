@@ -1,5 +1,3 @@
-'use client';
-
 // Skeleton placeholder. Matches StatCard sizing so the loading state doesn't
 // jump when real data arrives.
 

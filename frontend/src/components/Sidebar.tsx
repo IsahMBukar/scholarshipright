@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { NAV_ITEMS } from '@/lib/nav-items';
 
@@ -11,7 +12,7 @@ export default function Sidebar() {
     <aside className="hidden md:flex flex-col items-center w-[80px] h-full bg-white border-r border-gray-200 py-4 gap-1 overflow-y-auto">
       {/* Logo */}
       <Link href="/scholarships" className="w-10 h-10 rounded-lg overflow-hidden mb-4">
-        <img src="/images/logo-light.jpg" alt="ScholarshipRight" className="w-10 h-10 object-contain" />
+        <Image src="/images/logo-light.jpg" alt="ScholarshipRight" width={40} height={40} className="w-10 h-10 object-contain" />
       </Link>
 
       {/* Nav Items */}

@@ -10,6 +10,7 @@ import { useAuth, type PendingAction } from '@/hooks/useAuth';
 import GoogleButton from '@/components/auth/GoogleButton';
 import PasswordField from '@/components/auth/PasswordField';
 import Button from '@/components/admin/ui/Button';
+import { API_URL } from '@/lib/env';
 
 export default function AuthModal() {
   const { pendingAction, setPendingAction, login, refresh } = useAuth();
@@ -33,7 +34,7 @@ export default function AuthModal() {
 
   if (!pendingAction) return null;
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -45,7 +46,7 @@ export default function AuthModal() {
       // Replay the pending action
       const action = pendingAction;
       setPendingAction(null);
-      action.onReplay?.();
+      action?.onReplay?.();
     } else {
       setError(result.error || 'Login failed');
     }
@@ -66,7 +67,7 @@ export default function AuthModal() {
         await refresh();
         const action = pendingAction;
         setPendingAction(null);
-        action.onReplay?.();
+        action?.onReplay?.();
       } else {
         const data = await res.json().catch(() => ({}));
         setError(data.detail || 'Registration failed');

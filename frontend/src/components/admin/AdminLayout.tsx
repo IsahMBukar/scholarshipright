@@ -19,7 +19,7 @@ import { Skeleton } from '@/components/admin/ui/Skeleton';
 import { ShieldOff } from 'lucide-react';
 import type { AdminRole } from '@/lib/admin/types';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_URL } from '@/lib/env';
 
 interface AdminIdentity {
   id: number;

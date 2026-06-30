@@ -153,7 +153,7 @@ export const adminApi = {
     }),
 
   getGroupUsage: (code: string) =>
-    adminFetch<{ group_code: string; group_name: string; scholarship_count: number; scholarships: any[] }>(
+    adminFetch<{ group_code: string; group_name: string; scholarship_count: number; scholarships: Array<{ id: string; title: string }> }>(
       `/api/admin/groups/${code}/usage`
     ),
 

@@ -1,5 +1,3 @@
-'use client';
-
 interface MatchScoreBadgeProps {
   score: number;
   size?: 'sm' | 'md' | 'lg';

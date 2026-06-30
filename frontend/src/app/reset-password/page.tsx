@@ -26,7 +26,7 @@ import { KeyRound, AlertTriangle, CheckCircle2, ArrowLeft, Loader2 } from 'lucid
 import Button from '@/components/admin/ui/Button';
 import PasswordField from '@/components/auth/PasswordField';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_URL } from '@/lib/env';
 const AUTO_REDIRECT_MS = 3000;
 
 function ResetPasswordForm() {

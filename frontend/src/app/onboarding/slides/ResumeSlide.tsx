@@ -63,10 +63,11 @@ export default function ResumeSlide({
       setTimeout(() => {
         onComplete();
       }, 1200);
-    } catch (err: any) {
+    } catch (err) {
+      const error = err as { response?: { data?: { detail?: string } }; message?: string };
       const msg =
-        err?.response?.data?.detail ||
-        err?.message ||
+        error?.response?.data?.detail ||
+        error?.message ||
         "We couldn't process that file. It might be too large or in an unsupported format.";
       setState({ kind: 'error', message: String(msg) });
     }

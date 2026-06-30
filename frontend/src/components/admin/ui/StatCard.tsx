@@ -1,5 +1,3 @@
-'use client';
-
 // Stat / KPI card. Big number, label, optional delta / icon.
 
 import { type ReactNode } from 'react';

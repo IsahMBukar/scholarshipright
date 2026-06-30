@@ -1,8 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { ALL_CATEGORY_SLUGS } from '@/lib/scholarship-categories';
-
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://scholarshipright.com';
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_URL, SITE_URL as BASE_URL } from '@/lib/env';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();

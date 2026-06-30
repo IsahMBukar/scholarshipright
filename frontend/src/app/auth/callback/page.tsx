@@ -10,8 +10,9 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import Button from '@/components/admin/ui/Button';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_URL } from '@/lib/env';
 
 export default function AuthCallbackPage() {
   const router = useRouter();
@@ -63,12 +64,14 @@ export default function AuthCallbackPage() {
       <div className="min-h-screen flex items-center justify-center p-6 bg-gray-100">
         <div className="max-w-md w-full bg-white rounded-card border border-gray-200 p-8 text-center">
           <p className="text-sm text-red-600 mb-4">{error}</p>
-          <button
+          <Button
+            type="button"
+            variant="primary"
+            size="md"
             onClick={() => router.push('/login')}
-            className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-btn hover:brightness-110 transition-all"
           >
             ← Back to sign in
-          </button>
+          </Button>
         </div>
       </div>
     );

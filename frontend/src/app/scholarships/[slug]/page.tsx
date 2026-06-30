@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import ScholarshipDetailClient from './ScholarshipDetailClient';
 
 const SITE_URL = 'https://scholarshipright.com';
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_URL } from '@/lib/env';
 
 interface ScholarshipData {
   id: string;

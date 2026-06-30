@@ -9,7 +9,7 @@ import axios from 'axios';
 import type { PreviousDegree, StandardizedTest } from '@/lib/admin/types';
 export type { PreviousDegree, StandardizedTest };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_URL } from '@/lib/env';
 export interface MatchBreakdown {
   // Numeric criterion scores
   semantic?: number;          // max 30 (cosine sim × 30)
@@ -193,8 +193,8 @@ export async function fetchProfile(): Promise<Profile | null> {
   try {
     const { data } = await api.get('/api/profile');
     return data;
-  } catch (err: any) {
-    if (err?.response?.status === 404) return null;
+  } catch (err: unknown) {
+    if ((err as { response?: { status?: number } })?.response?.status === 404) return null;
     throw err;
   }
 }
@@ -260,12 +260,18 @@ export async function fetchSavedScholarships(statusFilter?: string): Promise<Arr
   return data;
 }
 
-export async function saveScholarship(scholarshipId: string): Promise<any> {
+export type SavedScholarship = Scholarship & {
+  status: string;
+  notes?: string;
+  reminder_enabled: boolean;
+};
+
+export async function saveScholarship(scholarshipId: string): Promise<SavedScholarship> {
   const { data } = await api.post(`/api/saved/${scholarshipId}`);
   return data;
 }
 
-export async function updateSavedScholarship(scholarshipId: string, update: { status?: string; notes?: string; reminder_enabled?: boolean }): Promise<any> {
+export async function updateSavedScholarship(scholarshipId: string, update: { status?: string; notes?: string; reminder_enabled?: boolean }): Promise<SavedScholarship> {
   const { data } = await api.put(`/api/saved/${scholarshipId}`, update);
   return data;
 }
@@ -306,6 +312,101 @@ export interface LevelAwareCompleteness {
   hint: string;
 }
 
+// Resume sub-entity types. All fields optional because the AI extractor
+// frequently returns partial data and we let users fill the rest manually.
+export interface ResumeEducation {
+  institution?: string;
+  degree?: string;
+  field?: string;
+  gpa?: string;
+  start_date?: string;
+  end_date?: string;
+  date?: string; // legacy alias for end_date
+  [key: string]: string | undefined;
+}
+
+export interface ResumeExperience {
+  company?: string;
+  position?: string;
+  title?: string; // legacy alias for position
+  location?: string;
+  start_date?: string;
+  end_date?: string;
+  description?: string;
+  [key: string]: string | undefined;
+}
+
+export interface ResumeResearchProject {
+  type?: 'research' | 'project' | string;
+  title?: string;
+  organization?: string;
+  role?: string;
+  location?: string;
+  start_date?: string;
+  end_date?: string;
+  technologies?: string;
+  description?: string;
+  outcomes?: string;
+  url?: string;
+  [key: string]: string | undefined;
+}
+
+export interface ResumeCertification {
+  name?: string;
+  issuer?: string;
+  date?: string;
+  [key: string]: string | undefined;
+}
+
+export interface ResumePublication {
+  title?: string;
+  journal?: string;
+  date?: string;
+  doi?: string;
+  [key: string]: string | undefined;
+}
+
+// Languages can arrive as either plain strings (legacy) or structured objects.
+export interface ResumeLanguageObject {
+  language?: string;
+  proficiency?: string;
+  [key: string]: string | undefined;
+}
+export type ResumeLanguage = string | ResumeLanguageObject;
+
+export interface ResumeAward {
+  title?: string;
+  issuer?: string;
+  date?: string;
+  description?: string;
+  [key: string]: string | undefined;
+}
+
+export interface ResumeProject {
+  title?: string;
+  organization?: string;
+  description?: string;
+  technologies?: string;
+  url?: string;
+  start_date?: string;
+  end_date?: string;
+  [key: string]: string | undefined;
+}
+
+export interface ResumeReference {
+  name?: string;
+  position?: string;
+  contact?: string;
+  [key: string]: string | undefined;
+}
+
+export interface ResumeIssue {
+  field: string;
+  severity: 'urgent' | 'severe' | 'likely';
+  message: string;
+  suggestion?: string;
+}
+
 export interface Resume {
   id: string;
   user_id: string;
@@ -323,30 +424,23 @@ export interface Resume {
   linkedin_url: string | null;
   portfolio_url: string | null;
   summary: string | null;
-  education: any[];
-  experience: any[];
-  research_projects: any[];
+  education: ResumeEducation[];
+  experience: ResumeExperience[];
+  research_projects: ResumeResearchProject[];
   skills: string[];
-  certifications: any[];
-  publications: any[];
-  languages: any[];
-  projects: any[];
-  awards: any[];
-  ref_list: any[];
-  analysis: Record<string, any>;
-  issues: any[];
+  certifications: ResumeCertification[];
+  publications: ResumePublication[];
+  languages: ResumeLanguage[];
+  projects: ResumeProject[];
+  awards: ResumeAward[];
+  ref_list: ResumeReference[];
+  analysis: Record<string, unknown>;
+  issues: ResumeIssue[];
   ai_suggestions: string | null;
   overall_score: number | null;
   level_aware_completeness: LevelAwareCompleteness | null;
   created_at: string;
   updated_at: string;
-}
-
-export interface ResumeIssue {
-  field: string;
-  severity: 'urgent' | 'severe' | 'likely';
-  message: string;
-  suggestion?: string;
 }
 
 export async function fetchResumes(): Promise<Resume[]> {
@@ -585,7 +679,14 @@ export async function agentGenerateDocument(scholarshipId: string, documentType:
   return data;
 }
 
-export async function agentChat(message: string, action?: string, scholarshipId?: string, documentType?: string, sessionId?: string | null): Promise<any> {
+export interface AgentChatResult {
+  type?: string;
+  message?: string;
+  session_id?: string;
+  [key: string]: unknown;
+}
+
+export async function agentChat(message: string, action?: string, scholarshipId?: string, documentType?: string, sessionId?: string | null): Promise<AgentChatResult> {
   const { data } = await api.post('/api/agent/chat', { message, action, scholarship_id: scholarshipId, document_type: documentType, session_id: sessionId });
   return data;
 }
@@ -594,15 +695,15 @@ export async function agentChat(message: string, action?: string, scholarshipId?
 
 export interface AgentStreamEvent {
   event: 'thinking' | 'tool_call' | 'tool_result' | 'token' | 'done' | 'error' | 'session';
-  data: any;
+  data: unknown;
 }
 
 export interface AgentStreamCallbacks {
   onThinking?: (step: string) => void;
-  onToolCall?: (name: string, args: Record<string, any>) => void;
-  onToolResult?: (name: string, result: any) => void;
+  onToolCall?: (name: string, args: Record<string, unknown>) => void;
+  onToolResult?: (name: string, result: unknown) => void;
   onToken?: (token: string) => void;
-  onDone?: (result: any) => void;
+  onDone?: (result: AgentChatResult) => void;
   onError?: (error: string) => void;
   onSession?: (sessionId: string) => void;
 }

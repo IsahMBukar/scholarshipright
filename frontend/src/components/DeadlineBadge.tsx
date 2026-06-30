@@ -1,5 +1,3 @@
-'use client';
-
 interface DeadlineBadgeProps {
   deadline: string;
 }

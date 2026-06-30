@@ -1,13 +1,76 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import AppLayout from '@/components/AppLayout';
 import PageHeader from '@/components/PageHeader';
 import { ProfileSkeleton } from '@/components/Skeletons';
 import OnboardingProgress from '@/components/OnboardingProgress';
 import { fetchResumes, fetchProfile, createOrUpdateProfile, updateResume, createManualResume } from '@/services/api';
-import type { Profile, Resume } from '@/services/api';
+import type {
+  Profile,
+  Resume,
+  ResumeEducation,
+  ResumeExperience,
+  ResumeResearchProject,
+  ResumeCertification,
+  ResumePublication,
+  ResumeLanguage,
+  ResumeReference,
+} from '@/services/api';
+
+// Shared shape for every edit modal in this page. Each modal only touches
+// the subset of fields it cares about, so all of these are optional.
+// All numeric-looking fields are typed as `string` because HTML inputs
+// surface their values as strings — the API layer coerces on save.
+type EditFormState = {
+  // Contact
+  location?: string;
+  email?: string;
+  phone?: string;
+  linkedin_url?: string;
+  // Quick stats / targets / research interests
+  country_of_origin?: string;
+  target_degree?: string;
+  field_of_study?: string;
+  target_countries?: string[];
+  target_fields?: string[];
+  research_interests?: string[];
+  graduation_year?: string | number;
+  degree_level?: string;
+  cgpa?: string | number;
+  cgpa_scale?: string | number;
+  work_experience_years?: string | number;
+  has_ielts?: boolean;
+  ielts_score?: string | number;
+  prior_studies_in_english?: boolean;
+  // Resume fields
+  summary?: string;
+  skills?: string[];
+  education?: ResumeEducation[];
+  experience?: ResumeExperience[];
+  research_projects?: ResumeResearchProject[];
+  certifications?: ResumeCertification[];
+  publications?: ResumePublication[];
+  languages?: ResumeLanguage[];
+  ref_list?: ResumeReference[];
+};
+
+// Value type accepted by saveResumeField — narrowed to the union of Resume
+// field shapes we actually persist. Allows undefined so callers can pass
+// optional EditFormState fields directly.
+type ResumeFieldValue =
+  | string
+  | string[]
+  | ResumeEducation[]
+  | ResumeExperience[]
+  | ResumeResearchProject[]
+  | ResumeCertification[]
+  | ResumePublication[]
+  | ResumeLanguage[]
+  | ResumeReference[]
+  | { location?: string; email?: string; phone?: string; linkedin_url?: string }
+  | undefined;
 import { COUNTRY_NAMES } from '@/data/countries';
 
 import {
@@ -419,7 +482,7 @@ export default function ProfilePage() {
 
 function ProfilePageInner() {
   const [activeTab, setActiveTab] = useState('Personal');
-  const [resume, setResume] = useState<any>(null);
+  const [resume, setResume] = useState<Resume | null>(null);
   const [profile, setProfile] = useState<Partial<Profile>>({});
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<string | null>(null);
@@ -429,6 +492,7 @@ function ProfilePageInner() {
   // engine needs (country of origin, target degree, target countries).
   // Comes from the onboarding hub's "Complete profile" button.
   const searchParams = useSearchParams();
+  const router = useRouter();
   const focusMatching = searchParams.get('focus') === 'matching';
   const [showMatchingBanner, setShowMatchingBanner] = useState(focusMatching);
 
@@ -437,8 +501,8 @@ function ProfilePageInner() {
   }, [focusMatching]);
 
   // Edit form states
-  const [editForm, setEditForm] = useState<any>({});
-  const editFormSnapshot = useRef<any>({});
+  const [editForm, setEditForm] = useState<EditFormState>({});
+  const editFormSnapshot = useRef<EditFormState>({});
 
   // Compute dirty by comparing current form to snapshot
   const isFormDirty = () => {
@@ -456,7 +520,7 @@ function ProfilePageInner() {
           // `profile.X` reads return undefined instead of crashing.
           fetchProfile().catch(() => null),
         ]);
-        const primary = resumes.find((r: any) => r.is_primary) || resumes[0];
+        const primary = resumes.find((r) => r.is_primary) || resumes[0];
         setResume(primary || null);
         setProfile(profileData || {});
       } catch (e) { /* ignore */ }
@@ -465,14 +529,14 @@ function ProfilePageInner() {
     load();
   }, []);
 
-  const openEdit = (section: string, data?: any) => {
-    const formData = data || {};
+  const openEdit = (section: string, data?: EditFormState) => {
+    const formData: EditFormState = data || {};
     editFormSnapshot.current = JSON.parse(JSON.stringify(formData));
     setEditing(section);
     setEditForm(formData);
   };
 
-  const saveProfile = async (data: Record<string, any>) => {
+  const saveProfile = async (data: Partial<Profile>) => {
     setSaving(true);
     try {
       await createOrUpdateProfile({ ...profile, ...data });
@@ -482,12 +546,12 @@ function ProfilePageInner() {
     finally { setSaving(false); }
   };
 
-  const saveResumeField = async (field: string, value: any) => {
+  const saveResumeField = async (field: string, value: ResumeFieldValue) => {
     if (!resume?.id) return;
     setSaving(true);
     try {
       await updateResume(resume.id, { [field]: value });
-      setResume((prev: any) => ({ ...prev, [field]: value }));
+      setResume((prev) => prev ? ({ ...prev, [field]: value }) : prev);
       setEditing(null);
     } catch (e) { console.error(e); }
     finally { setSaving(false); }
@@ -540,7 +604,7 @@ function ProfilePageInner() {
         {/* No-resume banner (manual path / fresh user) */}
         {!resume && (
           <NoResumeBanner
-            onUpload={() => (window.location.href = '/resume')}
+            onUpload={() => router.push('/resume')}
             onManual={async () => {
               try {
                 const stub = await createManualResume();
@@ -646,8 +710,8 @@ function ProfilePageInner() {
                 <SectionHeader title="Education" icon="school" onEdit={() => openEdit('education', { education: resume?.education || [] })} />
                 {edu.length > 0 ? (
                   <div className="ml-1">
-                    {edu.map((e: any, i: number) => (
-                      <TimelineEntry key={i} date={fmtDate(e.start_date || e.date, e.end_date)} title={e.degree || 'Degree'} subtitle={e.institution || ''} details={[e.field_of_study, e.gpa ? `CGPA ${e.gpa}` : null, e.description].filter(Boolean)} isLast={i === edu.length - 1} />
+                    {edu.map((e, i) => (
+                      <TimelineEntry key={i} date={fmtDate(e.start_date || e.date, e.end_date)} title={e.degree || 'Degree'} subtitle={e.institution || ''} details={[e.field_of_study, e.gpa ? `CGPA ${e.gpa}` : null, e.description].filter(Boolean) as string[]} isLast={i === edu.length - 1} />
                     ))}
                   </div>
                 ) : <EmptyState icon="school" message="No education entries. Upload a resume to auto-populate." />}
@@ -657,7 +721,7 @@ function ProfilePageInner() {
                 <div className="p-5 md:p-6">
                   <SectionHeader title="Certifications" icon="verified" onEdit={() => openEdit('certifications', { certifications: resume?.certifications || [] })} />
                   <div className="space-y-3">
-                    {certs.map((c: any, i: number) => (
+                    {certs.map((c, i) => (
                       <div key={i} className="flex items-start gap-3 p-3 bg-primary/5 rounded-xl border border-primary/10">
                         <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center flex-shrink-0">
                           <span className="material-symbols-outlined text-[16px] text-primary">workspace_premium</span>
@@ -676,7 +740,7 @@ function ProfilePageInner() {
                 <div className="p-5 md:p-6">
                   <SectionHeader title="Publications" icon="article" onEdit={() => openEdit('publications', { publications: resume?.publications || [] })} />
                   <div className="space-y-3">
-                    {pubs.map((p: any, i: number) => (
+                    {pubs.map((p, i) => (
                       <div key={i} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
                         <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                           <span className="material-symbols-outlined text-[16px] text-primary">description</span>
@@ -699,9 +763,13 @@ function ProfilePageInner() {
               <SectionHeader title="Work Experience" icon="work" onEdit={() => openEdit('experience', { experience: resume?.experience || [] })} />
               {exp.length > 0 ? (
                 <div className="ml-1">
-                  {exp.map((e: any, i: number) => (
-                    <TimelineEntry key={i} date={fmtDate(e.start_date, e.end_date)} title={e.position || e.title || 'Role'} subtitle={e.company || ''} details={e.achievements?.length ? e.achievements : (e.description ? [e.description] : [])} isLast={i === exp.length - 1} />
-                  ))}
+                  {exp.map((e, i) => {
+                    const achievements = (e as { achievements?: string[] }).achievements;
+                    const details = achievements?.length ? achievements : (e.description ? [e.description] : []);
+                    return (
+                      <TimelineEntry key={i} date={fmtDate(e.start_date, e.end_date)} title={e.position || e.title || 'Role'} subtitle={e.company || ''} details={details} isLast={i === exp.length - 1} />
+                    );
+                  })}
                 </div>
               ) : <EmptyState icon="work" message="No work experience listed. Upload a resume to auto-populate." />}
             </div>
@@ -713,8 +781,8 @@ function ProfilePageInner() {
               <SectionHeader title="Research & Projects" icon="science" onEdit={() => openEdit('research_projects', { research_projects: resume?.research_projects || [] })} />
               {rp.length > 0 ? (
                 <div className="ml-1">
-                  {rp.map((r: any, i: number) => (
-                    <TimelineEntry key={i} date={fmtDate(r.start_date, r.end_date)} title={r.title || 'Project'} subtitle={[r.organization, r.role].filter(Boolean).join(' • ')} details={[r.description, r.technologies ? `Tech: ${r.technologies}` : null, r.outcomes ? `Outcomes: ${r.outcomes}` : null].filter(Boolean)} isLast={i === rp.length - 1} />
+                  {rp.map((r, i) => (
+                    <TimelineEntry key={i} date={fmtDate(r.start_date, r.end_date)} title={r.title || 'Project'} subtitle={[r.organization, r.role].filter(Boolean).join(' • ')} details={[r.description, r.technologies ? `Tech: ${r.technologies}` : null, r.outcomes ? `Outcomes: ${r.outcomes}` : null].filter(Boolean) as string[]} isLast={i === rp.length - 1} />
                   ))}
                 </div>
               ) : <EmptyState icon="science" message="No research or projects listed. Upload a resume to auto-populate." />}
@@ -737,7 +805,7 @@ function ProfilePageInner() {
                 <div className="p-5 md:p-6">
                   <SectionHeader title="Languages" icon="translate" onEdit={() => openEdit('languages', { languages: resume?.languages || [] })} />
                   <div className="flex flex-wrap gap-2">
-                    {langs.map((l: any, i: number) => {
+                    {langs.map((l, i) => {
                       const name = typeof l === 'string' ? l : l.language;
                       const prof = typeof l === 'object' && l.proficiency ? l.proficiency : '';
                       return (
@@ -774,7 +842,7 @@ function ProfilePageInner() {
                 <div className="p-5 md:p-6">
                   <SectionHeader title="References" icon="contacts" onEdit={() => openEdit('ref_list', { ref_list: resume?.ref_list || [] })} />
                   <div className="space-y-3">
-                    {refs.map((r: any, i: number) => (
+                    {refs.map((r, i) => (
                       <div key={i} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
                         <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                           <span className="material-symbols-outlined text-[16px] text-primary">person</span>
@@ -889,13 +957,13 @@ function ProfilePageInner() {
             target_degree: editForm.target_degree,
             field_of_study: editForm.field_of_study,
             target_countries: editForm.target_countries,
-            graduation_year: editForm.graduation_year ? parseInt(editForm.graduation_year) : undefined,
+            graduation_year: editForm.graduation_year ? parseInt(String(editForm.graduation_year)) : undefined,
             degree_level: editForm.degree_level,
-            cgpa: editForm.cgpa ? parseFloat(editForm.cgpa) : undefined,
-            cgpa_scale: editForm.cgpa_scale ? parseFloat(editForm.cgpa_scale) : undefined,
-            work_experience_years: editForm.work_experience_years ? parseInt(editForm.work_experience_years) : undefined,
+            cgpa: editForm.cgpa ? parseFloat(String(editForm.cgpa)) : undefined,
+            cgpa_scale: editForm.cgpa_scale ? parseFloat(String(editForm.cgpa_scale)) : undefined,
+            work_experience_years: editForm.work_experience_years ? parseInt(String(editForm.work_experience_years)) : undefined,
             has_ielts: editForm.has_ielts,
-            ielts_score: editForm.ielts_score ? parseFloat(editForm.ielts_score) : undefined,
+            ielts_score: editForm.ielts_score ? parseFloat(String(editForm.ielts_score)) : undefined,
             prior_studies_in_english: editForm.prior_studies_in_english,
           })} />
         </Modal>
@@ -914,21 +982,21 @@ function ProfilePageInner() {
       {/* Education */}
       {editing === 'education' && (
         <Modal title="Edit Education" onClose={() => setEditing(null)}>
-          {(editForm.education || []).map((edu: any, idx: number) => (
+          {(editForm.education || []).map((edu: ResumeEducation & { date?: string }, idx: number) => (
             <div key={idx} className="p-3 bg-gray-50 rounded-lg mb-3 space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-[12px] font-bold text-primary">Entry {idx + 1}</span>
-                <button onClick={() => { const arr = [...editForm.education]; arr.splice(idx, 1); setEditForm({ ...editForm, education: arr }); }} className="text-[12px] text-red-500 hover:underline">Remove</button>
+                <button onClick={() => { const arr = [...(editForm.education || [])]; arr.splice(idx, 1); setEditForm({ ...editForm, education: arr }); }} className="text-[12px] text-red-500 hover:underline">Remove</button>
               </div>
-              <Input value={edu.degree || ''} onChange={v => { const arr = [...editForm.education]; arr[idx] = { ...arr[idx], degree: v }; setEditForm({ ...editForm, education: arr }); }} placeholder="Degree (e.g. B.Sc. Computer Science)" />
-              <Input value={edu.institution || ''} onChange={v => { const arr = [...editForm.education]; arr[idx] = { ...arr[idx], institution: v }; setEditForm({ ...editForm, education: arr }); }} placeholder="Institution" />
+              <Input value={edu.degree || ''} onChange={v => { const arr = [...(editForm.education || [])]; arr[idx] = { ...arr[idx], degree: v }; setEditForm({ ...editForm, education: arr }); }} placeholder="Degree (e.g. B.Sc. Computer Science)" />
+              <Input value={edu.institution || ''} onChange={v => { const arr = [...(editForm.education || [])]; arr[idx] = { ...arr[idx], institution: v }; setEditForm({ ...editForm, education: arr }); }} placeholder="Institution" />
               <div className="grid grid-cols-2 gap-2">
-                <Input value={edu.start_date || edu.date || ''} onChange={v => { const arr = [...editForm.education]; arr[idx] = { ...arr[idx], start_date: v }; setEditForm({ ...editForm, education: arr }); }} placeholder="Start date" />
-                <Input value={edu.end_date || ''} onChange={v => { const arr = [...editForm.education]; arr[idx] = { ...arr[idx], end_date: v }; setEditForm({ ...editForm, education: arr }); }} placeholder="End date" />
+                <Input value={edu.start_date || edu.date || ''} onChange={v => { const arr = [...(editForm.education || [])]; arr[idx] = { ...arr[idx], start_date: v }; setEditForm({ ...editForm, education: arr }); }} placeholder="Start date" />
+                <Input value={edu.end_date || ''} onChange={v => { const arr = [...(editForm.education || [])]; arr[idx] = { ...arr[idx], end_date: v }; setEditForm({ ...editForm, education: arr }); }} placeholder="End date" />
               </div>
             </div>
           ))}
-          <button onClick={() => setEditForm({ ...editForm, education: [...(editForm.education || []), { degree: '', institution: '', start_date: '', end_date: '' }] })} className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[13px] text-text-secondary hover:border-primary hover:text-primary transition-colors">
+          <button onClick={() => setEditForm({ ...editForm, education: [...(editForm.education || []), { degree: '', institution: '', start_date: '', end_date: '' } as ResumeEducation] })} className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[13px] text-text-secondary hover:border-primary hover:text-primary transition-colors">
             + Add Education
           </button>
           <SaveButton loading={saving} onClick={() => saveResumeField('education', editForm.education)} />
@@ -938,21 +1006,21 @@ function ProfilePageInner() {
       {/* Experience */}
       {editing === 'experience' && (
         <Modal title="Edit Work Experience" onClose={() => setEditing(null)}>
-          {(editForm.experience || []).map((exp: any, idx: number) => (
+          {(editForm.experience || []).map((exp: ResumeExperience, idx: number) => (
             <div key={idx} className="p-3 bg-gray-50 rounded-lg mb-3 space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-[12px] font-bold text-primary">Entry {idx + 1}</span>
-                <button onClick={() => { const arr = [...editForm.experience]; arr.splice(idx, 1); setEditForm({ ...editForm, experience: arr }); }} className="text-[12px] text-red-500 hover:underline">Remove</button>
+                <button onClick={() => { const arr = [...(editForm.experience || [])]; arr.splice(idx, 1); setEditForm({ ...editForm, experience: arr }); }} className="text-[12px] text-red-500 hover:underline">Remove</button>
               </div>
-              <Input value={exp.position || exp.title || ''} onChange={v => { const arr = [...editForm.experience]; arr[idx] = { ...arr[idx], position: v }; setEditForm({ ...editForm, experience: arr }); }} placeholder="Job Title" />
-              <Input value={exp.company || ''} onChange={v => { const arr = [...editForm.experience]; arr[idx] = { ...arr[idx], company: v }; setEditForm({ ...editForm, experience: arr }); }} placeholder="Company" />
+              <Input value={exp.position || exp.title || ''} onChange={v => { const arr = [...(editForm.experience || [])]; arr[idx] = { ...arr[idx], position: v }; setEditForm({ ...editForm, experience: arr }); }} placeholder="Job Title" />
+              <Input value={exp.company || ''} onChange={v => { const arr = [...(editForm.experience || [])]; arr[idx] = { ...arr[idx], company: v }; setEditForm({ ...editForm, experience: arr }); }} placeholder="Company" />
               <div className="grid grid-cols-2 gap-2">
-                <Input value={exp.start_date || ''} onChange={v => { const arr = [...editForm.experience]; arr[idx] = { ...arr[idx], start_date: v }; setEditForm({ ...editForm, experience: arr }); }} placeholder="Start date" />
-                <Input value={exp.end_date || ''} onChange={v => { const arr = [...editForm.experience]; arr[idx] = { ...arr[idx], end_date: v }; setEditForm({ ...editForm, experience: arr }); }} placeholder="End date" />
+                <Input value={exp.start_date || ''} onChange={v => { const arr = [...(editForm.experience || [])]; arr[idx] = { ...arr[idx], start_date: v }; setEditForm({ ...editForm, experience: arr }); }} placeholder="Start date" />
+                <Input value={exp.end_date || ''} onChange={v => { const arr = [...(editForm.experience || [])]; arr[idx] = { ...arr[idx], end_date: v }; setEditForm({ ...editForm, experience: arr }); }} placeholder="End date" />
               </div>
             </div>
           ))}
-          <button onClick={() => setEditForm({ ...editForm, experience: [...(editForm.experience || []), { position: '', company: '', start_date: '', end_date: '' }] })} className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[13px] text-text-secondary hover:border-primary hover:text-primary transition-colors">
+          <button onClick={() => setEditForm({ ...editForm, experience: [...(editForm.experience || []), { position: '', company: '', start_date: '', end_date: '' } as ResumeExperience] })} className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[13px] text-text-secondary hover:border-primary hover:text-primary transition-colors">
             + Add Experience
           </button>
           <SaveButton loading={saving} onClick={() => saveResumeField('experience', editForm.experience)} />
@@ -962,18 +1030,18 @@ function ProfilePageInner() {
       {/* Research & Projects */}
       {editing === 'research_projects' && (
         <Modal title="Edit Research & Projects" onClose={() => setEditing(null)}>
-          {(editForm.research_projects || []).map((rp: any, idx: number) => (
+          {(editForm.research_projects || []).map((rp: ResumeResearchProject, idx: number) => (
             <div key={idx} className="p-3 bg-gray-50 rounded-lg mb-3 space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-[12px] font-bold text-primary">Entry {idx + 1}</span>
-                <button onClick={() => { const arr = [...editForm.research_projects]; arr.splice(idx, 1); setEditForm({ ...editForm, research_projects: arr }); }} className="text-[12px] text-red-500 hover:underline">Remove</button>
+                <button onClick={() => { const arr = [...(editForm.research_projects || [])]; arr.splice(idx, 1); setEditForm({ ...editForm, research_projects: arr }); }} className="text-[12px] text-red-500 hover:underline">Remove</button>
               </div>
-              <Input value={rp.title || ''} onChange={v => { const arr = [...editForm.research_projects]; arr[idx] = { ...arr[idx], title: v }; setEditForm({ ...editForm, research_projects: arr }); }} placeholder="Project/Research Title" />
-              <Input value={rp.organization || ''} onChange={v => { const arr = [...editForm.research_projects]; arr[idx] = { ...arr[idx], organization: v }; setEditForm({ ...editForm, research_projects: arr }); }} placeholder="Organization" />
-              <Input value={rp.technologies || ''} onChange={v => { const arr = [...editForm.research_projects]; arr[idx] = { ...arr[idx], technologies: v }; setEditForm({ ...editForm, research_projects: arr }); }} placeholder="Technologies used" />
+              <Input value={rp.title || ''} onChange={v => { const arr = [...(editForm.research_projects || [])]; arr[idx] = { ...arr[idx], title: v }; setEditForm({ ...editForm, research_projects: arr }); }} placeholder="Project/Research Title" />
+              <Input value={rp.organization || ''} onChange={v => { const arr = [...(editForm.research_projects || [])]; arr[idx] = { ...arr[idx], organization: v }; setEditForm({ ...editForm, research_projects: arr }); }} placeholder="Organization" />
+              <Input value={rp.technologies || ''} onChange={v => { const arr = [...(editForm.research_projects || [])]; arr[idx] = { ...arr[idx], technologies: v }; setEditForm({ ...editForm, research_projects: arr }); }} placeholder="Technologies used" />
             </div>
           ))}
-          <button onClick={() => setEditForm({ ...editForm, research_projects: [...(editForm.research_projects || []), { title: '', organization: '', technologies: '' }] })} className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[13px] text-text-secondary hover:border-primary hover:text-primary transition-colors">
+          <button onClick={() => setEditForm({ ...editForm, research_projects: [...(editForm.research_projects || []), { title: '', organization: '', technologies: '' } as ResumeResearchProject] })} className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[13px] text-text-secondary hover:border-primary hover:text-primary transition-colors">
             + Add Research / Project
           </button>
           <SaveButton loading={saving} onClick={() => saveResumeField('research_projects', editForm.research_projects)} />
@@ -986,8 +1054,8 @@ function ProfilePageInner() {
           <div className="space-y-3">
             {(editForm.skills || []).map((s: string, idx: number) => (
               <div key={idx} className="flex gap-2">
-                <Input value={s} onChange={v => { const arr = [...editForm.skills]; arr[idx] = v; setEditForm({ ...editForm, skills: arr }); }} placeholder="Skill" />
-                <button onClick={() => { const arr = [...editForm.skills]; arr.splice(idx, 1); setEditForm({ ...editForm, skills: arr }); }} className="px-2 text-red-500 hover:bg-red-50 rounded-lg">
+                <Input value={s} onChange={v => { const arr = [...(editForm.skills || [])]; arr[idx] = v; setEditForm({ ...editForm, skills: arr }); }} placeholder="Skill" />
+                <button onClick={() => { const arr = [...(editForm.skills || [])]; arr.splice(idx, 1); setEditForm({ ...editForm, skills: arr }); }} className="px-2 text-red-500 hover:bg-red-50 rounded-lg">
                   <span className="material-symbols-outlined text-[18px]">delete</span>
                 </button>
               </div>
@@ -996,17 +1064,17 @@ function ProfilePageInner() {
           <button onClick={() => setEditForm({ ...editForm, skills: [...(editForm.skills || []), ''] })} className="w-full py-2 mt-3 border-2 border-dashed border-gray-200 rounded-lg text-[13px] text-text-secondary hover:border-primary hover:text-primary transition-colors">
             + Add Skill
           </button>
-          <SaveButton loading={saving} onClick={() => saveResumeField('skills', editForm.skills.filter((s: string) => s.trim()))} />
+          <SaveButton loading={saving} onClick={() => saveResumeField('skills', (editForm.skills || []).filter((s: string) => s.trim()))} />
         </Modal>
       )}
 
       {/* Languages */}
       {editing === 'languages' && (
         <Modal title="Edit Languages" onClose={() => setEditing(null)}>
-          <TagSelect options={LANGUAGES_LIST} selected={(editForm.languages || []).map((l: any) => typeof l === 'string' ? l : l.language)} onToggle={name => {
+          <TagSelect options={LANGUAGES_LIST} selected={(editForm.languages || []).map((l: ResumeLanguage | string) => typeof l === 'string' ? l : l.language || '')} onToggle={name => {
             const current = editForm.languages || [];
-            const exists = current.find((l: any) => (typeof l === 'string' ? l : l.language) === name);
-            setEditForm({ ...editForm, languages: exists ? current.filter((l: any) => (typeof l === 'string' ? l : l.language) !== name) : [...current, name] });
+            const exists = current.find((l: ResumeLanguage | string) => (typeof l === 'string' ? l : l.language) === name);
+            setEditForm({ ...editForm, languages: exists ? current.filter((l: ResumeLanguage | string) => (typeof l === 'string' ? l : l.language) !== name) : [...current, name as unknown as ResumeLanguage] });
           }} />
           <SaveButton loading={saving} onClick={() => saveResumeField('languages', editForm.languages)} />
         </Modal>
@@ -1041,18 +1109,18 @@ function ProfilePageInner() {
       {/* Certifications */}
       {editing === 'certifications' && (
         <Modal title="Edit Certifications" onClose={() => setEditing(null)}>
-          {(editForm.certifications || []).map((c: any, idx: number) => (
+          {(editForm.certifications || []).map((c: ResumeCertification, idx: number) => (
             <div key={idx} className="p-3 bg-gray-50 rounded-lg mb-3 space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-[12px] font-bold text-primary">Cert {idx + 1}</span>
-                <button onClick={() => { const arr = [...editForm.certifications]; arr.splice(idx, 1); setEditForm({ ...editForm, certifications: arr }); }} className="text-[12px] text-red-500 hover:underline">Remove</button>
+                <button onClick={() => { const arr = [...(editForm.certifications || [])]; arr.splice(idx, 1); setEditForm({ ...editForm, certifications: arr }); }} className="text-[12px] text-red-500 hover:underline">Remove</button>
               </div>
-              <Input value={c.name || ''} onChange={v => { const arr = [...editForm.certifications]; arr[idx] = { ...arr[idx], name: v }; setEditForm({ ...editForm, certifications: arr }); }} placeholder="Certification name" />
-              <Input value={c.issuer || ''} onChange={v => { const arr = [...editForm.certifications]; arr[idx] = { ...arr[idx], issuer: v }; setEditForm({ ...editForm, certifications: arr }); }} placeholder="Issuer" />
-              <Input value={c.date || ''} onChange={v => { const arr = [...editForm.certifications]; arr[idx] = { ...arr[idx], date: v }; setEditForm({ ...editForm, certifications: arr }); }} placeholder="Date" />
+              <Input value={c.name || ''} onChange={v => { const arr = [...(editForm.certifications || [])]; arr[idx] = { ...arr[idx], name: v }; setEditForm({ ...editForm, certifications: arr }); }} placeholder="Certification name" />
+              <Input value={c.issuer || ''} onChange={v => { const arr = [...(editForm.certifications || [])]; arr[idx] = { ...arr[idx], issuer: v }; setEditForm({ ...editForm, certifications: arr }); }} placeholder="Issuer" />
+              <Input value={c.date || ''} onChange={v => { const arr = [...(editForm.certifications || [])]; arr[idx] = { ...arr[idx], date: v }; setEditForm({ ...editForm, certifications: arr }); }} placeholder="Date" />
             </div>
           ))}
-          <button onClick={() => setEditForm({ ...editForm, certifications: [...(editForm.certifications || []), { name: '', issuer: '', date: '' }] })} className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[13px] text-text-secondary hover:border-primary hover:text-primary transition-colors">
+          <button onClick={() => setEditForm({ ...editForm, certifications: [...(editForm.certifications || []), { name: '', issuer: '', date: '' } as ResumeCertification] })} className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[13px] text-text-secondary hover:border-primary hover:text-primary transition-colors">
             + Add Certification
           </button>
           <SaveButton loading={saving} onClick={() => saveResumeField('certifications', editForm.certifications)} />
@@ -1062,18 +1130,18 @@ function ProfilePageInner() {
       {/* Publications */}
       {editing === 'publications' && (
         <Modal title="Edit Publications" onClose={() => setEditing(null)}>
-          {(editForm.publications || []).map((p: any, idx: number) => (
+          {(editForm.publications || []).map((p: ResumePublication, idx: number) => (
             <div key={idx} className="p-3 bg-gray-50 rounded-lg mb-3 space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-[12px] font-bold text-primary">Pub {idx + 1}</span>
-                <button onClick={() => { const arr = [...editForm.publications]; arr.splice(idx, 1); setEditForm({ ...editForm, publications: arr }); }} className="text-[12px] text-red-500 hover:underline">Remove</button>
+                <button onClick={() => { const arr = [...(editForm.publications || [])]; arr.splice(idx, 1); setEditForm({ ...editForm, publications: arr }); }} className="text-[12px] text-red-500 hover:underline">Remove</button>
               </div>
-              <Input value={p.title || ''} onChange={v => { const arr = [...editForm.publications]; arr[idx] = { ...arr[idx], title: v }; setEditForm({ ...editForm, publications: arr }); }} placeholder="Paper title" />
-              <Input value={p.journal || ''} onChange={v => { const arr = [...editForm.publications]; arr[idx] = { ...arr[idx], journal: v }; setEditForm({ ...editForm, publications: arr }); }} placeholder="Journal/Conference" />
-              <Input value={p.doi || ''} onChange={v => { const arr = [...editForm.publications]; arr[idx] = { ...arr[idx], doi: v }; setEditForm({ ...editForm, publications: arr }); }} placeholder="DOI" />
+              <Input value={p.title || ''} onChange={v => { const arr = [...(editForm.publications || [])]; arr[idx] = { ...arr[idx], title: v }; setEditForm({ ...editForm, publications: arr }); }} placeholder="Paper title" />
+              <Input value={p.journal || ''} onChange={v => { const arr = [...(editForm.publications || [])]; arr[idx] = { ...arr[idx], journal: v }; setEditForm({ ...editForm, publications: arr }); }} placeholder="Journal/Conference" />
+              <Input value={p.doi || ''} onChange={v => { const arr = [...(editForm.publications || [])]; arr[idx] = { ...arr[idx], doi: v }; setEditForm({ ...editForm, publications: arr }); }} placeholder="DOI" />
             </div>
           ))}
-          <button onClick={() => setEditForm({ ...editForm, publications: [...(editForm.publications || []), { title: '', journal: '', doi: '' }] })} className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[13px] text-text-secondary hover:border-primary hover:text-primary transition-colors">
+          <button onClick={() => setEditForm({ ...editForm, publications: [...(editForm.publications || []), { title: '', journal: '', doi: '' } as ResumePublication] })} className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[13px] text-text-secondary hover:border-primary hover:text-primary transition-colors">
             + Add Publication
           </button>
           <SaveButton loading={saving} onClick={() => saveResumeField('publications', editForm.publications)} />
@@ -1083,18 +1151,18 @@ function ProfilePageInner() {
       {/* References */}
       {editing === 'ref_list' && (
         <Modal title="Edit References" onClose={() => setEditing(null)}>
-          {(editForm.ref_list || []).map((r: any, idx: number) => (
+          {(editForm.ref_list || []).map((r: ResumeReference, idx: number) => (
             <div key={idx} className="p-3 bg-gray-50 rounded-lg mb-3 space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-[12px] font-bold text-primary">Ref {idx + 1}</span>
-                <button onClick={() => { const arr = [...editForm.ref_list]; arr.splice(idx, 1); setEditForm({ ...editForm, ref_list: arr }); }} className="text-[12px] text-red-500 hover:underline">Remove</button>
+                <button onClick={() => { const arr = [...(editForm.ref_list || [])]; arr.splice(idx, 1); setEditForm({ ...editForm, ref_list: arr }); }} className="text-[12px] text-red-500 hover:underline">Remove</button>
               </div>
-              <Input value={r.name || ''} onChange={v => { const arr = [...editForm.ref_list]; arr[idx] = { ...arr[idx], name: v }; setEditForm({ ...editForm, ref_list: arr }); }} placeholder="Name" />
-              <Input value={r.position || ''} onChange={v => { const arr = [...editForm.ref_list]; arr[idx] = { ...arr[idx], position: v }; setEditForm({ ...editForm, ref_list: arr }); }} placeholder="Position" />
-              <Input value={r.contact || ''} onChange={v => { const arr = [...editForm.ref_list]; arr[idx] = { ...arr[idx], contact: v }; setEditForm({ ...editForm, ref_list: arr }); }} placeholder="Contact" />
+              <Input value={r.name || ''} onChange={v => { const arr = [...(editForm.ref_list || [])]; arr[idx] = { ...arr[idx], name: v }; setEditForm({ ...editForm, ref_list: arr }); }} placeholder="Name" />
+              <Input value={r.position || ''} onChange={v => { const arr = [...(editForm.ref_list || [])]; arr[idx] = { ...arr[idx], position: v }; setEditForm({ ...editForm, ref_list: arr }); }} placeholder="Position" />
+              <Input value={r.contact || ''} onChange={v => { const arr = [...(editForm.ref_list || [])]; arr[idx] = { ...arr[idx], contact: v }; setEditForm({ ...editForm, ref_list: arr }); }} placeholder="Contact" />
             </div>
           ))}
-          <button onClick={() => setEditForm({ ...editForm, ref_list: [...(editForm.ref_list || []), { name: '', position: '', contact: '' }] })} className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[13px] text-text-secondary hover:border-primary hover:text-primary transition-colors">
+          <button onClick={() => setEditForm({ ...editForm, ref_list: [...(editForm.ref_list || []), { name: '', position: '', contact: '' } as ResumeReference] })} className="w-full py-2 border-2 border-dashed border-gray-200 rounded-lg text-[13px] text-text-secondary hover:border-primary hover:text-primary transition-colors">
             + Add Reference
           </button>
           <SaveButton loading={saving} onClick={() => saveResumeField('ref_list', editForm.ref_list)} />

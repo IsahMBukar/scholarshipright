@@ -23,10 +23,10 @@
 
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { Mail, AlertTriangle, ArrowLeft, CheckCircle2, ExternalLink, Loader2 } from 'lucide-react';
+import { Mail, AlertTriangle, ArrowLeft, CheckCircle2, ExternalLink } from 'lucide-react';
 import Button from '@/components/admin/ui/Button';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_URL } from '@/lib/env';
 
 interface DevResetHint {
   url: string;
@@ -224,19 +224,6 @@ export default function ForgotPasswordPage() {
           <ArrowLeft className="w-3.5 h-3.5" />
           Back to sign in
         </Link>
-      </div>
-    </div>
-  );
-}
-
-// Loading fallback (Suspense not strictly needed — no useSearchParams here —
-// but kept for parity with /login and /signup).
-export function ForgotPasswordLoading() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="flex items-center gap-2 text-sm text-text-secondary">
-        <Loader2 className="w-4 h-4 animate-spin" />
-        Loading…
       </div>
     </div>
   );

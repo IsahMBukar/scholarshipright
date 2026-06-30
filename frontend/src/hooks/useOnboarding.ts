@@ -384,23 +384,20 @@ export const BOOST_PROFILE_FIELDS = [
 type AnyProfile = Profile | Partial<Profile> | null | undefined;
 
 export function hasStudyField(p?: AnyProfile): boolean {
-  const pp = p as any;
-  return Boolean(pp?.field_of_study || (pp?.target_fields || []).length > 0);
+  return Boolean(p?.field_of_study || (p?.target_fields || []).length > 0);
 }
 
 export function isProfileComplete(p?: AnyProfile): boolean {
   if (!p) return false;
-  const pp = p as any;
-  return Boolean(pp.country_of_origin && pp.target_degree && hasStudyField(pp));
+  return Boolean(p.country_of_origin && p.target_degree && hasStudyField(p));
 }
 
 export function getMissingCriticalFields(p?: AnyProfile): string[] {
   if (!p) return CRITICAL_PROFILE_FIELDS.map((f) => f.label);
-  const pp = p as any;
   const missing: string[] = [];
-  if (!pp.country_of_origin) missing.push('Country of origin');
-  if (!pp.target_degree) missing.push('Target degree');
-  if (!hasStudyField(pp)) missing.push('Field of study');
+  if (!p.country_of_origin) missing.push('Country of origin');
+  if (!p.target_degree) missing.push('Target degree');
+  if (!hasStudyField(p)) missing.push('Field of study');
   return missing;
 }
 
@@ -408,9 +405,8 @@ export function getMissingBoostFields(
   p?: AnyProfile
 ): Array<{ label: string; points: number; icon: string }> {
   if (!p) return BOOST_PROFILE_FIELDS.map((b) => ({ label: b.label, points: b.points, icon: b.icon }));
-  const pp = p as any;
   return BOOST_PROFILE_FIELDS.filter((f) => {
-    const v = pp[f.key];
+    const v = p[f.key as keyof typeof p];
     if (f.key === 'target_countries') return !v || (v as string[]).length === 0;
     if (f.key === 'has_ielts') return !(v as boolean);
     return v == null || v === '';

@@ -1,5 +1,3 @@
-'use client';
-
 // Small badge. Tone variants for status pills.
 
 import clsx from 'clsx';

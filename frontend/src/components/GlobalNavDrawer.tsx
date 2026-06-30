@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { NAV_ITEMS } from '@/lib/nav-items';
 
@@ -18,7 +19,7 @@ export default function GlobalNavDrawer({ open, onClose }: { open: boolean; onCl
       <div className="absolute inset-0 bg-black/50 animate-fade-in" onClick={onClose} />
       <div className="absolute top-0 left-0 w-[280px] h-full bg-white shadow-xl animate-slide-in-left flex flex-col">
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <img src="/images/logo-light.jpg" alt="ScholarshipRight" className="h-8 w-8 rounded-lg object-contain" />
+          <Image src="/images/logo-light.jpg" alt="ScholarshipRight" width={32} height={32} className="h-8 w-8 rounded-lg object-contain" />
           <button onClick={onClose} className="w-10 h-10 flex items-center justify-center" aria-label="Close menu">
             <span className="material-symbols-outlined text-[24px]">close</span>
           </button>

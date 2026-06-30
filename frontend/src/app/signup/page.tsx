@@ -14,7 +14,7 @@ import Button from '@/components/admin/ui/Button';
 import PasswordField from '@/components/auth/PasswordField';
 import GoogleButton from '@/components/auth/GoogleButton';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_URL } from '@/lib/env';
 
 export default function SignupPage() {
   const [fullName, setFullName] = useState('');

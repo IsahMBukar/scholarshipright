@@ -42,7 +42,7 @@ import ProfileSlide from './slides/ProfileSlide';
 import MatchesPreviewSlide from './slides/MatchesPreviewSlide';
 import ScholaraIntroSlide from './slides/ScholaraIntroSlide';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_URL } from '@/lib/env';
 const TOTAL_SLIDES = 5;
 
 export default function OnboardingPage() {

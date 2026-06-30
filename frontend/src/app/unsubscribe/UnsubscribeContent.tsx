@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Suspense } from 'react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_URL } from '@/lib/env';
 
 function UnsubscribeInner() {
   const searchParams = useSearchParams();
@@ -112,7 +113,7 @@ function UnsubscribeInner() {
       <div className="max-w-[420px] w-full">
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2 mb-6">
-            <img src="/images/logo-light.jpg" alt="ScholarshipRight" className="h-8 w-8 rounded-lg" />
+            <Image src="/images/logo-light.jpg" alt="ScholarshipRight" width={32} height={32} className="h-8 w-8 rounded-lg" />
             <span className="text-sm font-extrabold">Scholarship<span className="text-[#f5b942]">Right</span></span>
           </Link>
           <h1 className="text-xl font-black text-[#1a1a1a] mb-2">Unsubscribe from emails</h1>

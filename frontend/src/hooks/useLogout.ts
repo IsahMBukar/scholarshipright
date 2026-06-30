@@ -13,8 +13,7 @@ import { useCallback, useState } from 'react';
 import { clearOnboardingForUser } from '@/hooks/useOnboarding';
 import { fetchMe } from '@/services/api';
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_URL } from '@/lib/env';
 
 export function useLogout() {
   const router = useRouter();

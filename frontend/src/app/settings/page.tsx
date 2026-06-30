@@ -8,6 +8,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { fetchMe, changePassword, fetchPreferences, updatePreferences } from '@/services/api';
 import type { MeUser, NotificationPreferences } from '@/services/api';
 import PasswordField from '@/components/auth/PasswordField';
+import Button from '@/components/admin/ui/Button';
 
 export default function SettingsPage() {
   const [user, setUser] = useState<MeUser | null>(null);
@@ -69,10 +70,11 @@ export default function SettingsPage() {
       setCurrentPw('');
       setNewPw('');
       setConfirmPw('');
-    } catch (err: any) {
-      const data = err?.response?.data;
-      if (data?.detail?.user_message) {
-        setPwError(data.detail.user_message);
+    } catch (err) {
+      const error = err as { response?: { data?: { detail?: { user_message?: string } | string } } };
+      const data = error?.response?.data;
+      if (data?.detail && typeof data.detail === 'object' && 'user_message' in data.detail) {
+        setPwError(data.detail.user_message || 'Unknown error');
       } else if (typeof data?.detail === 'string') {
         setPwError(data.detail);
       } else {
@@ -202,18 +204,17 @@ export default function SettingsPage() {
               </div>
             )}
 
-            <button
+            <Button
+              type="button"
+              variant="primary"
+              size="md"
               onClick={handlePasswordChange}
               disabled={pwLoading}
-              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-btn bg-primary text-white text-[13px] font-bold hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              loading={pwLoading}
+              leftIcon={!pwLoading ? <span className="material-symbols-outlined text-[16px]">save</span> : undefined}
             >
-              {pwLoading ? (
-                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <span className="material-symbols-outlined text-[16px]">save</span>
-              )}
               {pwLoading ? 'Saving…' : 'Update Password'}
-            </button>
+            </Button>
           </div>
         </section>
 

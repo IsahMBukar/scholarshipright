@@ -14,7 +14,7 @@ import Link from 'next/link';
 import { CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 import Button from '@/components/admin/ui/Button';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { API_URL } from '@/lib/env';
 
 function ConfirmEmailForm() {
   const router = useRouter();
@@ -23,6 +23,19 @@ function ConfirmEmailForm() {
 
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(5);
+  const [autoRedirect, setAutoRedirect] = useState(true);
+
+  // Auto-redirect to /onboarding after 5s on success. User can cancel.
+  useEffect(() => {
+    if (status !== 'success' || !autoRedirect) return;
+    if (countdown <= 0) {
+      router.push('/onboarding');
+      return;
+    }
+    const t = setTimeout(() => setCountdown((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [status, autoRedirect, countdown, router]);
 
   useEffect(() => {
     if (!token) {
@@ -80,7 +93,9 @@ function ConfirmEmailForm() {
             <div>
               <h1 className="text-lg font-semibold text-text-primary">Email confirmed!</h1>
               <p className="text-xs text-text-secondary">
-                Your email has been verified. Click below to continue.
+                {autoRedirect
+                  ? `Taking you to onboarding in ${countdown}s…`
+                  : 'Your email has been verified. Click below to continue.'}
               </p>
             </div>
           </div>
@@ -92,8 +107,18 @@ function ConfirmEmailForm() {
             className="w-full"
             onClick={() => router.push('/onboarding')}
           >
-            Continue
+            Continue now
           </Button>
+
+          {autoRedirect && (
+            <button
+              type="button"
+              onClick={() => setAutoRedirect(false)}
+              className="w-full mt-3 text-xs text-text-secondary hover:text-text-primary hover:underline"
+            >
+              Cancel auto-redirect
+            </button>
+          )}
         </div>
       </div>
     );

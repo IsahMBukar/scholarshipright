@@ -1,5 +1,3 @@
-'use client';
-
 interface FundingTagsProps {
   fundingType: string;
   coversTuition?: boolean;

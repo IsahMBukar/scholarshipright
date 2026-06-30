@@ -66,12 +66,11 @@ export default function RightPanel() {
   const filledCount = completionFields.filter(Boolean).length;
   const completionPct = Math.round((filledCount / completionFields.length) * 100);
 
-  const initial = (profile as any)?.full_name?.[0]?.toUpperCase()
-    || profile?.field_of_study?.[0]?.toUpperCase()
+  const initial = profile?.field_of_study?.[0]?.toUpperCase()
+    || profile?.university?.[0]?.toUpperCase()
     || 'U';
 
-  const displayName = (profile as any)?.full_name
-    || profile?.university
+  const displayName = profile?.university
     || 'Student';
 
   return (

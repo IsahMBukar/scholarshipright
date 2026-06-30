@@ -1,5 +1,3 @@
-'use client';
-
 // Pill button matching the brand DNA. Variants: primary | secondary | danger | ghost.
 
 import clsx from 'clsx';

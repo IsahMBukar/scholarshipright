@@ -4,6 +4,7 @@
 // Matches the landing page V7 DNA exactly.
 
 import Link from 'next/link';
+import Image from 'next/image';
 import '@/app/landing.css';
 
 const NAV_LINKS = [
@@ -19,7 +20,7 @@ export default function LandingShell({ children }: { children: React.ReactNode }
       {/* ═══ FLOATING NAV — identical to landing page ═══ */}
       <nav className="fixed left-1/2 -translate-x-1/2 z-50 bg-white/80 backdrop-blur-xl border border-[#f0ebe0] rounded-full flex items-center shadow-[0_8px_24px_-8px_rgba(0,0,0,0.08)] w-max max-w-[calc(100vw-1rem)] top-[clamp(0.5rem,0.4rem+0.3vw,1rem)] px-[clamp(0.5rem,0.25rem+0.6vw,1rem)] py-[clamp(0.25rem,0.2rem+0.2vw,0.5rem)] gap-[clamp(0.25rem,0.125rem+0.5vw,0.75rem)]">
         <Link href="/" className="flex items-center flex-shrink-0 gap-[clamp(0.25rem,0.2rem+0.3vw,0.5rem)] px-[clamp(0.125rem,0.05rem+0.3vw,0.5rem)]">
-          <img src="/images/logo-light.jpg" alt="ScholarshipRight" className="h-[clamp(1.25rem,0.5rem+1vw,2rem)] w-[clamp(1.25rem,0.5rem+1vw,2rem)] rounded-lg object-contain" />
+          <Image src="/images/logo-light.jpg" alt="ScholarshipRight" width={32} height={32} priority className="h-[clamp(1.25rem,0.5rem+1vw,2rem)] w-[clamp(1.25rem,0.5rem+1vw,2rem)] rounded-lg object-contain" />
           <span className="text-sm font-extrabold hidden sm:block">
             Scholarship<span className="text-[#f5b942]">Right</span>
           </span>
@@ -54,7 +55,7 @@ export default function LandingShell({ children }: { children: React.ReactNode }
             {/* Brand column */}
             <div className="col-span-2 md:col-span-2">
               <Link href="/" className="flex items-center gap-2.5 mb-4">
-                <img src="/images/logo-light.jpg" alt="ScholarshipRight" className="h-9 w-9 rounded-lg object-contain" />
+                <Image src="/images/logo-light.jpg" alt="ScholarshipRight" width={36} height={36} className="h-9 w-9 rounded-lg object-contain" />
                 <span className="text-lg font-extrabold">
                   Scholarship<span className="text-[#f5b942]">Right</span>
                 </span>

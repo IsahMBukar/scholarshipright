@@ -2,9 +2,93 @@
 
 import { useState } from 'react';
 
+// ── Shared shapes ───────────────────────────────────────────────
+// The agent backend returns loosely-typed JSON; these interfaces
+// describe what each card actually consumes. Optional fields are
+// the norm — render code already guards every access.
+
+interface EligibilityRequirement {
+  requirement?: string;
+  detail?: string;
+  action?: string;
+}
+
+export interface EligibilityCardData {
+  eligible?: boolean;
+  summary?: string;
+  match_score?: number;
+  requirements_met?: EligibilityRequirement[];
+  requirements_missing?: EligibilityRequirement[];
+}
+
+interface ReadinessSection {
+  name?: string;
+  status?: string;
+  score: number;
+  feedback?: string;
+}
+
+interface ReadinessDocument {
+  name?: string;
+  description?: string;
+  importance?: 'critical' | 'recommended' | string;
+}
+
+interface ReadinessImprovement {
+  area?: string;
+  suggestion?: string;
+  impact?: 'high' | 'medium' | 'low' | string;
+}
+
+export interface ReadinessCardData {
+  overall_score: number;
+  summary?: string;
+  sections?: ReadinessSection[];
+  missing_documents?: ReadinessDocument[];
+  improvements?: ReadinessImprovement[];
+}
+
+interface RoadmapMilestone {
+  category: string;
+  month?: number | string;
+  action?: string;
+  completed?: boolean;
+}
+
+interface RoadmapAlternative {
+  name?: string;
+  reason?: string;
+}
+
+export interface RoadmapCardData {
+  summary?: string;
+  estimated_months?: number | string;
+  milestones?: RoadmapMilestone[];
+  alternative_scholarships?: RoadmapAlternative[];
+}
+
+interface DiscoverOpportunity {
+  name?: string;
+  type?: string;
+  match_reason?: string;
+  estimated_match?: number;
+}
+
+export interface DiscoverCardData {
+  insights?: string;
+  opportunities?: DiscoverOpportunity[];
+}
+
+export interface DocumentCardData {
+  document_type?: string;
+  word_count?: number;
+  content: string;
+  notes?: string;
+}
+
 // ── Eligibility Card ────────────────────────────────────────────
 
-export function EligibilityCard({ data }: { data: any }) {
+export function EligibilityCard({ data }: { data: EligibilityCardData }) {
   return (
     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
       {/* Header */}
@@ -31,11 +115,11 @@ export function EligibilityCard({ data }: { data: any }) {
       </div>
 
       {/* Requirements met */}
-      {data.requirements_met?.length > 0 && (
+      {!!data.requirements_met?.length && (
         <div className="px-5 py-3 border-b border-gray-100">
           <h4 className="text-[12px] font-bold text-green-700 uppercase tracking-wider mb-2">Requirements Met</h4>
           <div className="space-y-2">
-            {data.requirements_met.map((r: any, i: number) => (
+            {data.requirements_met?.map((r: EligibilityRequirement, i: number) => (
               <div key={i} className="flex items-start gap-2">
                 <span className="material-symbols-outlined text-[18px] text-green-500 mt-0.5">check_circle</span>
                 <div>
@@ -49,11 +133,11 @@ export function EligibilityCard({ data }: { data: any }) {
       )}
 
       {/* Requirements missing */}
-      {data.requirements_missing?.length > 0 && (
+      {!!data.requirements_missing?.length && (
         <div className="px-5 py-3">
           <h4 className="text-[12px] font-bold text-red-600 uppercase tracking-wider mb-2">Requirements Missing</h4>
           <div className="space-y-3">
-            {data.requirements_missing.map((r: any, i: number) => (
+            {data.requirements_missing?.map((r: EligibilityRequirement, i: number) => (
               <div key={i} className="flex items-start gap-2">
                 <span className="material-symbols-outlined text-[18px] text-red-400 mt-0.5">cancel</span>
                 <div>
@@ -75,7 +159,7 @@ export function EligibilityCard({ data }: { data: any }) {
 
 // ── Readiness Card ──────────────────────────────────────────────
 
-export function ReadinessCard({ data }: { data: any }) {
+export function ReadinessCard({ data }: { data: ReadinessCardData }) {
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-green-600 bg-green-50';
     if (score >= 60) return 'text-yellow-600 bg-yellow-50';
@@ -117,7 +201,7 @@ export function ReadinessCard({ data }: { data: any }) {
       <div className="px-5 py-3 border-b border-gray-100">
         <h4 className="text-[12px] font-bold text-text-secondary uppercase tracking-wider mb-3">Section Scores</h4>
         <div className="space-y-2">
-          {data.sections?.map((s: any, i: number) => (
+          {data.sections?.map((s: ReadinessSection, i: number) => (
             <div key={i}>
               <div className="flex items-center justify-between mb-1">
                 <span className="text-[13px] font-medium text-text-primary">{s.name}</span>
@@ -138,11 +222,11 @@ export function ReadinessCard({ data }: { data: any }) {
       </div>
 
       {/* Missing documents */}
-      {data.missing_documents?.length > 0 && (
+      {!!data.missing_documents?.length && (
         <div className="px-5 py-3 border-b border-gray-100">
           <h4 className="text-[12px] font-bold text-red-600 uppercase tracking-wider mb-2">Missing Documents</h4>
           <div className="space-y-2">
-            {data.missing_documents.map((d: any, i: number) => (
+            {data.missing_documents?.map((d: ReadinessDocument, i: number) => (
               <div key={i} className="flex items-start gap-2 p-2 bg-red-50 rounded-lg">
                 <span className="material-symbols-outlined text-[18px] text-red-400 mt-0.5">description</span>
                 <div>
@@ -159,11 +243,11 @@ export function ReadinessCard({ data }: { data: any }) {
       )}
 
       {/* Improvements */}
-      {data.improvements?.length > 0 && (
+      {!!data.improvements?.length && (
         <div className="px-5 py-3">
           <h4 className="text-[12px] font-bold text-[#f5b942] uppercase tracking-wider mb-2">Improvements</h4>
           <div className="space-y-2">
-            {data.improvements.map((imp: any, i: number) => (
+            {data.improvements?.map((imp: ReadinessImprovement, i: number) => (
               <div key={i} className="flex items-start gap-2">
                 <span className={`material-symbols-outlined text-[16px] mt-0.5 ${
                   imp.impact === 'high' ? 'text-red-500' : imp.impact === 'medium' ? 'text-yellow-500' : 'text-gray-400'
@@ -184,7 +268,7 @@ export function ReadinessCard({ data }: { data: any }) {
 
 // ── Roadmap Card ────────────────────────────────────────────────
 
-export function RoadmapCard({ data }: { data: any }) {
+export function RoadmapCard({ data }: { data: RoadmapCardData }) {
   const categoryColors: Record<string, string> = {
     experience: 'bg-blue-100 text-blue-700',
     research: 'bg-purple-100 text-purple-700',
@@ -225,7 +309,7 @@ export function RoadmapCard({ data }: { data: any }) {
           <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200" />
 
           <div className="space-y-4">
-            {data.milestones?.map((m: any, i: number) => (
+            {data.milestones?.map((m: RoadmapMilestone, i: number) => (
               <div key={i} className="relative pl-10">
                 {/* Timeline dot */}
                 <div className={`absolute left-2.5 top-1 w-3 h-3 rounded-full border-2 ${
@@ -250,11 +334,11 @@ export function RoadmapCard({ data }: { data: any }) {
       </div>
 
       {/* Alternative scholarships */}
-      {data.alternative_scholarships?.length > 0 && (
+      {!!data.alternative_scholarships?.length && (
         <div className="px-5 py-3 border-t border-gray-100 bg-gray-50">
           <h4 className="text-[12px] font-bold text-[#f5b942] uppercase tracking-wider mb-2">Eligible Alternatives Now</h4>
           <div className="space-y-2">
-            {data.alternative_scholarships.map((alt: any, i: number) => (
+            {data.alternative_scholarships?.map((alt: RoadmapAlternative, i: number) => (
               <div key={i} className="flex items-start gap-2 p-2 bg-white rounded-lg border border-gray-100">
                 <span className="material-symbols-outlined text-[18px] text-[#f5b942] mt-0.5">lightbulb</span>
                 <div>
@@ -273,7 +357,7 @@ export function RoadmapCard({ data }: { data: any }) {
 
 // ── Discover Card ───────────────────────────────────────────────
 
-export function DiscoverCard({ data }: { data: any }) {
+export function DiscoverCard({ data }: { data: DiscoverCardData }) {
   const typeIcons: Record<string, string> = {
     scholarship: 'school',
     fellowship: 'groups',
@@ -296,12 +380,12 @@ export function DiscoverCard({ data }: { data: any }) {
 
       {/* Opportunities */}
       <div className="divide-y divide-gray-50">
-        {data.opportunities?.map((opp: any, i: number) => (
+        {data.opportunities?.map((opp: DiscoverOpportunity, i: number) => (
           <div key={i} className="px-5 py-3 hover:bg-gray-50 transition-colors">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
                 <span className="material-symbols-outlined text-[20px] text-blue-600">
-                  {typeIcons[opp.type] || 'school'}
+                  {(opp.type && typeIcons[opp.type]) || 'school'}
                 </span>
               </div>
               <div className="flex-1 min-w-0">
@@ -331,7 +415,7 @@ export function DiscoverCard({ data }: { data: any }) {
 
 // ── Document Card ───────────────────────────────────────────────
 
-export function DocumentCard({ data }: { data: any }) {
+export function DocumentCard({ data }: { data: DocumentCardData }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
