@@ -1,8 +1,11 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.session import Base
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationPreference(Base):
@@ -50,8 +53,8 @@ async def ensure_notification_preference_columns() -> None:
                 "CREATE UNIQUE INDEX IF NOT EXISTS ix_notification_preferences_user_id "
                 "ON notification_preferences (user_id)"
             ))
-    except Exception as e:
-        print(f"ensure_notification_preference_columns failed: {e}")
+    except Exception:
+        logger.exception("ensure_notification_preference_columns failed")
 
 
 async def get_or_create_preferences(db, user_id):

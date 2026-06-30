@@ -629,7 +629,16 @@ async def dev_get_reset_tokens(
     email: str = Query(..., min_length=3, max_length=255),
     db: AsyncSession = Depends(get_db),
 ):
-    """List recent password-reset token rows for an email. DEV ONLY."""
+    """List recent password-reset token rows for an email. DEV ONLY.
+
+    Returns 404 in any non-development environment. The 404 (rather than 401
+    or 503) is deliberate — those status codes would still leak the existence
+    of this route to a probe. 404 makes the endpoint indistinguishable from
+    a typo'd URL.
+    """
+    if get_settings().environment != "development":
+        raise HTTPException(status_code=404, detail="Not Found")
+
     email = email.strip().lower()
     now = datetime.now(timezone.utc)
 

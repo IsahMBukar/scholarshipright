@@ -1,6 +1,9 @@
 """Agent API endpoints for Scholara AI advisor with streaming and tool calling."""
 import json
+import logging
 import httpx
+
+logger = logging.getLogger(__name__)
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -336,9 +339,9 @@ async def api_agent_chat_stream(
             if full_response and session_id is not None:
                 try:
                     await _save_to_session(db, session_id, user.id, req.message, full_response)
-                except Exception as e:  # noqa: BLE001
+                except Exception:  # noqa: BLE001
                     # Never fail the stream just because session persistence failed.
-                    print(f"chat session save failed: {e}")
+                    logger.exception("chat session save failed")
             yield f"event: session\ndata: {json.dumps({'session_id': final_session_id})}\n\n"
 
     return StreamingResponse(
@@ -394,8 +397,8 @@ async def api_agent_chat(
     if session_id is not None:
         try:
             await _save_to_session(db, session_id, user.id, req.message, json.dumps(result, default=str))
-        except Exception as e:  # noqa: BLE001
-            print(f"chat session save failed: {e}")
+        except Exception:  # noqa: BLE001
+            logger.exception("chat session save failed")
         result["_session_id"] = str(session_id)
 
     return result

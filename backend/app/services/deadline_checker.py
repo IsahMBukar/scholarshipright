@@ -15,6 +15,9 @@ from app.models.scholarship import Scholarship
 from app.models.notification import Notification
 from app.db.session import AsyncSessionLocal
 from app.services.notifications import emit_notification
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # Reminder windows: (days_before_deadline, notification_title_template)
@@ -114,12 +117,12 @@ async def check_deadlines():
 
             await db.commit()
             if notifications_created > 0:
-                print(f"[DeadlineChecker] Created {notifications_created} deadline notifications")
+                logger.info("[DeadlineChecker] Created %d deadline notifications", notifications_created)
             else:
-                print(f"[DeadlineChecker] No new deadline notifications needed")
+                logger.info("[DeadlineChecker] No new deadline notifications needed")
 
     except Exception as e:
-        print(f"[DeadlineChecker] Error: {e}")
+        logger.exception("[DeadlineChecker] Error")
 
 
 async def deadline_checker_loop():

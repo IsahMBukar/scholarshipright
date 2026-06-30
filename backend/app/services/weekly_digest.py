@@ -7,6 +7,7 @@ scholarship matches.
 
 Runs alongside the deadline_checker loop in main.py lifespan.
 """
+import logging
 from datetime import datetime, timezone
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +16,8 @@ from app.db.session import AsyncSessionLocal
 from app.models.user import User
 from app.models.match_score import MatchScore
 from app.models.scholarship import Scholarship
+
+logger = logging.getLogger(__name__)
 
 
 TOP_N = 5  # Number of top matches to include in the digest
@@ -115,12 +118,12 @@ async def send_weekly_digests():
                 emails_sent += 1
 
             if emails_sent > 0:
-                print(f"[WeeklyDigest] Sent {emails_sent} digest emails")
+                logger.info("[WeeklyDigest] Sent %d digest emails", emails_sent)
             else:
-                print("[WeeklyDigest] No users with matches to email")
+                logger.info("[WeeklyDigest] No users with matches to email")
 
     except Exception as e:
-        print(f"[WeeklyDigest] Error: {e}")
+        logger.exception("[WeeklyDigest] Error")
 
 
 async def weekly_digest_loop():
@@ -138,6 +141,6 @@ async def weekly_digest_loop():
         next_run = now.replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=days_until_sunday)
         wait_seconds = (next_run - now).total_seconds()
 
-        print(f"[WeeklyDigest] Next run: {next_run.isoformat()} (in {wait_seconds/3600:.1f}h)")
+        logger.info("[WeeklyDigest] Next run: %s (in %.1fh)", next_run.isoformat(), wait_seconds / 3600)
         await asyncio.sleep(wait_seconds)
         await send_weekly_digests()

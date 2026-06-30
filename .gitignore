@@ -16,6 +16,9 @@ backend/debug_resume.py
 # Runtime logs — noisy, not source
 *.log
 
+# Redis snapshot — runtime artifact, not source
+dump.rdb
+
 # Hermes internals (AI agent runtime data)
 .hermes/
 

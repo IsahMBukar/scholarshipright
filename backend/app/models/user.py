@@ -1,3 +1,4 @@
+import logging
 import uuid
 import hashlib
 import secrets
@@ -5,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import Column, String, DateTime, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.session import Base
+
+logger = logging.getLogger(__name__)
 
 # Email confirmation token TTL (24 hours)
 EMAIL_CONFIRM_TTL_HOURS = 24
@@ -75,5 +78,5 @@ async def ensure_email_confirm_columns() -> None:
                 "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_google_id "
                 "ON users (google_id) WHERE google_id IS NOT NULL"
             ))
-    except Exception as e:
-        print(f"ensure_email_confirm_columns failed: {e}")
+    except Exception:
+        logger.exception("ensure_email_confirm_columns failed")

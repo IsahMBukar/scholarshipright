@@ -26,8 +26,11 @@ Why a separate table (not admin_invites):
     so we can purge them cheaply
 """
 import hashlib
+import logging
 import secrets
 import uuid
+
+logger = logging.getLogger(__name__)
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import Column, DateTime, ForeignKey, String
@@ -112,9 +115,9 @@ async def ensure_password_reset_schema_columns() -> None:
                     "ON password_reset_tokens (expires_at)"
                 )
             )
-    except Exception as e:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         # Don't crash startup for a migration problem — surface it loudly.
-        print(f"ensure_password_reset_schema_columns failed: {e}")
+        logger.exception("ensure_password_reset_schema_columns failed")
 
 
 def make_reset_url(base_url: str, token: str) -> str:
