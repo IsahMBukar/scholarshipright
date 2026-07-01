@@ -214,9 +214,9 @@ export async function fetchMe(): Promise<MeUser> {
   return data;
 }
 
-export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+export async function changePassword(newPassword: string, currentPassword?: string): Promise<void> {
   await api.post('/api/auth/set-password', {
-    current_password: currentPassword,
+    current_password: currentPassword || undefined,
     new_password: newPassword,
   });
 }

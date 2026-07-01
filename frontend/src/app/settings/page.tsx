@@ -42,31 +42,33 @@ export default function SettingsPage() {
       .finally(() => setPrefsLoading(false));
   }, []);
 
+  const hasPassword = user?.has_password ?? true; // default to true (safer)
+
   const handlePasswordChange = async () => {
     setPwError('');
     setPwSuccess('');
 
-    if (!currentPw) {
+    if (hasPassword && !currentPw) {
       setPwError('Enter your current password.');
       return;
     }
     if (newPw.length < 8) {
-      setPwError('New password must be at least 8 characters.');
+      setPwError('Password must be at least 8 characters.');
       return;
     }
     if (newPw !== confirmPw) {
       setPwError('Passwords do not match.');
       return;
     }
-    if (newPw === currentPw) {
+    if (hasPassword && newPw === currentPw) {
       setPwError('New password must be different from current password.');
       return;
     }
 
     setPwLoading(true);
     try {
-      await changePassword(currentPw, newPw);
-      setPwSuccess('Password changed successfully.');
+      await changePassword(newPw, hasPassword ? currentPw : undefined);
+      setPwSuccess(hasPassword ? 'Password changed successfully.' : 'Password set successfully.');
       setCurrentPw('');
       setNewPw('');
       setConfirmPw('');
@@ -78,7 +80,7 @@ export default function SettingsPage() {
       } else if (typeof data?.detail === 'string') {
         setPwError(data.detail);
       } else {
-        setPwError('Failed to change password. Please try again.');
+        setPwError('Failed to update password. Please try again.');
       }
     } finally {
       setPwLoading(false);
@@ -109,7 +111,7 @@ export default function SettingsPage() {
     return (
       <AppLayout showRightPanel={false}>
         <PageHeader title="SETTINGS" />
-        <div className="px-4 md:px-6 py-10 max-w-[640px]">
+        <div className="px-4 md:px-6 py-10 max-w-[760px] mx-auto">
           <div className="space-y-4 animate-pulse">
             <div className="h-24 bg-gray-200 rounded-2xl" />
             <div className="h-48 bg-gray-200 rounded-2xl" />
@@ -123,19 +125,19 @@ export default function SettingsPage() {
     <AppLayout showRightPanel={false}>
       <PageHeader title="SETTINGS" />
 
-      <div className="px-4 md:px-6 pb-10 max-w-[640px] space-y-5">
+      <div className="px-4 md:px-6 pb-10 max-w-[760px] mx-auto space-y-5">
 
         {/* ─── Account Info ─── */}
         <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 md:p-6">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
               <span className="material-symbols-outlined text-[20px] text-primary">person</span>
             </div>
-            <div>
+            <div className="flex-1 min-w-0">
               <h2 className="text-[15px] font-bold text-text-primary">Account</h2>
               <p className="text-[12px] text-text-secondary">
                 Signed in as{' '}
-                <span className="font-mono text-text-primary">
+                <span className="font-mono text-text-primary break-all">
                   {user?.email || 'Unable to load account info'}
                 </span>
               </p>
@@ -143,52 +145,60 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        {/* ─── Change Password ─── */}
+        {/* ─── Set / Change Password ─── */}
         <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 md:p-6">
           <div className="flex items-center gap-3 mb-5">
-            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
               <span className="material-symbols-outlined text-[20px] text-amber-700">lock</span>
             </div>
             <div>
-              <h2 className="text-[15px] font-bold text-text-primary">Change Password</h2>
+              <h2 className="text-[15px] font-bold text-text-primary">
+                {hasPassword ? 'Change Password' : 'Set Password'}
+              </h2>
               <p className="text-[12px] text-text-secondary">
-                Update your password to keep your account secure.
+                {hasPassword
+                  ? 'Update your password to keep your account secure.'
+                  : 'You signed in with Google. Set a password to also login with email.'}
               </p>
             </div>
           </div>
 
-          <div className="space-y-3">
-            {/* Current password */}
-            <PasswordField
-              id="current-password"
-              label="Current Password"
-              value={currentPw}
-              onChange={setCurrentPw}
-              placeholder="Enter current password"
-              autoComplete="current-password"
-              disabled={pwLoading}
-            />
+          <div className="grid gap-3">
+            {/* Current password — only shown if user already has one */}
+            {hasPassword && (
+              <PasswordField
+                id="current-password"
+                label="Current Password"
+                value={currentPw}
+                onChange={setCurrentPw}
+                placeholder="Enter current password"
+                autoComplete="current-password"
+                disabled={pwLoading}
+              />
+            )}
 
-            <PasswordField
-              id="new-password"
-              label="New Password"
-              value={newPw}
-              onChange={setNewPw}
-              placeholder="At least 8 characters"
-              autoComplete="new-password"
-              disabled={pwLoading}
-              showStrength
-            />
+            <div className="grid sm:grid-cols-2 gap-3">
+              <PasswordField
+                id="new-password"
+                label={hasPassword ? 'New Password' : 'Password'}
+                value={newPw}
+                onChange={setNewPw}
+                placeholder="At least 8 characters"
+                autoComplete="new-password"
+                disabled={pwLoading}
+                showStrength
+              />
 
-            <PasswordField
-              id="confirm-password"
-              label="Confirm New Password"
-              value={confirmPw}
-              onChange={setConfirmPw}
-              placeholder="Re-enter new password"
-              autoComplete="new-password"
-              disabled={pwLoading}
-            />
+              <PasswordField
+                id="confirm-password"
+                label="Confirm Password"
+                value={confirmPw}
+                onChange={setConfirmPw}
+                placeholder="Re-enter password"
+                autoComplete="new-password"
+                disabled={pwLoading}
+              />
+            </div>
 
             {/* Error / Success messages */}
             {pwError && (
@@ -204,30 +214,32 @@ export default function SettingsPage() {
               </div>
             )}
 
-            <Button
-              type="button"
-              variant="primary"
-              size="md"
-              onClick={handlePasswordChange}
-              disabled={pwLoading}
-              loading={pwLoading}
-              leftIcon={!pwLoading ? <span className="material-symbols-outlined text-[16px]">save</span> : undefined}
-            >
-              {pwLoading ? 'Saving…' : 'Update Password'}
-            </Button>
+            <div className="pt-1">
+              <Button
+                type="button"
+                variant="primary"
+                size="md"
+                onClick={handlePasswordChange}
+                disabled={pwLoading}
+                loading={pwLoading}
+                leftIcon={!pwLoading ? <span className="material-symbols-outlined text-[16px]">save</span> : undefined}
+              >
+                {pwLoading ? 'Saving…' : (hasPassword ? 'Update Password' : 'Set Password')}
+              </Button>
+            </div>
           </div>
         </section>
 
         {/* ─── Notification Preferences ─── */}
         <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 md:p-6">
           <div className="flex items-center gap-3 mb-5">
-            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
               <span className="material-symbols-outlined text-[20px] text-blue-600">notifications</span>
             </div>
             <div>
               <h2 className="text-[15px] font-bold text-text-primary">Email Preferences</h2>
               <p className="text-[12px] text-text-secondary">
-                Choose which emails you want to receive. Auth emails (verification, password reset) are always sent.
+                Choose which emails you want to receive. Auth emails are always sent.
               </p>
             </div>
           </div>
@@ -239,7 +251,7 @@ export default function SettingsPage() {
               ))}
             </div>
           ) : prefs ? (
-            <div className="space-y-1">
+            <div className="divide-y divide-gray-100">
               {[
                 { key: 'email_new_matches' as const, icon: '🎯', label: 'New match alerts', desc: 'When a new scholarship scores 70%+ against your profile' },
                 { key: 'email_match_improvements' as const, icon: '📈', label: 'Match improvements', desc: 'When an existing match score increases significantly' },
@@ -253,12 +265,12 @@ export default function SettingsPage() {
                   role="switch"
                   aria-checked={prefs[item.key]}
                   aria-label={`${item.label}: ${prefs[item.key] ? 'on' : 'off'}`}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors text-left"
+                  className="w-full flex items-center gap-4 py-3.5 first:pt-0 last:pb-0 hover:bg-gray-50 -mx-1 px-1 rounded-lg transition-colors text-left"
                 >
-                  <span className="text-lg flex-shrink-0">{item.icon}</span>
+                  <span className="text-lg flex-shrink-0 w-8 text-center">{item.icon}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-text-primary">{item.label}</p>
-                    <p className="text-[11px] text-text-secondary line-clamp-2">{item.desc}</p>
+                    <p className="text-[11px] text-text-secondary mt-0.5">{item.desc}</p>
                   </div>
                   <div className={`relative w-10 h-6 rounded-full transition-colors flex-shrink-0 ${prefs[item.key] ? 'bg-primary' : 'bg-gray-300'}`}>
                     <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${prefs[item.key] ? 'left-[18px]' : 'left-0.5'}`} />
@@ -267,7 +279,7 @@ export default function SettingsPage() {
               ))}
 
               {prefsError && (
-                <div className="flex items-center gap-2 p-2 rounded-lg bg-red-50 border border-red-200 mt-2">
+                <div className="flex items-center gap-2 p-2.5 rounded-lg bg-red-50 border border-red-200 mt-3">
                   <span className="material-symbols-outlined text-[14px] text-red-500">error</span>
                   <p className="flex-1 text-[12px] text-red-700">{prefsError}</p>
                   <button onClick={() => setPrefsError(null)} className="text-red-400 hover:text-red-600">
@@ -276,13 +288,13 @@ export default function SettingsPage() {
                 </div>
               )}
               {prefsSaved && (
-                <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-50 border border-emerald-200 mt-2">
+                <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 mt-3">
                   <span className="material-symbols-outlined text-[14px] text-emerald-600">check_circle</span>
                   <p className="text-[12px] text-emerald-700">Preferences saved</p>
                 </div>
               )}
               {prefsSaving && (
-                <div className="flex items-center gap-2 p-2 mt-2">
+                <div className="flex items-center gap-2 p-2 mt-3">
                   <span className="w-3 h-3 border-2 border-gray-300 border-t-primary rounded-full animate-spin" />
                   <p className="text-[12px] text-text-secondary">Saving…</p>
                 </div>
@@ -293,34 +305,36 @@ export default function SettingsPage() {
 
         {/* ─── Sign Out ─── */}
         <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 md:p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
-              <span className="material-symbols-outlined text-[20px] text-red-600">logout</span>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <span className="material-symbols-outlined text-[20px] text-red-600">logout</span>
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-[15px] font-bold text-text-primary">Sign Out</h2>
+                <p className="text-[12px] text-text-secondary">
+                  Sign out of your account on this device.
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-[15px] font-bold text-text-primary">Sign Out</h2>
-              <p className="text-[12px] text-text-secondary">
-                Sign out of your ScholarshipRight account on this device.
-              </p>
-            </div>
+            <button
+              onClick={async () => {
+                const ok = await showConfirm({
+                  title: 'Sign out of ScholarshipRight?',
+                  description: 'You will be returned to the login page. Any unsaved changes will be lost.',
+                  confirmLabel: 'Sign out',
+                  cancelLabel: 'Cancel',
+                  tone: 'danger',
+                });
+                if (ok) logout();
+              }}
+              disabled={loggingOut}
+              className="flex-shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-red-200 bg-red-50 text-red-700 text-[13px] font-bold hover:bg-red-100 hover:border-red-300 transition-colors disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined text-[16px]">logout</span>
+              {loggingOut ? 'Signing out…' : 'Sign out'}
+            </button>
           </div>
-          <button
-            onClick={async () => {
-              const ok = await showConfirm({
-                title: 'Sign out of ScholarshipRight?',
-                description: 'You will be returned to the login page. Any unsaved changes will be lost.',
-                confirmLabel: 'Sign out',
-                cancelLabel: 'Cancel',
-                tone: 'danger',
-              });
-              if (ok) logout();
-            }}
-            disabled={loggingOut}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg border border-red-200 bg-red-50 text-red-700 text-[13px] font-bold hover:bg-red-100 hover:border-red-300 transition-colors disabled:opacity-50"
-          >
-            <span className="material-symbols-outlined text-[16px]">logout</span>
-            {loggingOut ? 'Signing out…' : 'Sign out'}
-          </button>
         </section>
       </div>
     </AppLayout>
