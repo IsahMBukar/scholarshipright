@@ -5,7 +5,7 @@ import PageHeader from '@/components/PageHeader';
 
 export default function CoachingPage() {
   return (
-    <AppLayout>
+    <AppLayout showRightPanel={false}>
       <PageHeader title="Coaching" />
       <div className="flex flex-col items-center justify-center px-6 py-20 text-center">
         {/* Animated icon */}

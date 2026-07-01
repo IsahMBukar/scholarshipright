@@ -31,7 +31,7 @@ export default function ResumePage() {
   return (
     <Suspense
       fallback={
-        <AppLayout showRightPanel={false}>
+        <AppLayout>
           <PageHeader title="RESUME" />
           <ResumeListSkeleton />
         </AppLayout>
@@ -262,7 +262,7 @@ function ResumePageInner() {
   // ---- RENDER ----
   if (loading) {
     return (
-      <AppLayout showRightPanel={false}>
+      <AppLayout>
         <PageHeader title="RESUME" />
         <div className="p-4 md:p-6">
           <ResumeListSkeleton count={3} />
@@ -272,7 +272,7 @@ function ResumePageInner() {
   }
 
   return (
-    <AppLayout showRightPanel={false}>
+    <AppLayout>
       <PageHeader title="RESUME" />
       <OnboardingProgress />
       <div className="px-4 md:px-6 py-6 max-w-[900px]">

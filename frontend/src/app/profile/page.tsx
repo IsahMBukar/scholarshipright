@@ -467,7 +467,7 @@ export default function ProfilePage() {
   return (
     <Suspense
       fallback={
-        <AppLayout showRightPanel={false}>
+        <AppLayout>
           <PageHeader title="PROFILE" />
           <div className="min-h-[60vh] flex items-center justify-center text-text-secondary text-sm">
             Loading…
@@ -559,7 +559,7 @@ function ProfilePageInner() {
 
   const toggleArr = (arr: string[], item: string) => arr.includes(item) ? arr.filter(i => i !== item) : [...arr, item];
 
-  if (loading) return <AppLayout showRightPanel={false}><PageHeader title="PROFILE" /><ProfileSkeleton /></AppLayout>;
+  if (loading) return <AppLayout><PageHeader title="PROFILE" /><ProfileSkeleton /></AppLayout>;
 
   const edu = (resume?.education || []).slice().reverse();
   const exp = (resume?.experience || []).slice().reverse();
@@ -581,7 +581,7 @@ function ProfilePageInner() {
   const showMatching = showMatchingBanner && (missingCritical.length > 0 || missingBoost.length > 0);
 
   return (
-    <AppLayout showRightPanel={false}>
+    <AppLayout>
       <PageHeader title="PROFILE" />
       <OnboardingProgress />
       <div className="px-4 md:px-6 py-6 max-w-[860px]">

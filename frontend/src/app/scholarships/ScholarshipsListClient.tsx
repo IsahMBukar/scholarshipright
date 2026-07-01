@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import AppLayout from '@/components/AppLayout';
@@ -42,6 +42,11 @@ export default function ScholarshipsListClient() {
   const showConfirm = useConfirm();
   const pathname = usePathname();
   const { isAuthenticated, setPendingAction } = useAuth();
+
+  // Desktop filter expand/collapse state. Starts collapsed so the user
+  // sees maximum scholarship content; expands on click, auto-collapses on scroll.
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const mainRef = useRef<HTMLElement | null>(null);
 
   // Eligibility warning modal state
   const [eligibilityModal, setEligibilityModal] = useState<{
@@ -109,6 +114,24 @@ export default function ScholarshipsListClient() {
     }, 400);
     return () => clearTimeout(timer);
   }, [searchQuery, filters, loadScholarships]);
+
+  // Auto-collapse desktop filters when user scrolls the main content area.
+  // This prevents the filter panel from blocking scholarship cards.
+  useEffect(() => {
+    const el = document.getElementById('main-content');
+    if (!el) return;
+
+    function handleScroll() {
+      if (!filtersExpanded) return;
+      // Collapse after any meaningful scroll (>10px from top)
+      if (el!.scrollTop > 10) {
+        setFiltersExpanded(false);
+      }
+    }
+
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, [filtersExpanded]);
 
   async function handleSave(id: string) {
     // Action gating: guests see auth modal, then action replays automatically
@@ -260,7 +283,7 @@ export default function ScholarshipsListClient() {
               </button>
             )}
             </div>
-            <NotificationBell />
+            <span className="xl:hidden"><NotificationBell /></span>
           </div>
         </div>
 
@@ -270,6 +293,8 @@ export default function ScholarshipsListClient() {
             filters={filters}
             onChange={setFilters}
             resultCount={activeTab === 'Saved' || activeTab === 'Applied' ? displayScholarships.length : total}
+            collapsed={!filtersExpanded}
+            onToggleCollapse={() => setFiltersExpanded((v) => !v)}
           />
         </div>
       </div>

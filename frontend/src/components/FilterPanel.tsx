@@ -56,6 +56,10 @@ interface FilterPanelProps {
   // Result count from the page; surfaced next to the Filter header
   // so the user can see the count change live as they toggle.
   resultCount: number;
+  // When true, the desktop variant renders a compact collapsed bar
+  // instead of the full filter body. Mobile is unaffected (uses bottom sheet).
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 // ----- FilterDropdown -------------------------------------------------
@@ -333,7 +337,7 @@ function StipendPopover({ value, onChange }: { value: number | null; onChange: (
 // a single "Filters" button that opens a bottom sheet with the
 // same controls laid out vertically.
 
-export default function FilterPanel({ filters, onChange, resultCount }: FilterPanelProps) {
+export default function FilterPanel({ filters, onChange, resultCount, collapsed, onToggleCollapse }: FilterPanelProps) {
   const [meta, setMeta] = useState<FilterMetadata | null>(null);
   const [metaError, setMetaError] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -468,9 +472,50 @@ export default function FilterPanel({ filters, onChange, resultCount }: FilterPa
 
   return (
     <>
-      {/* DESKTOP: always-visible row */}
-      <div className="hidden md:block bg-white border border-gray-200 rounded-2xl p-3.5">
-        {body}
+      {/* DESKTOP: collapsible filter panel */}
+      <div className="hidden md:block">
+        {collapsed ? (
+          /* Collapsed bar — shows filter icon, active count, and expand button */
+          <button
+            onClick={onToggleCollapse}
+            className="w-full flex items-center gap-3 bg-white border border-gray-200 rounded-2xl px-4 py-2.5 hover:bg-gray-50 transition-colors group"
+          >
+            <span className="material-symbols-outlined text-[20px] text-text-secondary group-hover:text-primary transition-colors">tune</span>
+            <span className="text-[13px] font-medium text-text-secondary">Filters</span>
+            {count > 0 && (
+              <span className="px-2 py-0.5 bg-primary text-white text-[11px] font-bold rounded-full">
+                {count} active
+              </span>
+            )}
+            <span className="ml-auto flex items-center gap-1.5 text-[12px] text-text-secondary group-hover:text-primary transition-colors">
+              <span className="text-[12px] font-medium">{resultCount} results</span>
+              <span className="material-symbols-outlined text-[18px]">expand_more</span>
+            </span>
+          </button>
+        ) : (
+          /* Expanded panel — full filter body with collapse toggle */
+          <div className="bg-white border border-gray-200 rounded-2xl p-3.5">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px] text-text-secondary">tune</span>
+                <span className="text-[13px] font-semibold text-text-primary">Filters</span>
+                {count > 0 && (
+                  <span className="px-1.5 py-0.5 bg-primary text-white text-[10px] font-bold rounded-full">{count}</span>
+                )}
+              </div>
+              {onToggleCollapse && (
+                <button
+                  onClick={onToggleCollapse}
+                  className="flex items-center gap-1 text-[12px] text-text-secondary hover:text-primary transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[18px]">expand_less</span>
+                  <span className="font-medium">Hide</span>
+                </button>
+              )}
+            </div>
+            {body}
+          </div>
+        )}
       </div>
 
       {/* MOBILE: Filters button + bottom sheet */}

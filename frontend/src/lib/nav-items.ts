@@ -11,6 +11,7 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { label: 'Scholarships', icon: 'school', href: '/scholarships' },
+  { label: 'Scholara', icon: 'smart_toy', href: '/chat' },
   { label: 'Resume', icon: 'description', href: '/resume' },
   { label: 'Profile', icon: 'person', href: '/profile' },
   { label: 'Coaching', icon: 'record_voice_over', href: '/coaching', soon: true },

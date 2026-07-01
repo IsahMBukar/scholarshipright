@@ -23,8 +23,8 @@ export default function PageHeader({ title, children }: { title: string; childre
             <h1 className="text-[20px] font-bold text-text-primary uppercase tracking-wide">{title}</h1>
             {/* Right-side extra content (tabs, buttons, etc.) */}
             {children && <div className="flex-1 flex items-center justify-end gap-2">{children}</div>}
-            {/* Notification bell — far right on all screens */}
-            <div className="flex items-center gap-2 ml-auto flex-shrink-0">
+            {/* Notification bell — hidden on xl where RightPanel shows its own */}
+            <div className="flex items-center gap-2 ml-auto flex-shrink-0 xl:hidden">
               <NotificationBell />
             </div>
           </div>

@@ -1,77 +1,136 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { fetchProfile, fetchSavedScholarships, fetchScholarships, type Profile, type Scholarship } from '@/services/api';
 import { useRouter } from 'next/navigation';
 import NotificationBell from './NotificationBell';
 import OnboardingProgress from './OnboardingProgress';
 
+// ── Module-level cache ────────────────────────────────────────────
+// Stale-while-revalidate: first mount shows cached data instantly and
+// re-fetches in background. Subsequent mounts within STALE_MS reuse
+// the cache without a network round-trip. Prevents 3 API calls on
+// every page navigation that uses AppLayout.
+const STALE_MS = 60_000; // 1 minute
+
+interface CachedData {
+  profile: Profile | null;
+  scholarshipCount: number;
+  savedCount: number;
+  appliedCount: number;
+  deadlines: Array<{ name: string; slug: string; days: number }>;
+}
+
+let cachedData: CachedData | null = null;
+let cacheTimestamp = 0;
+
+function isStale() {
+  return !cachedData || Date.now() - cacheTimestamp > STALE_MS;
+}
+
+async function loadRightPanelData(): Promise<CachedData> {
+  const [profileData, scholarships, saved] = await Promise.allSettled([
+    fetchProfile(),
+    fetchScholarships({ limit: '100' }),
+    fetchSavedScholarships(),
+  ]);
+
+  const profile = profileData.status === 'fulfilled' ? profileData.value : null;
+
+  let scholarshipCount = 0;
+  let deadlines: CachedData['deadlines'] = [];
+  if (scholarships.status === 'fulfilled') {
+    scholarshipCount = scholarships.value.total;
+    const now = new Date();
+    deadlines = scholarships.value.items
+      .filter(s => s.deadline && new Date(s.deadline) > now)
+      .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
+      .slice(0, 5)
+      .map(s => {
+        const days = Math.ceil((new Date(s.deadline).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        return { name: s.name, slug: s.slug, days };
+      });
+  }
+
+  let savedCount = 0;
+  let appliedCount = 0;
+  if (saved.status === 'fulfilled') {
+    savedCount = saved.value.length;
+    const appliedStatuses = ['applying', 'applied', 'reviewing', 'accepted'];
+    appliedCount = saved.value.filter((s: { status?: string }) => appliedStatuses.includes(s.status || '')).length;
+  }
+
+  return { profile, scholarshipCount, savedCount, appliedCount, deadlines };
+}
+
 export default function RightPanel() {
   const router = useRouter();
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [scholarshipCount, setScholarshipCount] = useState(0);
-  const [savedCount, setSavedCount] = useState(0);
-  const [appliedCount, setAppliedCount] = useState(0);
-  const [deadlines, setDeadlines] = useState<Array<{ name: string; slug: string; days: number }>>([]);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<CachedData>(() => cachedData || {
+    profile: null, scholarshipCount: 0, savedCount: 0, appliedCount: 0, deadlines: [],
+  });
+  const [loading, setLoading] = useState(() => isStale());
 
   useEffect(() => {
-    async function load() {
-      try {
-        const [profileData, scholarships, saved] = await Promise.allSettled([
-          fetchProfile(),
-          fetchScholarships({ limit: '100' }),
-          fetchSavedScholarships(),
-        ]);
-
-        if (profileData.status === 'fulfilled') setProfile(profileData.value);
-        if (scholarships.status === 'fulfilled') {
-          setScholarshipCount(scholarships.value.total);
-          // Get upcoming deadlines
-          const now = new Date();
-          const upcoming = scholarships.value.items
-            .filter(s => s.deadline && new Date(s.deadline) > now)
-            .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
-            .slice(0, 5)
-            .map(s => {
-              const days = Math.ceil((new Date(s.deadline).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-              return { name: s.name, slug: s.slug, days };
-            });
-          setDeadlines(upcoming);
-        }
-        if (saved.status === 'fulfilled') {
-          setSavedCount(saved.value.length);
-          const appliedStatuses = ['applying', 'applied', 'reviewing', 'accepted'];
-          setAppliedCount(saved.value.filter((s: { status?: string }) => appliedStatuses.includes(s.status || '')).length);
-        }
-      } catch (err) {
-        console.error('RightPanel load error:', err);
-      } finally {
-        setLoading(false);
-      }
+    // If cache is fresh, use it directly (already set in initial state)
+    if (!isStale()) {
+      setLoading(false);
+      return;
     }
-    load();
+
+    let cancelled = false;
+    loadRightPanelData()
+      .then((fresh) => {
+        if (cancelled) return;
+        cachedData = fresh;
+        cacheTimestamp = Date.now();
+        setData(fresh);
+      })
+      .catch((err) => {
+        console.error('RightPanel load error:', err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
   }, []);
 
-  // Calculate profile completion
-  const completionFields = [
-    profile?.degree_level,
-    profile?.field_of_study,
-    profile?.university,
-    profile?.country_of_origin,
-    profile?.target_degree,
-    profile?.target_countries?.length,
-    profile?.cgpa,
-  ];
-  const filledCount = completionFields.filter(Boolean).length;
-  const completionPct = Math.round((filledCount / completionFields.length) * 100);
+  // Memoize profile completion calculation
+  const completionPct = useMemo(() => {
+    const p = data.profile;
+    const fields = [
+      p?.degree_level,
+      p?.field_of_study,
+      p?.university,
+      p?.country_of_origin,
+      p?.target_degree,
+      p?.target_countries?.length,
+      p?.cgpa,
+    ];
+    const filled = fields.filter(Boolean).length;
+    return Math.round((filled / fields.length) * 100);
+  }, [data.profile]);
 
-  const initial = profile?.field_of_study?.[0]?.toUpperCase()
-    || profile?.university?.[0]?.toUpperCase()
-    || 'U';
+  // Memoize derived display values
+  const { initial, displayName } = useMemo(() => {
+    const p = data.profile;
+    return {
+      initial: p?.field_of_study?.[0]?.toUpperCase() || p?.university?.[0]?.toUpperCase() || 'U',
+      displayName: p?.university || 'Student',
+    };
+  }, [data.profile]);
 
-  const displayName = profile?.university
-    || 'Student';
+  const stats = useMemo(() => [
+    { label: 'Matched', value: data.scholarshipCount, icon: 'school', href: '/scholarships' },
+    { label: 'Saved', value: data.savedCount, icon: 'bookmark', href: '/scholarships' },
+    { label: 'Applied', value: data.appliedCount, icon: 'send', href: '/scholarships' },
+  ], [data.scholarshipCount, data.savedCount, data.appliedCount]);
+
+  const tipText = useMemo(() => {
+    if (completionPct < 50) return 'Complete your profile to get better scholarship matches. Add your research interests and target countries.';
+    if (completionPct < 80) return 'Great progress! Add your IELTS score and publications to improve match accuracy.';
+    return 'Your profile looks strong! Check your matches and start applying to top scholarships.';
+  }, [completionPct]);
 
   return (
     <aside className="hidden xl:flex flex-col w-[240px] h-full border-l border-gray-200 bg-white p-5 overflow-y-auto">
@@ -108,11 +167,7 @@ export default function RightPanel() {
       {/* Quick Stats */}
       <div className="space-y-3 mb-6">
         <h4 className="text-[12px] font-bold uppercase tracking-wider text-text-secondary">Quick Stats</h4>
-        {[
-          { label: 'Matched', value: scholarshipCount, icon: 'school', href: '/scholarships' },
-          { label: 'Saved', value: savedCount, icon: 'bookmark', href: '/scholarships' },
-          { label: 'Applied', value: appliedCount, icon: 'send', href: '/scholarships' },
-        ].map((stat) => (
+        {stats.map((stat) => (
           <button
             key={stat.label}
             onClick={() => router.push(stat.href)}
@@ -135,13 +190,7 @@ export default function RightPanel() {
           <span className="material-symbols-outlined text-primary text-[20px]">lightbulb</span>
           <h4 className="text-[13px] font-bold text-text-primary">Tip</h4>
         </div>
-        <p className="text-[12px] text-text-secondary leading-relaxed">
-          {completionPct < 50
-            ? 'Complete your profile to get better scholarship matches. Add your research interests and target countries.'
-            : completionPct < 80
-            ? 'Great progress! Add your IELTS score and publications to improve match accuracy.'
-            : 'Your profile looks strong! Check your matches and start applying to top scholarships.'}
-        </p>
+        <p className="text-[12px] text-text-secondary leading-relaxed">{tipText}</p>
       </div>
 
       {/* Upcoming Deadlines */}
@@ -153,9 +202,9 @@ export default function RightPanel() {
               <div key={i} className="h-6 bg-gray-100 rounded animate-pulse" />
             ))}
           </div>
-        ) : deadlines.length > 0 ? (
+        ) : data.deadlines.length > 0 ? (
           <div className="space-y-2">
-            {deadlines.map((item) => (
+            {data.deadlines.map((item) => (
               <button
                 key={item.slug}
                 onClick={() => router.push(`/scholarships/${item.slug}`)}
