@@ -168,7 +168,12 @@ def _scholarship_text(scholarship: Any) -> str:
 # ── Existing eligibility signals, now more nuanced ────────────────
 
 def field_match_score(user_fields: list[str], scholarship_fields: list[str]) -> float:
-    """Score field match: +15 exact/all-fields, +11 sibling, +6 text partial, 0 none."""
+    """Score field match: +15 exact/all-fields, +12 containment, +11 sibling, +6 text partial, 0 none.
+
+    Handles mismatches between short tokens ("computer_science") and full
+    names ("Computer Science") by normalising both to a canonical form
+    (lowercase, underscores/spaces/hyphens stripped, punctuation removed).
+    """
     if not user_fields or not scholarship_fields:
         return 0
 
@@ -177,15 +182,42 @@ def field_match_score(user_fields: list[str], scholarship_fields: list[str]) -> 
         return 15
 
     user_norm = {_norm(f) for f in user_fields}
+
+    # Exact match (after normalisation)
     if user_norm & sch_norm:
         return 15
 
+    # Fuzzy containment: "computer_science_&_engineering" contains "engineering"
+    # Also handles "Computer Science" ↔ "computer_science" since _norm collapses both.
+    def _strip_extra(s: str) -> str:
+        """Remove punctuation like & / ( ) so containment works."""
+        return re.sub(r'[^a-z0-9_]', '', s)
+
+    user_stripped = {_strip_extra(u) for u in user_norm}
+    sch_stripped = {_strip_extra(s) for s in sch_norm}
+    for us in user_stripped:
+        if not us:
+            continue
+        for ss in sch_stripped:
+            if not ss:
+                continue
+            if us == ss or ss in us or us in ss:
+                return 12
+
+    # Sibling bonus via FIELD_SIBLINGS
     for uf in user_norm:
         siblings = {_norm(s) for s in FIELD_SIBLINGS.get(uf, [])}
         if siblings & sch_norm:
             return 11
+    # Also try stripped form for sibling lookup (handles "Computer Science" → "computer_science")
+    for us in user_stripped:
+        if us and us not in FIELD_SIBLINGS:
+            continue
+        siblings = {_norm(s) for s in FIELD_SIBLINGS.get(us, [])}
+        if siblings & sch_norm:
+            return 11
 
-    # Catch loose forms like "computer science" vs "computing" or "AI".
+    # Token-level partial: "Computer Science & Engineering" vs "Engineering"
     user_tokens = _tokens(" ".join(user_fields).replace("_", " "))
     sch_tokens = _tokens(" ".join(scholarship_fields).replace("_", " "))
     if user_tokens & sch_tokens:

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { Profile } from '@/services/api';
 import { COUNTRY_NAMES } from '@/data/countries';
+import { FIELDS_OF_STUDY } from '@/data/fieldsOfStudy';
 
 /**
  * ProfileSlide — slide 2 of the onboarding carousel.
@@ -42,23 +43,6 @@ const POPULAR_TARGET_COUNTRIES = [
   'United States', 'United Kingdom', 'Canada', 'Germany', 'France',
   'Netherlands', 'Sweden', 'Switzerland', 'Australia', 'Japan',
   'South Korea', 'China', 'Turkey', 'Belgium', 'Singapore',
-];
-
-const FIELDS_OF_STUDY = [
-  { value: 'engineering', label: 'Engineering' },
-  { value: 'computer_science', label: 'Computer Science' },
-  { value: 'natural_sciences', label: 'Natural Sciences' },
-  { value: 'medicine', label: 'Medicine & Health' },
-  { value: 'business', label: 'Business & Management' },
-  { value: 'economics', label: 'Economics' },
-  { value: 'law', label: 'Law' },
-  { value: 'arts_humanities', label: 'Arts & Humanities' },
-  { value: 'social_sciences', label: 'Social Sciences' },
-  { value: 'education', label: 'Education' },
-  { value: 'agriculture', label: 'Agriculture' },
-  { value: 'public_health', label: 'Public Health' },
-  { value: 'architecture', label: 'Architecture' },
-  { value: 'mathematics', label: 'Mathematics' },
 ];
 
 const CGPA_SCALE_OPTIONS = [

@@ -16,9 +16,10 @@ import type {
   ResumeResearchProject, ResumeCertification, ResumePublication,
   ResumeLanguageObject, ResumeReference,
 } from '@/services/api';
+import { POPULAR_FIELDS, FIELDS_OF_STUDY_VALUES } from '@/data/fieldsOfStudy';
 
 const DEGREE_OPTIONS = ['bachelor', 'master', 'phd', 'diploma', 'short_course', 'certificate'];
-const FIELDS = ['computer_science', 'engineering', 'medicine', 'business', 'law', 'natural_sciences', 'social_sciences', 'arts', 'education', 'agriculture', 'public_health', 'economics', 'mathematics', 'physics', 'chemistry', 'biology'];
+const FIELDS = POPULAR_FIELDS;
 
 const SEVERITY_CONFIG: Record<string, { color: string; bg: string; icon: string; label: string }> = {
   urgent: { color: 'text-red-600', bg: 'bg-red-50', icon: 'error', label: 'Urgent' },

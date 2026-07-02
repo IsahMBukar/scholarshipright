@@ -23,6 +23,7 @@ import type {
   PreviousDegree,
   StandardizedTest,
 } from '@/lib/admin/types';
+import { FIELDS_OF_STUDY } from '@/data/fieldsOfStudy';
 
 // ── Form state ────────────────────────────────────────────────────
 
@@ -194,43 +195,12 @@ export const DEGREE_LEVEL_OPTIONS: ReadonlyArray<{ value: string; label: string 
   { value: 'other',       label: 'Other / unclassified' },
 ];
 
-// Canonical field-of-study tokens. The match engine uses these via
-// FIELD_SIBLINGS to compute sibling-field bonuses; using an exact
-// canonical token ensures the bonus kicks in. Anything not in this
-// list can still be entered via free text (the MultiSelect's
-// "Create …" affordance) but loses the sibling match.
-export const FIELD_OF_STUDY_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
-  // FIELD_SIBLINGS keys (16) — get full sibling-match bonuses
-  { value: 'agriculture',           label: 'Agriculture' },
-  { value: 'artificial_intelligence', label: 'Artificial Intelligence' },
-  { value: 'biology',               label: 'Biology' },
-  { value: 'business',              label: 'Business / Management' },
-  { value: 'chemistry',             label: 'Chemistry' },
-  { value: 'computer_science',      label: 'Computer Science' },
-  { value: 'data_science',          label: 'Data Science' },
-  { value: 'economics',             label: 'Economics' },
-  { value: 'engineering',           label: 'Engineering' },
-  { value: 'law',                   label: 'Law' },
-  { value: 'mathematics',           label: 'Mathematics' },
-  { value: 'medicine',              label: 'Medicine' },
-  { value: 'natural_sciences',      label: 'Natural Sciences' },
-  { value: 'physics',               label: 'Physics' },
-  { value: 'public_health',         label: 'Public Health' },
-  { value: 'social_sciences',       label: 'Social Sciences' },
-  // DB-extras that aren't in FIELD_SIBLINGS but already appear in data
-  { value: 'all_fields',            label: 'All fields' },
-  { value: 'architecture',          label: 'Architecture' },
-  { value: 'environment',           label: 'Environmental Science' },
-  { value: 'governance',            label: 'Governance / Public Policy' },
-  { value: 'health',                label: 'Health (general)' },
-  { value: 'humanities',            label: 'Humanities' },
-  { value: 'life_sciences',         label: 'Life Sciences' },
-  { value: 'nursing',               label: 'Nursing' },
-  { value: 'pharmacy',              label: 'Pharmacy' },
-  { value: 'political_science',     label: 'Political Science' },
-  { value: 'psychology',            label: 'Psychology' },
-  { value: 'water_management',      label: 'Water Management' },
-];
+// Canonical field-of-study tokens.  Sourced from the exhaustive
+// fieldsOfStudy.ts list (2 497 entries).  The MultiSelect typeahead
+// searches the full list, so admins can pick any recognised field.
+// The match engine uses fuzzy normalisation so both short tokens
+// ("computer_science") and full names ("Computer Science") match.
+export const FIELD_OF_STUDY_OPTIONS: ReadonlyArray<{ value: string; label: string }> = FIELDS_OF_STUDY;
 
 // Canonical host countries. Comprehensive list — the typeahead shows
 // 5 at a time so the long-list UX stays scannable. Free text is also

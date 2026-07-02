@@ -72,6 +72,7 @@ type ResumeFieldValue =
   | { location?: string; email?: string; phone?: string; linkedin_url?: string }
   | undefined;
 import { COUNTRY_NAMES } from '@/data/countries';
+import { POPULAR_FIELDS, FIELDS_OF_STUDY_VALUES, FIELDS_OF_STUDY } from '@/data/fieldsOfStudy';
 
 import {
   getMissingCriticalFields,
@@ -82,7 +83,7 @@ import {
 const DEGREE_OPTIONS = ['bachelor', 'master', 'phd'];
 const CURRENT_EDUCATION_OPTIONS = ['high_school', 'bachelor', 'master', 'phd'];
 const COUNTRIES = COUNTRY_NAMES;
-const FIELDS = ['computer_science', 'engineering', 'medicine', 'business', 'law', 'natural_sciences', 'social_sciences', 'arts', 'education', 'agriculture', 'public_health', 'economics', 'mathematics', 'physics', 'chemistry', 'biology'];
+const FIELDS = POPULAR_FIELDS;
 const LANGUAGES_LIST = ['English', 'French', 'Arabic', 'Portuguese', 'Swahili', 'Spanish', 'German', 'Japanese', 'Chinese', 'Korean', 'Turkish'];
 const POPULAR_TARGET_COUNTRIES = ['Germany', 'United Kingdom', 'United States', 'Canada', 'Japan', 'Australia', 'France', 'Sweden', 'Netherlands', 'Switzerland', 'South Korea', 'China', 'Turkey', 'Belgium'];
 
@@ -895,7 +896,7 @@ function ProfilePageInner() {
                   <Select value={editForm.target_degree || ''} onChange={v => setEditForm({ ...editForm, target_degree: v })} options={[{ value: '', label: 'Select' }, ...DEGREE_OPTIONS.map(d => ({ value: d, label: d.charAt(0).toUpperCase() + d.slice(1) }))]} />
                 </Field>
                 <Field label="Field of study">
-                  <Select value={editForm.field_of_study || ''} onChange={v => setEditForm({ ...editForm, field_of_study: v })} options={[{ value: '', label: 'Select' }, ...FIELDS.map(f => ({ value: f, label: f.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }))]} />
+                  <Select value={editForm.field_of_study || ''} onChange={v => setEditForm({ ...editForm, field_of_study: v })} options={[{ value: '', label: 'Select' }, ...FIELDS_OF_STUDY]} />
                 </Field>
                 <Field label="Target countries">
                   <TagSelect options={POPULAR_TARGET_COUNTRIES} selected={editForm.target_countries || []} onToggle={c => setEditForm({ ...editForm, target_countries: toggleArr(editForm.target_countries || [], c) })} allOptions={COUNTRY_NAMES} placeholder="Search countries…" />
@@ -1091,7 +1092,7 @@ function ProfilePageInner() {
               <TagSelect options={POPULAR_TARGET_COUNTRIES} selected={editForm.target_countries || []} onToggle={c => setEditForm({ ...editForm, target_countries: toggleArr(editForm.target_countries || [], c) })} allOptions={COUNTRY_NAMES} placeholder="Search countries…" />
             </Field>
             <Field label="Target Fields">
-              <TagSelect options={FIELDS} selected={editForm.target_fields || []} onToggle={f => setEditForm({ ...editForm, target_fields: toggleArr(editForm.target_fields || [], f) })} />
+              <TagSelect options={FIELDS} selected={editForm.target_fields || []} onToggle={f => setEditForm({ ...editForm, target_fields: toggleArr(editForm.target_fields || [], f) })} allOptions={FIELDS_OF_STUDY_VALUES} placeholder="Search fields…" />
             </Field>
           </div>
           <SaveButton loading={saving} onClick={() => saveProfile({ target_degree: editForm.target_degree, target_countries: editForm.target_countries, target_fields: editForm.target_fields })} />
@@ -1101,7 +1102,7 @@ function ProfilePageInner() {
       {/* Research Interests */}
       {editing === 'research_interests' && (
         <Modal title="Edit Research Interests" onClose={() => setEditing(null)}>
-          <TagSelect options={FIELDS} selected={editForm.research_interests || []} onToggle={f => setEditForm({ ...editForm, research_interests: toggleArr(editForm.research_interests || [], f) })} />
+          <TagSelect options={FIELDS} selected={editForm.research_interests || []} onToggle={f => setEditForm({ ...editForm, research_interests: toggleArr(editForm.research_interests || [], f) })} allOptions={FIELDS_OF_STUDY_VALUES} placeholder="Search fields…" />
           <SaveButton loading={saving} onClick={() => saveProfile({ research_interests: editForm.research_interests })} />
         </Modal>
       )}
