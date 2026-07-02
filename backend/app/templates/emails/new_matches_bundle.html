@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body, table, td, p, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+  table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+  img { -ms-interpolation-mode: bicubic; border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+  body { margin: 0; padding: 0; width: 100% !important; background-color: #f5f3ef; }
+  a { color: #d4972e; }
+  @media only screen and (max-width: 600px) {
+    .email-container { width: 100% !important; }
+    .mobile-pad { padding-left: 20px !important; padding-right: 20px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background-color:#f5f3ef;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f3ef;">
+<tr><td align="center" style="padding:32px 16px;">
+<table role="presentation" class="email-container" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+
+  <!-- Logo -->
+  <tr>
+    <td align="center" style="padding:24px 0 20px;">
+      <a href="{{FRONTEND_URL}}" style="text-decoration:none;">
+        <img src="{{FRONTEND_URL}}/images/logo-light.jpg" width="40" height="40" alt="SR" style="border-radius:10px;display:block;">
+      </a>
+      <p style="margin:8px 0 0;font-family:'Inter',-apple-system,sans-serif;font-size:16px;font-weight:800;color:#1a1a1a;">
+        Scholarship<span style="color:#f5b942;">Right</span>
+      </p>
+    </td>
+  </tr>
+
+  <!-- Card -->
+  <tr>
+    <td style="background:#ffffff;border-radius:16px;border:1px solid #f0ebe0;overflow:hidden;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        <tr><td class="mobile-pad" style="padding:36px 40px;">
+
+          <!-- Badge -->
+          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 20px;">
+            <tr>
+              <td style="background:#f5b942;border-radius:20px;padding:6px 16px;">
+                <p style="margin:0;font-family:'Inter',-apple-system,sans-serif;font-size:11px;font-weight:700;color:#1a1a1a;text-transform:uppercase;letter-spacing:1px;">
+                  🎯 New Matches
+                </p>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Heading -->
+          <h1 style="margin:0 0 8px;font-family:'Inter',-apple-system,sans-serif;font-size:26px;font-weight:800;color:#1a1a1a;text-align:center;letter-spacing:-0.5px;line-height:1.2;">
+            {{HEADING}}
+          </h1>
+          <p style="margin:0 0 28px;font-family:'Inter',-apple-system,sans-serif;font-size:14px;color:#666;text-align:center;line-height:1.6;">
+            Hi {{RECIPIENT_NAME}}, {{SUBTEXT}}
+          </p>
+
+          <!-- Match Cards -->
+          {{MATCH_CARDS}}
+
+          <!-- CTA -->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;">
+            <tr>
+              <td align="center">
+                <a href="{{FRONTEND_URL}}/scholarships" style="display:inline-block;background:#f5b942;color:#1a1a1a;font-family:'Inter',-apple-system,sans-serif;font-size:14px;font-weight:700;text-decoration:none;padding:14px 32px;border-radius:50px;">
+                  View all matches →
+                </a>
+              </td>
+            </tr>
+          </table>
+
+        </td></tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- Footer -->
+  <tr>
+    <td align="center" style="padding:24px 20px;">
+      <p style="margin:0 0 4px;font-family:'Inter',-apple-system,sans-serif;font-size:13px;font-weight:700;color:#f5b942;">ScholarshipRight</p>
+      <p style="margin:0 0 12px;font-family:'Inter',-apple-system,sans-serif;font-size:11px;color:#999;">AI matching for fully funded scholarships</p>
+      <p style="margin:0;font-family:'Inter',-apple-system,sans-serif;font-size:11px;color:#bbb;line-height:1.8;">
+        hello@scholarshipright.com · <a href="{{FRONTEND_URL}}" style="color:#d4972e;text-decoration:none;">scholarshipright.com</a><br>
+        <a href="{{UNSUBSCRIBE_URL}}" style="color:#bbb;text-decoration:underline;">Unsubscribe</a> ·
+        <a href="{{FRONTEND_URL}}/settings" style="color:#bbb;text-decoration:underline;">Email preferences</a>
+      </p>
+      <p style="margin:12px 0 0;font-family:'Inter',-apple-system,sans-serif;font-size:10px;color:#ccc;">© {{YEAR}} ScholarshipRight. All rights reserved.</p>
+    </td>
+  </tr>
+
+</table>
+</td></tr></table>
+</body>
+</html>

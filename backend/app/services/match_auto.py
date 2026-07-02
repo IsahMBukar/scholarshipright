@@ -207,31 +207,63 @@ async def recompute_matches_for_user(user_id: UUID, reason: str = REASON_MANUAL)
             await db.commit()
 
             # Send new-match emails (after commit, fire-and-forget)
+            # Bundle all new matches into ONE email (max 10) instead of
+            # sending individual emails per scholarship.
             if notif_new > 0:
                 from app.services.email import send_templated_email
+                from app.services.weekly_digest import _build_match_card
                 user_row = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
                 if user_row:
+                    # Collect all new matches, sort by score, cap at 10
+                    new_matches = []
                     for sch_id, new_score in new_scores.items():
                         old_score = old_scores.get(sch_id)
                         if old_score is None and is_new_match(new_score):
                             sch = (await db.execute(select(Scholarship).where(Scholarship.id == sch_id))).scalar_one_or_none()
                             if sch:
-                                deadline_str = sch.deadline.strftime("%b %d, %Y") if sch.deadline else "Open"
-                                await send_templated_email(
-                                    to=user_row.email,
-                                    template="new_match",
-                                    variables={
-                                        "RECIPIENT_NAME": user_row.full_name or "Student",
-                                        "SCHOLARSHIP_NAME": sch.name,
-                                        "MATCH_SCORE": str(round(new_score)),
-                                        "AMOUNT": getattr(sch, "amount", "See details") or "See details",
-                                        "DEADLINE": deadline_str,
-                                        "COUNTRY": getattr(sch, "host_country", "") or "",
-                                        "USER_ID": str(user_id),
-                                        "UNSUBSCRIBE_CATEGORY": "new_matches",
-                                    },
-                                    subject=f"New match: {sch.name} ({round(new_score)}%)",
-                                )
+                                new_matches.append((sch, new_score))
+                    new_matches.sort(key=lambda x: x[1], reverse=True)
+                    new_matches = new_matches[:10]
+
+                    if new_matches:
+                        cards = []
+                        for sch, score in new_matches:
+                            deadline_str = sch.deadline.strftime("%b %d, %Y") if sch.deadline else "Open"
+                            amount = getattr(sch, "amount", None) or "See details"
+                            country = getattr(sch, "host_country", None) or ""
+                            cards.append(_build_match_card(
+                                scholarship_name=sch.name,
+                                score=float(score),
+                                amount=amount,
+                                deadline=deadline_str,
+                                country=country,
+                            ))
+
+                        match_cards_html = "\n".join(cards)
+                        count = len(new_matches)
+                        if count == 1:
+                            heading = "New scholarship match!"
+                            subtext = f"a new scholarship just scored {round(new_matches[0][1])}% against your profile."
+                            subject = f"New match: {new_matches[0][0].name} ({round(new_matches[0][1])}%)"
+                        else:
+                            heading = f"{count} new scholarship matches!"
+                            subtext = f"you have {count} new scholarships that scored 70%+ against your profile."
+                            top_name = new_matches[0][0].name
+                            subject = f"{count} new matches — top: {top_name} ({round(new_matches[0][1])}%)"
+
+                        await send_templated_email(
+                            to=user_row.email,
+                            template="new_matches_bundle",
+                            variables={
+                                "RECIPIENT_NAME": user_row.full_name or "Student",
+                                "HEADING": heading,
+                                "SUBTEXT": subtext,
+                                "MATCH_CARDS": match_cards_html,
+                                "USER_ID": str(user_id),
+                                "UNSUBSCRIBE_CATEGORY": "new_matches",
+                            },
+                            subject=subject,
+                        )
 
             logger.info(
                 "recompute ok user=%s reason=%s matches=%s penalized=%s new_notifs=%s improved_notifs=%s",

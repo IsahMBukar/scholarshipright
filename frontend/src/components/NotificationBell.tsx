@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useNotifications } from '@/hooks/useNotifications';
 import type { Notification } from '@/services/api';
@@ -8,7 +9,9 @@ import type { Notification } from '@/services/api';
 export default function NotificationBell() {
   const { notifications, unreadCount, loading, load, markRead, markAllRead, remove } = useNotifications();
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, right: 0 });
   const panelRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   // Close on outside click
   useEffect(() => {
@@ -21,11 +24,105 @@ export default function NotificationBell() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
 
+  // Position dropdown relative to bell button when opening
+  function handleOpen() {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setPos({
+        top: rect.bottom + 8,
+        right: window.innerWidth - rect.right,
+      });
+      load();
+    }
+    setOpen(!open);
+  }
+
+  const dropdown = open ? createPortal(
+    <div
+      ref={panelRef}
+      style={{ position: 'fixed', top: pos.top, right: pos.right }}
+      className="w-[min(360px,calc(100vw-2rem))] bg-white rounded-xl shadow-xl border border-gray-200 z-[9999] overflow-hidden"
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+        <h3 className="text-[15px] font-bold text-text-primary">Notifications</h3>
+        {unreadCount > 0 && (
+          <button
+            onClick={markAllRead}
+            className="text-[12px] text-primary font-medium hover:underline"
+          >
+            Mark all read
+          </button>
+        )}
+      </div>
+
+      {/* List */}
+      <div className="max-h-[400px] overflow-y-auto">
+        {loading ? (
+          <div className="p-8 text-center">
+            <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full mx-auto" />
+          </div>
+        ) : notifications.length === 0 ? (
+          <div className="p-8 text-center">
+            <span className="material-symbols-outlined text-4xl text-gray-300 mb-2 block">notifications_none</span>
+            <p className="text-[13px] text-text-secondary">No notifications yet</p>
+          </div>
+        ) : (
+          notifications.map((n) => (
+            <div
+              key={n.id}
+              className={`flex gap-3 px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors group ${
+                !n.is_read ? 'bg-primary-light/10' : ''
+              }`}
+            >
+              {/* Unread dot */}
+              <div className="pt-1.5 flex-shrink-0">
+                <div
+                  className={`w-2.5 h-2.5 rounded-full ${
+                    !n.is_read ? 'bg-primary' : 'bg-transparent'
+                  }`}
+                />
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 min-w-0">
+                {n.link ? (
+                  <Link
+                    href={n.link}
+                    onClick={() => { markRead(n.id); setOpen(false); }}
+                    className="block"
+                  >
+                    <NotificationContent n={n} />
+                  </Link>
+                ) : (
+                  <div onClick={() => markRead(n.id)} className="cursor-pointer">
+                    <NotificationContent n={n} />
+                  </div>
+                )}
+                <p className="text-[11px] text-text-secondary mt-1">{timeAgo(n.created_at)}</p>
+              </div>
+
+              {/* Delete button */}
+              <button
+                onClick={() => remove(n.id)}
+                className="opacity-0 group-hover:opacity-100 p-1 self-start mt-1 hover:bg-red-50 rounded transition-all"
+              >
+                <span className="material-symbols-outlined text-[16px] text-red-400">close</span>
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+    </div>,
+    document.body,
+  ) : null;
+
   return (
-    <div className="relative" ref={panelRef}>
+    <div className="relative">
       {/* Bell button */}
       <button
-        onClick={() => { setOpen(!open); if (!open) load(); }}
+        ref={btnRef}
+        onClick={handleOpen}
         className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors"
         aria-label={unreadCount > 0 ? `${unreadCount} unread notifications` : 'Notifications'}
       >
@@ -39,81 +136,7 @@ export default function NotificationBell() {
         )}
       </button>
 
-      {/* Dropdown panel */}
-      {open && (
-        <div className="absolute right-0 top-full mt-2 w-[min(360px,calc(100vw-2rem))] bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <h3 className="text-[15px] font-bold text-text-primary">Notifications</h3>
-            {unreadCount > 0 && (
-              <button
-                onClick={markAllRead}
-                className="text-[12px] text-primary font-medium hover:underline"
-              >
-                Mark all read
-              </button>
-            )}
-          </div>
-
-          {/* List */}
-          <div className="max-h-[400px] overflow-y-auto">
-            {loading ? (
-              <div className="p-8 text-center">
-                <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full mx-auto" />
-              </div>
-            ) : notifications.length === 0 ? (
-              <div className="p-8 text-center">
-                <span className="material-symbols-outlined text-4xl text-gray-300 mb-2 block">notifications_none</span>
-                <p className="text-[13px] text-text-secondary">No notifications yet</p>
-              </div>
-            ) : (
-              notifications.map((n) => (
-                <div
-                  key={n.id}
-                  className={`flex gap-3 px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors group ${
-                    !n.is_read ? 'bg-primary-light/10' : ''
-                  }`}
-                >
-                  {/* Unread dot */}
-                  <div className="pt-1.5 flex-shrink-0">
-                    <div
-                      className={`w-2.5 h-2.5 rounded-full ${
-                        !n.is_read ? 'bg-primary' : 'bg-transparent'
-                      }`}
-                    />
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    {n.link ? (
-                      <Link
-                        href={n.link}
-                        onClick={() => { markRead(n.id); setOpen(false); }}
-                        className="block"
-                      >
-                        <NotificationContent n={n} />
-                      </Link>
-                    ) : (
-                      <div onClick={() => markRead(n.id)} className="cursor-pointer">
-                        <NotificationContent n={n} />
-                      </div>
-                    )}
-                    <p className="text-[11px] text-text-secondary mt-1">{timeAgo(n.created_at)}</p>
-                  </div>
-
-                  {/* Delete button */}
-                  <button
-                    onClick={() => remove(n.id)}
-                    className="opacity-0 group-hover:opacity-100 p-1 self-start mt-1 hover:bg-red-50 rounded transition-all"
-                  >
-                    <span className="material-symbols-outlined text-[16px] text-red-400">close</span>
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
+      {dropdown}
     </div>
   );
 }
