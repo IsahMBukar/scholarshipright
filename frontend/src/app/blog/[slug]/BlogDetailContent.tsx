@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import DOMPurify from 'isomorphic-dompurify';
 import LandingShell from '@/components/LandingShell';
 import type { BlogPostOut, ScholarshipTagOut } from '@/lib/blog/types';
 
@@ -120,11 +121,11 @@ function RenderBody({
             </span>
           );
         }
-        // Regular HTML content
+        // Regular HTML content (sanitized client-side as defense-in-depth)
         return (
           <div
             key={`txt-${i}`}
-            dangerouslySetInnerHTML={{ __html: part }}
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(part) }}
           />
         );
       })}

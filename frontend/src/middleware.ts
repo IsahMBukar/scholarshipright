@@ -27,7 +27,10 @@ const AUTH_ROUTES = ['/login', '/signup'];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const hasToken = request.cookies.has('sr_token');
+  const token = request.cookies.get('sr_token')?.value;
+
+  // Token must exist AND look like a JWT (3 dot-separated base64 segments)
+  const hasValidToken = !!token && token.split('.').length === 3;
 
   // Check if the current path is a protected route
   const isProtected = PROTECTED_ROUTES.some(
@@ -39,15 +42,15 @@ export function middleware(request: NextRequest) {
     (route) => pathname === route || pathname.startsWith(route + '/')
   );
 
-  // Protected route + no token → redirect to /login with return URL
-  if (isProtected && !hasToken) {
+  // Protected route + no valid token → redirect to /login with return URL
+  if (isProtected && !hasValidToken) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('next', pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  // Auth route + already has token → redirect to /scholarships
-  if (isAuthRoute && hasToken) {
+  // Auth route + already has valid token → redirect to /scholarships
+  if (isAuthRoute && hasValidToken) {
     return NextResponse.redirect(new URL('/scholarships', request.url));
   }
 

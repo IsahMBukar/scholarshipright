@@ -17,9 +17,11 @@ const nextConfig = {
   images: {
     formats: ['image/avif', 'image/webp'],
     remotePatterns: [
-      // Scholarship provider logos may come from arbitrary HTTPS hosts.
-      // Tighten this list as known CDNs/hosts are identified in prod.
-      { protocol: 'https', hostname: '**' },
+      // Only allow known image hosts. Add CDNs as needed.
+      { protocol: 'https', hostname: 'scholarshipright.com' },
+      { protocol: 'https', hostname: '*.scholarshipright.com' },
+      { protocol: 'https', hostname: 'res.cloudinary.com' },
+      { protocol: 'https', hostname: 'images.unsplash.com' },
     ],
   },
 
@@ -48,13 +50,12 @@ const nextConfig = {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
           },
-          // Content-Security-Policy (report-only mode initially)
-          // Adjust as needed, then switch to enforcing by removing '-Report-Only'
+          // Content-Security-Policy (enforcing)
           {
-            key: 'Content-Security-Policy-Report-Only',
+            key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // Next.js requires unsafe-inline/eval for dev
+              "script-src 'self' 'unsafe-inline'",  // unsafe-inline required for Next.js
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com",
               "img-src 'self' data: https:",
