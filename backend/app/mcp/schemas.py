@@ -2,8 +2,10 @@
 MCP tool schemas for ScholarshipRight.
 
 Defines the input/output schemas for each tool the MCP server exposes.
-These mirror the existing backend scholarship model fields.
+These mirror the existing backend scholarship and blog model fields.
 """
+
+# ── Scholarship fields ─────────────────────────────────────────────
 
 # Fields that agents can set when adding/updating a scholarship.
 # Matches AdminScholarshipCreate from the backend.
@@ -123,25 +125,64 @@ SCHOLARSHIP_FIELDS = {
 }
 
 
-def get_tool_schemas() -> dict:
-    """Return MCP tool input schemas."""
-    required_fields = [k for k, v in SCHOLARSHIP_FIELDS.items() if v.get("required")]
+# ── Blog fields ────────────────────────────────────────────────────
+
+BLOG_FIELDS = {
+    "title": {"type": "string", "description": "Blog post title (3-300 chars)", "required": True},
+    "body": {"type": "string", "description": "Post content in Markdown. Use @[scholarship:slug] to embed scholarship cards inline.", "required": True},
+    "excerpt": {"type": "string", "description": "Short summary shown in the blog list (optional, auto-generated if omitted)"},
+    "cover_image_url": {"type": "string", "description": "URL to the cover/hero image"},
+    "category": {
+        "type": "string",
+        "enum": ["general", "guides", "tips", "success-stories", "application-help", "essay-writing", "interview-prep", "funding", "study-abroad"],
+        "description": "Post category (default: general)",
+    },
+    "tags": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "Tags for the post (e.g. ['tips', 'chevening', 'uk-scholarships'])",
+    },
+    "status": {
+        "type": "string",
+        "enum": ["draft", "published", "pending_review"],
+        "description": "Post status. AI submissions default to pending_review for admin approval.",
+    },
+}
+
+
+# ── Tool schema builder ───────────────────────────────────────────
+
+def _build_properties(fields: dict) -> dict:
+    """Convert field defs to JSON Schema properties (strip 'required' key)."""
     properties = {}
-    for name, spec in SCHOLARSHIP_FIELDS.items():
+    for name, spec in fields.items():
         prop = {"type": spec["type"], "description": spec.get("description", "")}
         if "enum" in spec:
             prop["enum"] = spec["enum"]
         if "items" in spec:
             prop["items"] = spec["items"]
         properties[name] = prop
+    return properties
+
+
+def get_tool_schemas() -> dict:
+    """Return MCP tool input schemas."""
+    # ── Scholarship tools ──────────────────────────────────────────
+    sch_properties = _build_properties(SCHOLARSHIP_FIELDS)
+    sch_required = [k for k, v in SCHOLARSHIP_FIELDS.items() if v.get("required")]
+
+    # ── Blog tools ─────────────────────────────────────────────────
+    blog_properties = _build_properties(BLOG_FIELDS)
+    blog_required = [k for k, v in BLOG_FIELDS.items() if v.get("required")]
 
     return {
+        # Scholarship tools
         "add_scholarship": {
             "description": "Add a new scholarship to the review queue. Submissions are reviewed by an admin before going live.",
             "inputSchema": {
                 "type": "object",
-                "properties": properties,
-                "required": required_fields,
+                "properties": sch_properties,
+                "required": sch_required,
             },
         },
         "list_scholarships": {
@@ -170,9 +211,64 @@ def get_tool_schemas() -> dict:
                 "type": "object",
                 "properties": {
                     "id_or_slug": {"type": "string", "description": "Scholarship ID (UUID) or slug to edit"},
-                    **{k: v for k, v in properties.items() if k != "id_or_slug"},
+                    **{k: v for k, v in sch_properties.items() if k != "id_or_slug"},
                 },
                 "required": ["id_or_slug"],
+            },
+        },
+        # Blog tools
+        "create_blog_post": {
+            "description": "Create a new blog post. AI submissions go to pending_review for admin approval before publishing. Use @[scholarship:slug] in the body to embed scholarship cards inline.",
+            "inputSchema": {
+                "type": "object",
+                "properties": blog_properties,
+                "required": blog_required,
+            },
+        },
+        "list_blog_posts": {
+            "description": "List published blog posts. Filter by category or tag.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "search": {"type": "string", "description": "Search in post titles"},
+                    "category": {"type": "string", "description": "Filter by category slug"},
+                    "tag": {"type": "string", "description": "Filter by tag"},
+                    "page": {"type": "integer", "description": "Page number (default 1)"},
+                    "limit": {"type": "integer", "description": "Results per page (default 10, max 50)"},
+                },
+            },
+        },
+        "get_blog_post": {
+            "description": "Get a blog post by slug or ID. Returns full content including markdown body and rendered HTML.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "slug_or_id": {"type": "string", "description": "Blog post slug or UUID"},
+                },
+                "required": ["slug_or_id"],
+            },
+        },
+        "edit_blog_post": {
+            "description": "Edit an existing blog post. Only pass the fields you want to change. Use post_id (UUID) from get_blog_post or list_blog_posts.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "post_id": {"type": "string", "description": "Blog post UUID to edit"},
+                    **{k: v for k, v in blog_properties.items() if k not in ("status",)},
+                    "status": {
+                        "type": "string",
+                        "enum": ["draft", "published", "pending_review", "archived"],
+                        "description": "Change post status (e.g. publish a draft, archive a post)",
+                    },
+                },
+                "required": ["post_id"],
+            },
+        },
+        "list_blog_categories": {
+            "description": "List all blog categories that have published posts.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
             },
         },
     }

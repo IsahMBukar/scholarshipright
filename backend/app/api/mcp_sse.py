@@ -29,7 +29,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db, AsyncSessionLocal
 from app.models.scholarship import Scholarship
 from app.models.pending_scholarship import PendingScholarship
-from app.mcp.schemas import get_tool_schemas
+from app.models.blog import BlogPost, BlogScholarshipTag, extract_scholarship_slugs
+from app.models.user import User
+from app.mcp.schemas import get_tool_schemas, SCHOLARSHIP_FIELDS
 from app.mcp.security import require_mcp_auth, McpAuthRecord, log_mcp_request
 from app.mcp.oauth import (
     is_oauth_enabled,
@@ -100,7 +102,7 @@ async def oauth_authorization_server_metadata():
         "response_types_supported": ["code"],
         "grant_types_supported": ["authorization_code"],
         "code_challenge_methods_supported": ["S256"],
-        "scopes_supported": ["scholarships:read", "scholarships:write"],
+        "scopes_supported": ["scholarships:read", "scholarships:write", "blogs:read", "blogs:write"],
         "token_endpoint_auth_methods_supported": ["none"],
         "registration_endpoint": f"{server_url}/api/auth/mcp-register",
     }
@@ -275,15 +277,27 @@ async def _call_tool(
     ip = request.client.host if request.client else "unknown"
     ua = request.headers.get("user-agent", "unknown")
 
-    # Scope check: write operations require "scholarships:write" scope
-    _write_tools = {"add_scholarship", "edit_scholarship"}
-    if name in _write_tools and not auth.has_scope("scholarships:write"):
+    # Scope check: write operations require appropriate write scope
+    _sch_write_tools = {"add_scholarship", "edit_scholarship"}
+    _blog_write_tools = {"create_blog_post", "edit_blog_post"}
+
+    if name in _sch_write_tools and not auth.has_scope("scholarships:write"):
         logger.warning(
-            "MCP scope denied: auth=%s name=%s tool=%s (needs write scope)",
+            "MCP scope denied: auth=%s name=%s tool=%s (needs scholarships:write)",
             auth.auth_method, auth.name, name,
         )
         return {
             "content": [{"type": "text", "text": "Insufficient scope — scholarships:write required. Your token only has read access."}],
+            "isError": True,
+        }
+
+    if name in _blog_write_tools and not auth.has_scope("blogs:write"):
+        logger.warning(
+            "MCP scope denied: auth=%s name=%s tool=%s (needs blogs:write)",
+            auth.auth_method, auth.name, name,
+        )
+        return {
+            "content": [{"type": "text", "text": "Insufficient scope — blogs:write required. Your token only has read access."}],
             "isError": True,
         }
 
@@ -299,6 +313,16 @@ async def _call_tool(
             result = await _handle_get(args)
         elif name == "edit_scholarship":
             result = await _handle_edit(args)
+        elif name == "create_blog_post":
+            result = await _handle_blog_create(args, auth)
+        elif name == "list_blog_posts":
+            result = await _handle_blog_list(args)
+        elif name == "get_blog_post":
+            result = await _handle_blog_get(args)
+        elif name == "edit_blog_post":
+            result = await _handle_blog_edit(args, auth)
+        elif name == "list_blog_categories":
+            result = await _handle_blog_categories()
         else:
             result = {
                 "content": [{"type": "text", "text": f"Unknown tool: {name}"}],
@@ -536,3 +560,327 @@ async def _handle_edit(args: dict[str, Any]) -> dict:
         }
 
         return {"content": [{"type": "text", "text": json.dumps(data, indent=2, default=str)}]}
+
+
+# ── Blog tool handlers ────────────────────────────────────────────
+
+def _slugify(title: str) -> str:
+    """Generate URL-friendly slug from title."""
+    import re as _re
+    s = title.lower().strip()
+    s = _re.sub(r"[^\w\s-]", "", s)
+    s = _re.sub(r"[\s_]+", "-", s)
+    s = _re.sub(r"-+", "-", s).strip("-")
+    return s[:280]
+
+
+def _reading_time(body: str) -> int:
+    """Estimate reading time in minutes."""
+    import math
+    words = len(body.split())
+    return max(1, math.ceil(words / 200))
+
+
+async def _sync_blog_scholarship_tags(db: AsyncSession, post_id, body: str) -> None:
+    """Parse @[scholarship:slug] from body and sync the tag table."""
+    from sqlalchemy import text as sa_text
+
+    slugs = extract_scholarship_slugs(body)
+    if not slugs:
+        await db.execute(
+            sa_text("DELETE FROM blog_scholarship_tags WHERE blog_post_id = :pid"),
+            {"pid": str(post_id)},
+        )
+        return
+
+    rows = await db.execute(
+        select(Scholarship.id, Scholarship.slug).where(Scholarship.slug.in_(slugs))
+    )
+    slug_to_id = {r.slug: r.id for r in rows.all()}
+
+    await db.execute(
+        sa_text("DELETE FROM blog_scholarship_tags WHERE blog_post_id = :pid"),
+        {"pid": str(post_id)},
+    )
+
+    for i, slug in enumerate(slugs):
+        sch_id = slug_to_id.get(slug)
+        if sch_id:
+            tag = BlogScholarshipTag(
+                blog_post_id=post_id,
+                scholarship_id=sch_id,
+                position_hint=i,
+            )
+            db.add(tag)
+
+
+async def _handle_blog_create(args: dict[str, Any], auth: McpAuthRecord) -> dict:
+    """Create a blog post. AI submissions default to pending_review."""
+    from datetime import datetime, timezone
+
+    required = ["title", "body"]
+    missing = [f for f in required if f not in args]
+    if missing:
+        return {
+            "content": [{"type": "text", "text": f"Missing required fields: {', '.join(missing)}"}],
+            "isError": True,
+        }
+
+    title = args["title"].strip()
+    body = args["body"].strip()
+    if len(title) < 3:
+        return {"content": [{"type": "text", "text": "Title must be at least 3 characters."}], "isError": True}
+    if len(body) < 10:
+        return {"content": [{"type": "text", "text": "Body must be at least 10 characters."}], "isError": True}
+
+    # Default to pending_review for AI submissions
+    status = args.get("status", "pending_review")
+
+    async with AsyncSessionLocal() as db:
+        # Resolve auth identity to a user ID
+        identity = _get_auth_identity(auth)
+        # Try to find user by email (OAuth) or use the first admin as fallback
+        user_row = await db.execute(select(User.id).limit(1))
+        author_id = user_row.scalar()
+        if not author_id:
+            return {
+                "content": [{"type": "text", "text": "No users found in database. Cannot assign author."}],
+                "isError": True,
+            }
+
+        slug = _slugify(title)
+        existing = await db.execute(select(BlogPost.id).where(BlogPost.slug == slug))
+        if existing.scalar_one_or_none():
+            import uuid
+            slug = f"{slug}-{uuid.uuid4().hex[:6]}"
+
+        now = datetime.now(timezone.utc)
+        post = BlogPost(
+            author_id=author_id,
+            title=title,
+            slug=slug,
+            excerpt=args.get("excerpt"),
+            body=body,
+            cover_image_url=args.get("cover_image_url"),
+            category=args.get("category", "general"),
+            tags=args.get("tags", []),
+            reading_time_minutes=_reading_time(body),
+            status=status,
+            published_at=now if status == "published" else None,
+        )
+        db.add(post)
+        await db.flush()
+
+        await _sync_blog_scholarship_tags(db, post.id, body)
+
+        await db.commit()
+        await db.refresh(post)
+
+        lines = [
+            f"Blog post created (ID: {post.id})",
+            f"Title: {post.title}",
+            f"Slug: {post.slug}",
+            f"Status: {post.status}",
+            f"URL: /blog/{post.slug}",
+        ]
+        if status == "pending_review":
+            lines.append("Status is pending_review — an admin will review before it goes live.")
+        elif status == "draft":
+            lines.append("Saved as draft. Set status='published' or 'pending_review' when ready.")
+
+        return {"content": [{"type": "text", "text": "\n".join(lines)}]}
+
+
+async def _handle_blog_list(args: dict[str, Any]) -> dict:
+    """List published blog posts."""
+    import math
+
+    search = args.get("search", "")
+    category = args.get("category")
+    tag = args.get("tag")
+    page = max(1, args.get("page", 1))
+    limit = min(50, max(1, args.get("limit", 10)))
+
+    async with AsyncSessionLocal() as db:
+        base = select(BlogPost).where(BlogPost.status == "published")
+        count_base = select(func.count(BlogPost.id)).where(BlogPost.status == "published")
+
+        if search:
+            ilike = f"%{search}%"
+            base = base.where(BlogPost.title.ilike(ilike))
+            count_base = count_base.where(BlogPost.title.ilike(ilike))
+        if category:
+            base = base.where(BlogPost.category == category)
+            count_base = count_base.where(BlogPost.category == category)
+        if tag:
+            base = base.where(BlogPost.tags.any(tag))
+            count_base = count_base.where(BlogPost.tags.any(tag))
+
+        total = (await db.execute(count_base)).scalar() or 0
+        pages = max(1, math.ceil(total / limit))
+
+        rows = await db.execute(
+            base.order_by(BlogPost.published_at.desc())
+            .offset((page - 1) * limit)
+            .limit(limit)
+        )
+        posts = rows.scalars().all()
+
+        if not posts:
+            return {"content": [{"type": "text", "text": "No blog posts found."}]}
+
+        lines = [f"Found {total} post(s), showing page {page}/{pages}:\n"]
+        for p in posts:
+            tags_str = f" [{', '.join(p.tags)}]" if p.tags else ""
+            lines.append(f"- {p.title} | {p.category} | {p.reading_time_minutes}min read | Slug: {p.slug}{tags_str}")
+
+        return {"content": [{"type": "text", "text": "\n".join(lines)}]}
+
+
+async def _handle_blog_get(args: dict[str, Any]) -> dict:
+    """Get a blog post by slug or ID."""
+    slug_or_id = args.get("slug_or_id", "").strip()
+    if not slug_or_id:
+        return {"content": [{"type": "text", "text": "slug_or_id is required."}], "isError": True}
+
+    async with AsyncSessionLocal() as db:
+        # Try slug first
+        row = await db.execute(
+            select(BlogPost).where(BlogPost.slug == slug_or_id, BlogPost.status == "published")
+        )
+        post = row.scalar_one_or_none()
+
+        # Fallback to UUID
+        if not post:
+            from uuid import UUID
+            try:
+                row = await db.execute(
+                    select(BlogPost).where(BlogPost.id == UUID(slug_or_id))
+                )
+                post = row.scalar_one_or_none()
+            except (ValueError, AttributeError):
+                pass
+
+        if not post:
+            return {
+                "content": [{"type": "text", "text": f"Blog post not found: {slug_or_id}"}],
+                "isError": True,
+            }
+
+        # Fetch author name
+        author = (await db.execute(select(User.full_name).where(User.id == post.author_id))).scalar()
+
+        data = {
+            "id": str(post.id),
+            "title": post.title,
+            "slug": post.slug,
+            "excerpt": post.excerpt,
+            "body": post.body,
+            "cover_image_url": post.cover_image_url,
+            "category": post.category,
+            "tags": post.tags or [],
+            "reading_time_minutes": post.reading_time_minutes,
+            "view_count": post.view_count,
+            "status": post.status,
+            "author_name": author or "Anonymous",
+            "published_at": post.published_at.isoformat() if post.published_at else None,
+            "created_at": post.created_at.isoformat(),
+            "updated_at": post.updated_at.isoformat(),
+        }
+
+        return {"content": [{"type": "text", "text": json.dumps(data, indent=2, default=str)}]}
+
+
+async def _handle_blog_edit(args: dict[str, Any], auth: McpAuthRecord) -> dict:
+    """Edit an existing blog post."""
+    import uuid as _uuid
+    from datetime import datetime, timezone
+
+    post_id = args.get("post_id", "").strip()
+    if not post_id:
+        return {"content": [{"type": "text", "text": "post_id is required."}], "isError": True}
+
+    from app.mcp.schemas import BLOG_FIELDS
+    editable = {k: v for k, v in args.items() if k != "post_id" and k in BLOG_FIELDS}
+    if not editable:
+        return {
+            "content": [{"type": "text", "text": "No fields to update. Pass at least one field besides post_id."}],
+            "isError": True,
+        }
+
+    async with AsyncSessionLocal() as db:
+        try:
+            row = await db.execute(select(BlogPost).where(BlogPost.id == _uuid.UUID(post_id)))
+        except ValueError:
+            return {"content": [{"type": "text", "text": "Invalid post_id format. Must be a UUID."}], "isError": True}
+
+        post = row.scalar_one_or_none()
+        if not post:
+            return {"content": [{"type": "text", "text": f"Blog post not found: {post_id}"}], "isError": True}
+
+        changed = []
+
+        # Handle title change → regenerate slug
+        if "title" in editable:
+            new_slug = _slugify(editable["title"])
+            from sqlalchemy import select as _sel
+            slug_exists = await db.execute(
+                _sel(BlogPost.id).where(BlogPost.slug == new_slug, BlogPost.id != post.id)
+            )
+            if slug_exists.scalar_one_or_none():
+                new_slug = f"{new_slug}-{_uuid.uuid4().hex[:6]}"
+            post.slug = new_slug
+            post.title = editable["title"]
+            changed.append("title")
+
+        if "body" in editable:
+            post.body = editable["body"]
+            post.reading_time_minutes = _reading_time(editable["body"])
+            await _sync_blog_scholarship_tags(db, post.id, editable["body"])
+            changed.append("body")
+
+        for field in ("excerpt", "cover_image_url", "category", "tags"):
+            if field in editable:
+                setattr(post, field, editable[field])
+                changed.append(field)
+
+        # Handle status change
+        if "status" in editable:
+            new_status = editable["status"]
+            if new_status == "published" and post.status != "published":
+                post.published_at = datetime.now(timezone.utc)
+            post.status = new_status
+            changed.append("status")
+
+        if not changed:
+            return {"content": [{"type": "text", "text": f"No changes for: {post.title}"}]}
+
+        post.updated_at = datetime.now(timezone.utc)
+        await db.commit()
+        await db.refresh(post)
+
+        data = {
+            "id": str(post.id),
+            "title": post.title,
+            "slug": post.slug,
+            "status": post.status,
+            "updated_fields": changed,
+        }
+        return {"content": [{"type": "text", "text": json.dumps(data, indent=2, default=str)}]}
+
+
+async def _handle_blog_categories() -> dict:
+    """List distinct categories from published posts."""
+    async with AsyncSessionLocal() as db:
+        rows = await db.execute(
+            select(BlogPost.category)
+            .where(BlogPost.status == "published")
+            .distinct()
+            .order_by(BlogPost.category)
+        )
+        categories = [r[0] for r in rows.all()]
+
+        if not categories:
+            return {"content": [{"type": "text", "text": "No blog categories found."}]}
+
+        return {"content": [{"type": "text", "text": "Categories:\n" + "\n".join(f"- {c}" for c in categories)}]}
