@@ -37,6 +37,7 @@ from app.mcp.oauth import (
     is_oauth_enabled,
     get_protected_resource_metadata,
     get_www_authenticate_header,
+    get_server_url,
 )
 
 logger = logging.getLogger("scholarshipright.mcp_sse")
@@ -44,6 +45,7 @@ logger = logging.getLogger("scholarshipright.mcp_sse")
 router = APIRouter(tags=["mcp"])
 
 # SSE connections for server-initiated messages
+_MAX_SSE_CONNECTIONS = 50
 _connections: dict[str, asyncio.Queue] = {}
 
 
@@ -88,7 +90,7 @@ async def oauth_authorization_server_metadata():
             content={"detail": "OAuth not enabled on this server"},
         )
 
-    server_url = os.environ.get("MCP_OAUTH_SERVER_URL", "").rstrip("/")
+    server_url = get_server_url()
     if not server_url:
         return JSONResponse(
             status_code=500,
@@ -136,6 +138,10 @@ async def mcp_endpoint(
 
 async def _handle_sse(request: Request, auth: McpAuthRecord) -> StreamingResponse:
     """GET — open SSE stream for server-initiated messages."""
+    if len(_connections) >= _MAX_SSE_CONNECTIONS:
+        logger.warning("SSE connection limit reached (%d), rejecting", _MAX_SSE_CONNECTIONS)
+        return JSONResponse(status_code=429, content={"detail": "Too many SSE connections"})
+
     conn_id = str(uuid.uuid4())
     queue: asyncio.Queue = asyncio.Queue()
     _connections[conn_id] = queue
@@ -171,7 +177,21 @@ async def _handle_sse(request: Request, auth: McpAuthRecord) -> StreamingRespons
 
 async def _handle_jsonrpc(request: Request, auth: McpAuthRecord):
     """POST — handle JSON-RPC request and return response."""
-    body = await request.json()
+    # Reject oversized bodies (1MB limit)
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > 1_000_000:
+        return JSONResponse(
+            status_code=413,
+            content={"jsonrpc": "2.0", "error": {"code": -32600, "message": "Request body too large"}},
+        )
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(
+            status_code=400,
+            content={"jsonrpc": "2.0", "error": {"code": -32700, "message": "Invalid JSON"}},
+        )
 
     # Handle batch requests
     if isinstance(body, list):
@@ -238,7 +258,7 @@ async def _process_message(body: dict, request: Request, auth: McpAuthRecord) ->
         return {
             "jsonrpc": "2.0",
             "id": msg_id,
-            "error": {"code": -32603, "message": str(e)},
+            "error": {"code": -32603, "message": "Internal server error"},
         }
 
 
@@ -638,10 +658,29 @@ async def _handle_blog_create(args: dict[str, Any], auth: McpAuthRecord) -> dict
 
     async with AsyncSessionLocal() as db:
         # Resolve auth identity to a user ID
+        # OAuth → try email from claims; API key → find super_admin
+        author_id = None
         identity = _get_auth_identity(auth)
-        # Try to find user by email (OAuth) or use the first admin as fallback
-        user_row = await db.execute(select(User.id).limit(1))
-        author_id = user_row.scalar()
+
+        if auth.auth_method == "oauth" and auth.oauth_claims.get("email"):
+            email = auth.oauth_claims["email"]
+            user_row = await db.execute(select(User.id).where(User.email == email))
+            author_id = user_row.scalar_one_or_none()
+
+        if not author_id:
+            # Fallback: find super_admin, then any admin, then any user
+            for role_filter in [
+                User.is_admin == True, User.admin_role == "super_admin",  # noqa: E712
+            ]:
+                user_row = await db.execute(select(User.id).where(role_filter).limit(1))
+                author_id = user_row.scalar_one_or_none()
+                if author_id:
+                    break
+
+        if not author_id:
+            user_row = await db.execute(select(User.id).limit(1))
+            author_id = user_row.scalar()
+
         if not author_id:
             return {
                 "content": [{"type": "text", "text": "No users found in database. Cannot assign author."}],

@@ -7,6 +7,7 @@ operator knob out of the user-facing API surface.
 """
 from __future__ import annotations
 
+import hmac
 import os
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, status
 from pydantic import BaseModel
@@ -33,7 +34,7 @@ def _require_admin_token(token: str | None) -> None:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="MATCH_ADMIN_TOKEN is not configured on the server.",
         )
-    if not token or token.strip() != expected:
+    if not token or not hmac.compare_digest(token.strip(), expected):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin token.")
 
 

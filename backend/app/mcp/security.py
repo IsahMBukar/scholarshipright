@@ -183,9 +183,9 @@ async def _check_rate_limit(db: AsyncSession, key: McpApiKey) -> bool:
         return True
 
     except Exception as e:
-        # If the table doesn't exist yet, allow the request
-        logger.warning("Rate limit check failed (table may not exist): %s", e)
-        return True
+        # Fail-closed: if rate limit check fails, deny the request
+        logger.error("Rate limit check failed (denying request): %s", e)
+        return False
 
 
 async def log_mcp_request(

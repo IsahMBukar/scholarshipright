@@ -96,6 +96,11 @@ def is_oauth_enabled() -> bool:
     return _oauth_enabled
 
 
+def get_server_url() -> str:
+    """Return the MCP server's public URL (for OAuth metadata)."""
+    return _server_url.rstrip("/")
+
+
 # ---------------------------------------------------------------------------
 # JWKS fetching and caching
 # ---------------------------------------------------------------------------

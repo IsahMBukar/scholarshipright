@@ -245,8 +245,20 @@ async def _handle_blog_create(args: dict[str, Any]) -> list[TextContent]:
     status = args.get("status", "pending_review")
 
     async with AsyncSessionLocal() as db:
-        user_row = await db.execute(select(User.id).limit(1))
-        author_id = user_row.scalar()
+        # For stdio (local Claude Desktop): prefer super_admin, then admin, then any user
+        author_id = None
+        for role_filter in [
+            User.is_admin == True, User.admin_role == "super_admin",  # noqa: E712
+        ]:
+            user_row = await db.execute(select(User.id).where(role_filter).limit(1))
+            author_id = user_row.scalar_one_or_none()
+            if author_id:
+                break
+
+        if not author_id:
+            user_row = await db.execute(select(User.id).limit(1))
+            author_id = user_row.scalar()
+
         if not author_id:
             return [TextContent(type="text", text="No users found. Cannot assign author.")]
 
