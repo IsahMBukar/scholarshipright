@@ -584,21 +584,7 @@ async def _handle_edit(args: dict[str, Any]) -> dict:
 
 # ── Blog tool handlers ────────────────────────────────────────────
 
-def _slugify(title: str) -> str:
-    """Generate URL-friendly slug from title."""
-    import re as _re
-    s = title.lower().strip()
-    s = _re.sub(r"[^\w\s-]", "", s)
-    s = _re.sub(r"[\s_]+", "-", s)
-    s = _re.sub(r"-+", "-", s).strip("-")
-    return s[:280]
-
-
-def _reading_time(body: str) -> int:
-    """Estimate reading time in minutes."""
-    import math
-    words = len(body.split())
-    return max(1, math.ceil(words / 200))
+from app.utils.blog import slugify as _slugify, reading_time as _reading_time
 
 
 async def _sync_blog_scholarship_tags(db: AsyncSession, post_id, body: str) -> None:

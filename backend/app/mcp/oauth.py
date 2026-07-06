@@ -182,7 +182,7 @@ async def validate_oauth_token(token: str) -> Optional[dict[str, Any]]:
     except JWTError:
         pass  # Not a self-issued token, try Scalekit
     except Exception:
-        pass
+        logger.debug("Self-issued token validation failed, trying JWKS fallback", exc_info=True)
 
     # --- Strategy 2: Scalekit JWKS (RS256/ES256) ---
     if not _jwks_url:

@@ -230,13 +230,13 @@ async def probe_redis() -> dict:
 # Identical values and names to the pre-M2 module so no route changes needed.
 
 auth_register_rate_limit = rate_limit(
-    "auth_register", max_requests=50, window_seconds=15 * 60
+    "auth_register", max_requests=5, window_seconds=15 * 60
 )
 auth_login_rate_limit = rate_limit(
-    "auth_login", max_requests=50, window_seconds=15 * 60
+    "auth_login", max_requests=15, window_seconds=15 * 60
 )
 auth_invite_rate_limit = rate_limit(
-    "auth_invite", max_requests=50, window_seconds=15 * 60
+    "auth_invite", max_requests=10, window_seconds=15 * 60
 )
 # Forgot-password: tight — prevents email-bombing.
 auth_forgot_rate_limit = rate_limit(
@@ -287,4 +287,9 @@ mcp_register_rate_limit = rate_limit(
 # Blog write endpoints — protect against spam.
 blog_write_rate_limit = rate_limit(
     "blog_write", max_requests=20, window_seconds=60 * 60
+)
+
+# Scholarship view — protect against view count inflation.
+scholarship_view_rate_limit = rate_limit(
+    "scholarship_view", max_requests=60, window_seconds=60 * 60
 )

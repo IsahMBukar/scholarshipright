@@ -4,6 +4,8 @@ from sqlalchemy import select, func, or_, update
 from typing import Optional, List
 from datetime import date
 from uuid import UUID
+
+from app.core.rate_limit import scholarship_view_rate_limit
 import hashlib
 import json
 
@@ -360,7 +362,11 @@ async def get_scholarship(slug: str, request: Request, db: AsyncSession = Depend
 
 
 @router.post("/{slug}/view")
-async def increment_view(slug: str, db: AsyncSession = Depends(get_db)):
+async def increment_view(
+    slug: str,
+    _rate: None = Depends(scholarship_view_rate_limit),
+    db: AsyncSession = Depends(get_db),
+):
     """Increment view count for a scholarship. Idempotent-safe POST."""
     query = select(Scholarship).where(Scholarship.slug == slug)
     result = await db.execute(query)

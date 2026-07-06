@@ -30,6 +30,7 @@ from app.models.scholarship import Scholarship
 from app.api.users import get_current_user
 from app.core.admin import require_admin
 from app.core.rate_limit import blog_write_rate_limit
+from app.utils.blog import slugify as _slugify, reading_time as _reading_time
 
 logger = logging.getLogger(__name__)
 
@@ -58,19 +59,7 @@ _ALLOWED_ATTRS = {
 }
 
 
-# ── Helpers ──────────────────────────────────────────────────────
-
-def _slugify(title: str) -> str:
-    s = title.lower().strip()
-    s = re.sub(r"[^\w\s-]", "", s)
-    s = re.sub(r"[\s_]+", "-", s)
-    s = re.sub(r"-+", "-", s).strip("-")
-    return s[:280]
-
-
-def _reading_time(body: str) -> int:
-    words = len(body.split())
-    return max(1, math.ceil(words / 200))
+# ── Helpers (imported from app.utils.blog) ──────────────────────────
 
 
 def _md_to_html(md_text: str) -> str:

@@ -195,19 +195,9 @@ async def _handle_edit(args: dict[str, Any]) -> list[TextContent]:
         return [TextContent(type="text", text=json.dumps(data, indent=2, default=str))]
 
 
-# ── Blog helpers ──────────────────────────────────────────────────
+# ── Blog helpers (imported from app.utils.blog) ──────────────────
 
-def _slugify(title: str) -> str:
-    s = title.lower().strip()
-    s = re.sub(r"[^\w\s-]", "", s)
-    s = re.sub(r"[\s_]+", "-", s)
-    s = re.sub(r"-+", "-", s).strip("-")
-    return s[:280]
-
-
-def _reading_time(body: str) -> int:
-    words = len(body.split())
-    return max(1, math.ceil(words / 200))
+from app.utils.blog import slugify as _slugify, reading_time as _reading_time
 
 
 async def _sync_blog_tags(db: AsyncSession, post_id, body: str) -> None:
