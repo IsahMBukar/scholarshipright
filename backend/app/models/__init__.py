@@ -8,6 +8,9 @@ from app.models.password_reset import PasswordResetToken
 from app.models.notification_preference import NotificationPreference
 from app.models.country import Country
 from app.models.group import Group, GroupMember
+from app.models.pending_scholarship import PendingScholarship
+from app.models.resume import Resume
+from app.models.notification import Notification
 
 __all__ = [
     "User",
@@ -20,4 +23,5 @@ __all__ = [
     "Country",
     "Group",
     "GroupMember",
+    "PendingScholarship",
 ]

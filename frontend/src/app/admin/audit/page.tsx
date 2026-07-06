@@ -27,6 +27,10 @@ const ACTION_TONE: Record<string, BadgeTone> = {
   'scholarship.activate': 'positive',
   'scholarship.deactivate': 'warning',
   'scholarship.delete': 'negative',
+  'review.approve': 'positive',
+  'review.reject': 'negative',
+  'review.delete': 'warning',
+  'review.submit': 'info',
   'invite.create': 'primary',
   'invite.revoke': 'warning',
   'admin.login': 'positive',
@@ -52,7 +56,12 @@ export default function AdminAuditPage() {
   const [targetTypeFilter, setTargetTypeFilter] = useState('');
   const [actorFilter, setActorFilter] = useState('');
   const [selected, setSelected] = useState<AdminAuditEntry | null>(null);
-  const [polling, setPolling] = useState(false);
+  const [polling, setPolling] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('audit_polling') === 'true';
+    }
+    return false;
+  });
 
   const params: ListAuditParams = useMemo(
     () => ({
@@ -169,7 +178,10 @@ export default function AdminAuditPage() {
       </Button>
       <Button
         variant={polling ? 'primary' : 'secondary'}
-        onClick={() => setPolling((p) => !p)}
+        onClick={() => setPolling((p) => {
+          localStorage.setItem('audit_polling', String(!p));
+          return !p;
+        })}
         title={polling ? 'Pause auto-refresh' : 'Resume auto-refresh (10s)'}
       >
         {polling ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}

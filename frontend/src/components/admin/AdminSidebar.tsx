@@ -13,8 +13,9 @@ import {
   GraduationCap,
   ScrollText,
   Mail,
-  ShieldCheck,
+  ShieldCheck, Shield,
   Globe2,
+  ClipboardCheck,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -22,6 +23,8 @@ const NAV_ITEMS = [
   { label: 'Overview', icon: LayoutDashboard, href: '/admin' },
   { label: 'Users', icon: Users, href: '/admin/users' },
   { label: 'Scholarships', icon: GraduationCap, href: '/admin/scholarships' },
+  { label: 'Review Queue', icon: ClipboardCheck, href: '/admin/review' },
+  { label: 'MCP Agents', icon: Shield, href: '/admin/mcp' },
   { label: 'Country Groups', icon: Globe2, href: '/admin/groups' },
   { label: 'Audit', icon: ScrollText, href: '/admin/audit' },
   { label: 'Invites', icon: Mail, href: '/admin/invites' },

@@ -60,6 +60,7 @@ async def _get_redis():
             decode_responses=True,
             socket_connect_timeout=2,
             socket_timeout=2,
+            protocol=2,  # Force RESP2 — compatible with Redis 3.x (no HELLO command)
         )
         # Quick liveness ping — non-blocking for the first request only.
         await _redis_client.ping()
@@ -270,4 +271,15 @@ agent_rate_limit = rate_limit(
 # a synchronous recompute when user.match_dirty == True.
 matches_rate_limit = rate_limit(
     "matches", max_requests=60, window_seconds=60 * 60
+)
+
+# MCP OAuth endpoints — protect against brute-force and abuse.
+mcp_authorize_rate_limit = rate_limit(
+    "mcp_authorize", max_requests=10, window_seconds=15 * 60
+)
+mcp_token_rate_limit = rate_limit(
+    "mcp_token", max_requests=20, window_seconds=15 * 60
+)
+mcp_register_rate_limit = rate_limit(
+    "mcp_register", max_requests=5, window_seconds=15 * 60
 )

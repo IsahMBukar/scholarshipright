@@ -382,3 +382,27 @@ export interface CountryOption {
   name: string;
   iso3?: string;
 }
+
+// ── Pending Review Queue ──────────────────────────────────────────
+
+export interface PendingScholarship {
+  id: string;
+  payload: Record<string, any>;
+  submitted_by: string;
+  agent_key_id: string | null;
+  status: 'pending_review' | 'approved' | 'rejected';
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+  approved_scholarship_id: string | null;
+  duplicate_of: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReviewStats {
+  pending: number;
+  approved: number;
+  rejected: number;
+  total: number;
+}

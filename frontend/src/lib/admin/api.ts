@@ -20,6 +20,8 @@ import type {
   GroupCreateRequest,
   GroupUpdateRequest,
   CountryOption,
+  PendingScholarship,
+  ReviewStats,
 } from './types';
 
 // Re-export common types for callers.
@@ -161,6 +163,77 @@ export const adminApi = {
   listCountries: (search?: string) =>
     adminFetch<CountryOption[]>('/api/admin/countries', {
       params: search ? { search } : {},
+    }),
+
+  // Review Queue
+  getReviewStats: () =>
+    adminFetch<ReviewStats>('/api/admin/review/stats'),
+
+  listPending: (params: { status?: string; submitted_by?: string; page?: number; limit?: number } = {}) =>
+    adminFetch<PaginatedResponse<PendingScholarship>>('/api/admin/review', { params }),
+
+  getPending: (id: string) =>
+    adminFetch<PendingScholarship>(`/api/admin/review/${id}`),
+
+  approvePending: (id: string, body?: { slug_override?: string; is_active?: boolean; is_verified?: boolean }) =>
+    adminFetch<PendingScholarship>(`/api/admin/review/${id}/approve`, {
+      method: 'POST',
+      body: body || {},
+    }),
+
+  rejectPending: (id: string, reason: string) =>
+    adminFetch<PendingScholarship>(`/api/admin/review/${id}/reject`, {
+      method: 'POST',
+      body: { reason },
+    }),
+
+  deletePending: (id: string) =>
+    adminFetch<{ detail: string }>(`/api/admin/review/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // URL Extraction (Smart Create)
+  extractUrl: (url: string) =>
+    adminFetch<{ url: string; data: Record<string, any>; fields_found: number; fields_missing: string[] }>(
+      '/api/admin/scholarships/extract-url',
+      { method: 'POST', body: { url } }
+    ),
+  // Bulk Import
+  bulkImportUrls: (urls: string[]) =>
+    adminFetch<{
+      total: number;
+      submitted: number;
+      duplicates: number;
+      errors: number;
+      results: Array<{
+        index: number;
+        url?: string;
+        name?: string;
+        status: string;
+        pending_id?: string;
+        error?: string;
+      }>;
+    }>('/api/admin/scholarships/bulk-import', {
+      method: 'POST',
+      body: { urls },
+    }),
+
+  bulkImportRecords: (records: Record<string, any>[]) =>
+    adminFetch<{
+      total: number;
+      submitted: number;
+      duplicates: number;
+      errors: number;
+      results: Array<{
+        index: number;
+        name?: string;
+        status: string;
+        pending_id?: string;
+        error?: string;
+      }>;
+    }>('/api/admin/scholarships/bulk-import-records', {
+      method: 'POST',
+      body: { records },
     }),
 
   // Eligibility preview

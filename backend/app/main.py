@@ -13,6 +13,12 @@ from app.api import admin_scholarships
 from app.api import admin_audit
 from app.api import admin_groups
 from app.api import admin_invites as admin_invites_module
+from app.api import admin_review
+from app.api import admin_mcp_keys
+from app.api import admin_extract
+from app.api import mcp_sse
+from app.api import admin_bulk
+from app.api import admin_mcp_logs
 from app.api.notifications import router as notifications_router
 from app.api.preferences import router as preferences_router
 from app.api.unsubscribe import router as unsubscribe_router
@@ -31,6 +37,10 @@ from app.models.scholarship import (
     ensure_required_documents_schema_columns,
     ensure_eligibility_schema_columns,
 )
+from app.models.pending_scholarship import ensure_pending_scholarships_table
+from app.mcp.auth import ensure_mcp_api_keys_table
+from app.mcp.security import ensure_mcp_security_tables
+from app.mcp.oauth import load_oauth_config
 
 settings = get_settings()
 logger = logging.getLogger("scholarshipright.startup")
@@ -41,6 +51,12 @@ async def lifespan(app: FastAPI):
     # Initialize the Redis-backed rate limiter (falls back to in-memory
     # silently if Redis is unreachable — see rate_limit.py).
     init_redis_url(settings.redis_url)
+
+    # Load MCP OAuth configuration (no-op if MCP_OAUTH_ENABLED != "1")
+    try:
+        load_oauth_config()
+    except Exception as e:
+        logger.exception("load_oauth_config failed: %s", e)
 
     # Startup: ensure the new match-recompute columns exist (idempotent).
     try:
@@ -115,6 +131,24 @@ async def lifespan(app: FastAPI):
     except Exception as e:  # noqa: BLE001
         logger.exception("ensure_eligibility_schema_columns failed: %s", e)
 
+    # Startup: ensure pending_scholarships table exists (idempotent).
+    try:
+        await ensure_pending_scholarships_table()
+    except Exception as e:  # noqa: BLE001
+        logger.exception("ensure_pending_scholarships_table failed: %s", e)
+
+    # Startup: ensure mcp_api_keys table exists (idempotent).
+    try:
+        await ensure_mcp_api_keys_table()
+    except Exception as e:  # noqa: BLE001
+        logger.exception("ensure_mcp_api_keys_table failed: %s", e)
+
+    # Startup: ensure mcp_request_log table exists (idempotent).
+    try:
+        await ensure_mcp_security_tables()
+    except Exception as e:  # noqa: BLE001
+        logger.exception("ensure_mcp_security_tables failed: %s", e)
+
     # Startup: start deadline checker in background
     deadline_task = asyncio.create_task(deadline_checker_loop())
     # Startup: start weekly digest in background
@@ -162,6 +196,12 @@ app.include_router(admin_groups.router, prefix="/api/admin", tags=["admin"])
 # so we mount each sub-router with the right prefix.
 app.include_router(admin_invites_module.admin_invites_router, prefix="/api/admin", tags=["admin"])
 app.include_router(admin_invites_module.accept_invite_router, prefix="/api/auth", tags=["auth"])
+app.include_router(admin_review.router, prefix="/api/admin", tags=["admin"])
+app.include_router(admin_mcp_keys.router, prefix="/api/admin", tags=["admin"])
+app.include_router(admin_extract.router, prefix="/api/admin", tags=["admin"])
+app.include_router(mcp_sse.router)
+app.include_router(admin_mcp_logs.router, prefix="/api/admin", tags=["admin"])
+app.include_router(admin_bulk.router, prefix="/api/admin", tags=["admin"])
 
 
 @app.get("/healthz")

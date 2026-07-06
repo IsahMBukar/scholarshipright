@@ -9,14 +9,15 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Calendar, Globe, CheckCircle2, XCircle, ExternalLink, RotateCw, Plus, AlertTriangle } from 'lucide-react';
+import { Calendar, Globe, CheckCircle2, XCircle, ExternalLink, RotateCw, Plus, AlertTriangle, Upload } from 'lucide-react';
 import AdminLayout from '@/components/admin/AdminLayout';
 import DataTable, { type Column } from '@/components/admin/ui/DataTable';
 import Badge, { type BadgeTone } from '@/components/admin/ui/Badge';
 import Button from '@/components/admin/ui/Button';
 import Drawer from '@/components/admin/ui/Drawer';
 import { useToast } from '@/components/admin/ui/Toast';
-import CreateScholarshipDrawer from '@/components/admin/CreateScholarshipDrawer';
+import CreateScholarshipWizard from '@/components/admin/CreateScholarshipWizard';
+import BulkImportDrawer from '@/components/admin/BulkImportDrawer';
 import {
   FUNDING_OPTIONS as FORM_FUNDING_OPTIONS,
   ENGLISH_TEST_OPTIONS,
@@ -90,6 +91,7 @@ export default function AdminScholarshipsPage() {
   const [sort, setSort] = useState<ListScholarshipsParams['sort']>('newest');
   const [selected, setSelected] = useState<AdminScholarship | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   const params: ListScholarshipsParams = useMemo(
     () => ({
@@ -411,7 +413,7 @@ export default function AdminScholarshipsPage() {
         saveError={(patch.error as AdminApiError | null)?.message ?? null}
       />
 
-      <CreateScholarshipDrawer
+      <CreateScholarshipWizard
         open={createOpen}
         onClose={() => {
           if (!create.isPending) setCreateOpen(false);
@@ -427,6 +429,10 @@ export default function AdminScholarshipsPage() {
             ? 'Create failed — see console for details.'
             : null
         }
+      />
+      <BulkImportDrawer
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
       />
     </AdminLayout>
   );

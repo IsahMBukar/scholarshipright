@@ -1,13 +1,16 @@
 """Auth endpoints — registration, login, logout, me, password reset."""
+import os
+import html as _html
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from starlette.responses import RedirectResponse
+from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel, EmailStr, Field
 from passlib.context import CryptContext
 from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone
+import httpx
 import logging
 
 from app.db.session import get_db
@@ -114,13 +117,6 @@ async def register(body: RegisterRequest, response: Response, db: AsyncSession =
     db.add(user)
     await db.commit()
     await db.refresh(user)
-
-    token = create_token(str(user.id))
-    response.set_cookie(
-        key=COOKIE_NAME, value=token,
-        max_age=COOKIE_MAX_AGE,
-        **auth_cookie_kwargs(),
-    )
 
     # Generate email confirmation token and send confirmation email
     from app.models.user import (
@@ -857,3 +853,359 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)):
     # Clear the state cookie
     redirect.delete_cookie("google_oauth_state")
     return redirect
+
+
+
+
+# ---------------------------------------------------------------------------
+# MCP OAuth 2.0 (authorization code + PKCE)
+#
+# ScholarshipRight IS the authorization server. MCP clients (Claude.ai,
+# ChatGPT) redirect users here to authenticate with the app's own login
+# form. No Scalekit consent screen.
+# ---------------------------------------------------------------------------
+
+import hashlib
+import secrets as _secrets
+import time
+from base64 import urlsafe_b64encode
+from urllib.parse import urlparse
+
+# In-memory store for pending auth codes (code -> metadata)
+# TTL: 5 minutes. Max 1000 entries to prevent memory exhaustion.
+_mcp_auth_codes: dict[str, dict] = {}
+_AUTH_CODE_TTL = 300  # 5 minutes
+_MAX_AUTH_CODES = 1000
+
+
+def _cleanup_expired_codes() -> None:
+    """Remove expired auth codes from memory."""
+    now = time.time()
+    expired = [c for c, m in _mcp_auth_codes.items() if now > m["expires_at"]]
+    for c in expired:
+        _mcp_auth_codes.pop(c, None)
+
+
+def _validate_redirect_uri(uri: str) -> str | None:
+    """Validate redirect_uri. Returns error message or None if valid.
+
+    Rules:
+    - Must be HTTPS (except localhost for dev)
+    - Must not be empty
+    - Must be a valid URL
+    """
+    if not uri:
+        return "redirect_uri is required"
+    try:
+        parsed = urlparse(uri)
+    except Exception:
+        return "redirect_uri is not a valid URL"
+    if not parsed.scheme or not parsed.netloc:
+        return "redirect_uri is not a valid URL"
+    if parsed.scheme == "http" and parsed.hostname not in ("localhost", "127.0.0.1"):
+        return "redirect_uri must use HTTPS"
+    if parsed.scheme not in ("http", "https"):
+        return "redirect_uri must use HTTP or HTTPS"
+    return None
+
+
+def _esc(value: str) -> str:
+    """HTML-escape a string for safe interpolation into templates."""
+    return _html.escape(str(value), quote=True)
+
+
+def _mcp_login_form_html(
+    client_id: str,
+    redirect_uri: str,
+    response_type: str,
+    state: str,
+    scope: str,
+    code_challenge: str,
+    code_challenge_method: str,
+    server_url: str,
+    error: str = "",
+) -> str:
+    """Render the MCP OAuth login form with XSS-safe interpolation."""
+    error_html = f'<div class="error">{_esc(error)}</div>' if error else ""
+    esc = _esc
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in — ScholarshipRight MCP</title>
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+         sans-serif; background: #f5f5f5; display: flex;
+         align-items: center; justify-content: center; min-height: 100vh; }}
+  .card {{ background: #fff; padding: 40px; border-radius: 16px;
+           box-shadow: 0 4px 24px rgba(0,0,0,.08); width: 100%;
+           max-width: 400px; }}
+  .logo {{ margin-bottom: 24px; }}
+  .logo h1 {{ font-size: 22px; font-weight: 700; }}
+  .logo p {{ font-size: 13px; color: #666; margin-top: 4px; }}
+  .badge {{ display: inline-block; background: #eef2ff; color: #4338ca;
+            font-size: 12px; font-weight: 600; padding: 4px 12px;
+            border-radius: 100px; margin-bottom: 24px; }}
+  label {{ display: block; font-size: 13px; font-weight: 500;
+           color: #333; margin-bottom: 6px; }}
+  input {{ width: 100%; padding: 10px 12px; border: 1px solid #ddd;
+           border-radius: 8px; font-size: 14px; margin-bottom: 16px;
+           outline: none; transition: border-color 0.2s; }}
+  input:focus {{ border-color: #4a90d9; }}
+  button {{ width: 100%; padding: 12px; background: #1a1a1a; color: #fff;
+            border: none; border-radius: 8px; font-size: 14px;
+            font-weight: 600; cursor: pointer; transition: background 0.2s; }}
+  button:hover {{ background: #333; }}
+  .error {{ background: #fef2f2; color: #dc2626; font-size: 13px;
+            padding: 10px 14px; border-radius: 8px; margin-bottom: 16px;
+            border: 1px solid #fecaca; }}
+  .footer {{ text-align: center; margin-top: 20px; font-size: 12px; color: #999; }}
+  .scope-info {{ background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534;
+                 font-size: 12px; padding: 8px 12px; border-radius: 8px;
+                 margin-bottom: 16px; }}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <h1>ScholarshipRight</h1>
+    <p>AI Agent Authentication</p>
+  </div>
+  <div style="text-align:center"><span class="badge">MCP Connection</span></div>
+  {error_html}
+  <div class="scope-info">
+    Requesting access: <strong>{esc(scope or "scholarships:read")}</strong>
+  </div>
+  <form method="POST" action="{esc(server_url)}/api/auth/mcp-authorize">
+    <input type="hidden" name="client_id" value="{esc(client_id)}">
+    <input type="hidden" name="redirect_uri" value="{esc(redirect_uri)}">
+    <input type="hidden" name="response_type" value="{esc(response_type)}">
+    <input type="hidden" name="state" value="{esc(state)}">
+    <input type="hidden" name="scope" value="{esc(scope)}">
+    <input type="hidden" name="code_challenge" value="{esc(code_challenge)}">
+    <input type="hidden" name="code_challenge_method" value="{esc(code_challenge_method)}">
+    <label>Email</label>
+    <input type="email" name="email" placeholder="admin@example.com" required autofocus>
+    <label>Password</label>
+    <input type="password" name="password" placeholder="Your password" required>
+    <button type="submit">Sign in &amp; Connect Agent</button>
+  </form>
+  <div class="footer">Only admin &amp; staff accounts can connect AI agents.</div>
+</div>
+</body>
+</html>"""
+
+
+def _get_server_url() -> str:
+    """Get the public server URL for form actions and metadata."""
+    return os.environ.get("MCP_OAUTH_SERVER_URL", get_settings().server_url).rstrip("/")
+
+
+@router.api_route("/mcp-authorize", methods=["GET", "POST"])
+async def mcp_authorize(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """OAuth 2.0 Authorization Endpoint (RFC 6749) with PKCE (RFC 7636).
+
+    GET  -- Show the custom login form with OAuth params preserved.
+    POST -- Verify credentials, generate auth code, redirect to client.
+    """
+    from app.core.rate_limit import mcp_authorize_rate_limit
+    await mcp_authorize_rate_limit(request)
+
+    _cleanup_expired_codes()
+    server_url = _get_server_url()
+
+    if request.method == "GET":
+        client_id = request.query_params.get("client_id", "")
+        redirect_uri = request.query_params.get("redirect_uri", "")
+        response_type = request.query_params.get("response_type", "code")
+        state = request.query_params.get("state", "")
+        scope = request.query_params.get("scope", "scholarships:read")
+        code_challenge = request.query_params.get("code_challenge", "")
+        code_challenge_method = request.query_params.get("code_challenge_method", "")
+
+        uri_error = _validate_redirect_uri(redirect_uri)
+        if uri_error:
+            return JSONResponse(status_code=400, content={"error": "invalid_request", "error_description": uri_error})
+        if response_type != "code":
+            return JSONResponse(status_code=400, content={"error": "unsupported_response_type", "error_description": "Only 'code' is supported"})
+        if not code_challenge:
+            return JSONResponse(status_code=400, content={"error": "invalid_request", "error_description": "code_challenge required (PKCE)"})
+
+        return HTMLResponse(
+            _mcp_login_form_html(
+                client_id=client_id, redirect_uri=redirect_uri,
+                response_type=response_type, state=state, scope=scope,
+                code_challenge=code_challenge, code_challenge_method=code_challenge_method,
+                server_url=server_url,
+            )
+        )
+
+    # POST: verify credentials and issue auth code
+    form = await request.form()
+    client_id = str(form.get("client_id", ""))
+    redirect_uri = str(form.get("redirect_uri", ""))
+    response_type = str(form.get("response_type", "code"))
+    state = str(form.get("state", ""))
+    scope = str(form.get("scope", "scholarships:read"))
+    code_challenge = str(form.get("code_challenge", ""))
+    code_challenge_method = str(form.get("code_challenge_method", ""))
+    email = str(form.get("email", "")).strip().lower()
+    password = str(form.get("password", ""))
+
+    uri_error = _validate_redirect_uri(redirect_uri)
+    if uri_error:
+        return JSONResponse(status_code=400, content={"error": "invalid_request", "error_description": uri_error})
+
+    def _form_error(msg, status_code=400):
+        return HTMLResponse(
+            _mcp_login_form_html(
+                client_id, redirect_uri, response_type, state,
+                scope, code_challenge, code_challenge_method,
+                server_url=server_url, error=msg,
+            ),
+            status_code=status_code,
+        )
+
+    if not email or not password:
+        return _form_error("Email and password are required.")
+
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+
+    if not user or not user.password_hash:
+        return _form_error("Invalid email or password.", 401)
+    if not verify_password(password, user.password_hash):
+        return _form_error("Invalid email or password.", 401)
+    if not user.is_active:
+        return _form_error("Account is deactivated.", 403)
+    if not getattr(user, "is_admin", False):
+        return _form_error("Only admin and staff members can connect AI agents.", 403)
+
+    # Enforce cap on stored auth codes
+    if len(_mcp_auth_codes) >= _MAX_AUTH_CODES:
+        _cleanup_expired_codes()
+        if len(_mcp_auth_codes) >= _MAX_AUTH_CODES:
+            logger.error("MCP auth codes at capacity (%d), rejecting", _MAX_AUTH_CODES)
+            return _form_error("Server busy. Please try again in a moment.", 503)
+
+    auth_code = _secrets.token_urlsafe(32)
+    _mcp_auth_codes[auth_code] = {
+        "user_id": str(user.id),
+        "email": user.email,
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "scope": scope,
+        "code_challenge": code_challenge,
+        "code_challenge_method": code_challenge_method,
+        "expires_at": time.time() + _AUTH_CODE_TTL,
+    }
+
+    logger.info("MCP OAuth: auth code issued for user=%s client=%s scope=%s", email, client_id, scope)
+
+    separator = "&" if "?" in redirect_uri else "?"
+    callback = f"{redirect_uri}{separator}code={auth_code}"
+    if state:
+        callback += f"&state={state}"
+    return RedirectResponse(url=callback, status_code=302)
+
+
+@router.post("/mcp-token")
+async def mcp_token(request: Request):
+    """OAuth 2.0 Token Endpoint (RFC 6749) with PKCE (RFC 7636)."""
+    from app.core.rate_limit import mcp_token_rate_limit
+    await mcp_token_rate_limit(request)
+
+    _cleanup_expired_codes()
+
+    form = await request.form()
+    grant_type = str(form.get("grant_type", ""))
+    code = str(form.get("code", ""))
+    redirect_uri = str(form.get("redirect_uri", ""))
+    client_id = str(form.get("client_id", ""))
+    code_verifier = str(form.get("code_verifier", ""))
+
+    if grant_type != "authorization_code":
+        return JSONResponse(status_code=400, content={"error": "unsupported_grant_type", "error_description": "Only authorization_code is supported"})
+
+    if not code or code not in _mcp_auth_codes:
+        return JSONResponse(status_code=400, content={"error": "invalid_grant", "error_description": "Invalid or expired authorization code"})
+
+    code_data = _mcp_auth_codes.pop(code)
+
+    if code_data["redirect_uri"] != redirect_uri:
+        return JSONResponse(status_code=400, content={"error": "invalid_grant", "error_description": "redirect_uri mismatch"})
+
+    if code_data.get("code_challenge"):
+        computed_challenge = (
+            urlsafe_b64encode(hashlib.sha256(code_verifier.encode("ascii")).digest())
+            .rstrip(b"=").decode("ascii")
+        )
+        if computed_challenge != code_data["code_challenge"]:
+            return JSONResponse(status_code=400, content={"error": "invalid_grant", "error_description": "PKCE verification failed"})
+
+    settings = get_settings()
+    now = datetime.now(timezone.utc)
+    scope = code_data.get("scope", "scholarships:read")
+    server_url = _get_server_url()
+
+    token_payload = {
+        "sub": code_data["user_id"],
+        "email": code_data["email"],
+        "client_id": code_data.get("client_id", "mcp-client"),
+        "scope": scope,
+        "iss": server_url,
+        "aud": os.environ.get("MCP_OAUTH_AUDIENCE", server_url),
+        "iat": int(now.timestamp()),
+        "exp": int(now.timestamp()) + 3600,
+    }
+    access_token = jwt.encode(token_payload, settings.jwt_secret, algorithm=ALGORITHM)
+
+    logger.info("MCP OAuth: token issued for user=%s scope=%s", code_data["email"], scope)
+
+    return JSONResponse(content={
+        "access_token": access_token,
+        "token_type": "Bearer",
+        "expires_in": 3600,
+        "scope": scope,
+    })
+
+
+@router.post("/mcp-register")
+async def mcp_register(request: Request):
+    """Dynamic Client Registration (RFC 7591).
+
+    Accepts registration but validates redirect_uris.
+    """
+    from app.core.rate_limit import mcp_register_rate_limit
+    await mcp_register_rate_limit(request)
+
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+
+    redirect_uris = body.get("redirect_uris", [])
+    if not isinstance(redirect_uris, list):
+        return JSONResponse(status_code=400, content={"error": "invalid_client_metadata", "error_description": "redirect_uris must be a list"})
+
+    for uri in redirect_uris:
+        err = _validate_redirect_uri(uri)
+        if err:
+            return JSONResponse(status_code=400, content={"error": "invalid_client_metadata", "error_description": f"Invalid redirect_uri: {err}"})
+
+    client_id = _secrets.token_urlsafe(16)
+    logger.info("MCP OAuth: client registered client_id=%s name=%s", client_id, body.get("client_name", "unknown"))
+
+    return JSONResponse(
+        status_code=201,
+        content={
+            "client_id": client_id,
+            "client_id_issued_at": int(time.time()),
+            "grant_types": ["authorization_code"],
+            "response_types": ["code"],
+            "redirect_uris": redirect_uris,
+            "token_endpoint_auth_method": "none",
+        },
+    )

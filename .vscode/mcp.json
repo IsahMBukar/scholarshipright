@@ -1,0 +1,11 @@
+{
+  "servers": {
+    "scholarshipright": {
+      "type": "http",
+      "url": "https://condense-disclose-equation.ngrok-free.dev/mcp/sse",
+      "headers": {
+        "Authorization": "Bearer YOUR_MCP_API_KEY"
+      }
+    }
+  }
+}

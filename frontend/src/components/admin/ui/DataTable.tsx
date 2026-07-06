@@ -40,6 +40,8 @@ export interface Column<T> {
   accessor: (row: T) => string | number | null;
   // Optional custom cell renderer. Default: String(value).
   cell?: (row: T) => ReactNode;
+  // Alias for cell — some pages use "render" instead.
+  render?: (row: T) => ReactNode;
   // Right-align numeric columns.
   align?: 'left' | 'right' | 'center';
   // Disable sorting on this column.
@@ -52,15 +54,15 @@ export interface Column<T> {
 
 export interface DataTableProps<T> {
   rows: T[];
-  total: number;
-  page: number;
-  pageSize: number;
+  total?: number;
+  page?: number;
+  pageSize?: number;
   columns: Column<T>[];
   isLoading?: boolean;
   error?: string | null;
   keyExtractor: (row: T) => string | number;
-  onPageChange: (page: number) => void;
-  onPageSizeChange: (pageSize: number) => void;
+  onPageChange?: (page: number) => void;
+  onPageSizeChange?: (pageSize: number) => void;
   onSortChange?: (key: string | null, dir: SortDir) => void;
   onFilterChange?: (key: string, value: string) => void;
   // Initial values (e.g. restored from URL).
@@ -84,9 +86,9 @@ interface SortState {
 
 export default function DataTable<T>({
   rows,
-  total,
-  page,
-  pageSize,
+  total = 0,
+  page = 1,
+  pageSize: pageSizeProp,
   columns,
   isLoading,
   error,
@@ -110,6 +112,8 @@ export default function DataTable<T>({
   const [filters, setFilters] = useState<Record<string, string>>(initialFilters);
   const [selected, setSelected] = useState<Set<string | number>>(new Set());
 
+  const pageSize = pageSizeProp ?? (rows.length || 10);
+  const hasPagination = !!pageSizeProp;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const handleHeaderClick = useCallback(
@@ -164,17 +168,17 @@ export default function DataTable<T>({
       // Don't capture when user is typing in an input/textarea
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      if (e.key === 'ArrowLeft' && page > 1) {
+      if (e.key === 'ArrowLeft' && hasPagination && page > 1) {
         e.preventDefault();
-        onPageChange(page - 1);
-      } else if (e.key === 'ArrowRight' && page < totalPages) {
+        onPageChange?.(page - 1);
+      } else if (e.key === 'ArrowRight' && hasPagination && page < totalPages) {
         e.preventDefault();
-        onPageChange(page + 1);
+        onPageChange?.(page + 1);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [page, totalPages, onPageChange]);
+  }, [page, totalPages, onPageChange, hasPagination]);
 
   const sortIcon = (col: Column<T>) => {
     if (col.disableSort) return null;
@@ -252,7 +256,8 @@ export default function DataTable<T>({
                 </th>
               ))}
             </tr>
-            {/* Filter row */}
+            {/* Filter row — only shown when onFilterChange is provided */}
+            {onFilterChange && (
             <tr className="border-b border-gray-200 bg-white">
               <th />
               {columns.map((col) => {
@@ -280,6 +285,7 @@ export default function DataTable<T>({
                 );
               })}
             </tr>
+            )}
           </thead>
           <tbody>
             {isLoading ? (
@@ -340,7 +346,7 @@ export default function DataTable<T>({
                             col.align === 'center' && 'text-center'
                           )}
                         >
-                          {col.cell ? col.cell(row) : value ?? <span className="text-text-secondary">—</span>}
+                          {(col.cell || col.render) ? (col.cell || col.render)!(row) : value ?? <span className="text-text-secondary">—</span>}
                         </td>
                       );
                     })}
@@ -352,47 +358,49 @@ export default function DataTable<T>({
         </table>
       </div>
 
-      {/* Pagination */}
-      <div className="flex items-center justify-between gap-3 px-4 h-12 border-t border-gray-200 bg-gray-50/50">
-        <div className="text-xs text-text-secondary">
-          {total === 0 ? '0 results' : `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total}`}
-          <span className="hidden lg:inline ml-2 text-text-secondary/60">(← → to navigate)</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={pageSize}
-            onChange={(e) => onPageSizeChange(Number(e.target.value))}
-            className="h-8 px-2 text-xs bg-white border border-gray-200 rounded-md"
-          >
-            {[10, 25, 50, 100].map((n) => (
-              <option key={n} value={n}>
-                {n} / page
-              </option>
-            ))}
-          </select>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page <= 1}
-              onClick={() => onPageChange(page - 1)}
+      {/* Pagination — only shown when pageSize is explicitly set */}
+      {hasPagination && (
+        <div className="flex items-center justify-between gap-3 px-4 h-12 border-t border-gray-200 bg-gray-50/50">
+          <div className="text-xs text-text-secondary">
+            {total === 0 ? '0 results' : `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total}`}
+            <span className="hidden lg:inline ml-2 text-text-secondary/60">(← → to navigate)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={pageSize}
+              onChange={(e) => onPageSizeChange?.(Number(e.target.value))}
+              className="h-8 px-2 text-xs bg-white border border-gray-200 rounded-md"
             >
-              Prev
-            </Button>
-            <span className="text-xs text-text-secondary px-2">
-              Page {page} / {totalPages}
-            </span>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page >= totalPages}
-              onClick={() => onPageChange(page + 1)}
-            >
-              Next
-            </Button>
+              {[10, 25, 50, 100].map((n) => (
+                <option key={n} value={n}>
+                  {n} / page
+                </option>
+              ))}
+            </select>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => onPageChange?.(page - 1)}
+              >
+                Prev
+              </Button>
+              <span className="text-xs text-text-secondary px-2">
+                Page {page} / {totalPages}
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => onPageChange?.(page + 1)}
+              >
+                Next
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
