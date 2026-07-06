@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import LandingShell from '@/components/LandingShell';
 import { fetchBlogPost } from '@/lib/blog/api';
@@ -140,8 +140,11 @@ export default function BlogDetailContent({ slug }: { slug: string }) {
   const [post, setPost] = useState<BlogPostOut | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const fetchedRef = useRef(false);
 
   useEffect(() => {
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
     fetchBlogPost(slug)
       .then(setPost)
       .catch((e) => setError(e.message))
@@ -202,19 +205,19 @@ export default function BlogDetailContent({ slug }: { slug: string }) {
     <LandingShell>
       <article className="pt-28 sm:pt-32 pb-20 px-4">
         <div className="max-w-[720px] mx-auto">
-          {/* Back link */}
-          <Link
-            href="/blog"
-            className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-[#d4972e] transition mb-6"
-          >
-            <span className="material-symbols-outlined text-base">arrow_back</span>
-            Back to blog
-          </Link>
-
-          {/* Category */}
-          <span className="inline-block px-3 py-1 mb-4 text-[11px] font-bold uppercase tracking-widest text-[#d4972e] bg-[#fdfbf7] border border-[#f0ebe0] rounded-full">
-            {post.category}
-          </span>
+          {/* Back link + Category */}
+          <div className="flex items-center justify-between mb-8">
+            <Link
+              href="/blog"
+              className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-[#d4972e] transition"
+            >
+              <span className="material-symbols-outlined text-base">arrow_back</span>
+              Back to blog
+            </Link>
+            <span className="px-3 py-1 text-[11px] font-bold uppercase tracking-widest text-[#d4972e] bg-[#fdfbf7] border border-[#f0ebe0] rounded-full">
+              {post.category}
+            </span>
+          </div>
 
           {/* Title */}
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-[#1a1a1a] mb-4 leading-tight">

@@ -22,16 +22,23 @@ function BlogCard({ post }: { post: BlogListOut }) {
       href={`/blog/${post.slug}`}
       className="group block bg-white rounded-2xl border border-[#f0ebe0] overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_20px_40px_-12px_rgba(212,151,46,0.18)] hover:border-[#f5b942]/40"
     >
-      {/* Cover image */}
-      {post.cover_image_url && (
-        <div className="aspect-[16/9] overflow-hidden bg-[#fdfbf7]">
+      {/* Cover image or placeholder */}
+      <div className="aspect-[16/9] overflow-hidden bg-[#fdfbf7]">
+        {post.cover_image_url ? (
           <img
             src={post.cover_image_url}
             alt={post.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           />
-        </div>
-      )}
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#fdfbf7] to-[#f5e6c8]">
+            <div className="text-center">
+              <span className="text-4xl">📝</span>
+              <p className="text-xs text-[#d4972e]/60 font-semibold mt-1.5">ScholarshipRight</p>
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="p-5 sm:p-6">
         {/* Category + date */}
