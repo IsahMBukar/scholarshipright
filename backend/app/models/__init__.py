@@ -11,6 +11,7 @@ from app.models.group import Group, GroupMember
 from app.models.pending_scholarship import PendingScholarship
 from app.models.resume import Resume
 from app.models.notification import Notification
+from app.models.blog import BlogPost, BlogScholarshipTag
 
 __all__ = [
     "User",

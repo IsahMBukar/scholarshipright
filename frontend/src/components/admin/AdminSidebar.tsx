@@ -16,6 +16,7 @@ import {
   ShieldCheck, Shield,
   Globe2,
   ClipboardCheck,
+  PenSquare,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { label: 'Users', icon: Users, href: '/admin/users' },
   { label: 'Scholarships', icon: GraduationCap, href: '/admin/scholarships' },
   { label: 'Review Queue', icon: ClipboardCheck, href: '/admin/review' },
+  { label: 'Blog', icon: PenSquare, href: '/admin/blogs' },
   { label: 'MCP Agents', icon: Shield, href: '/admin/mcp' },
   { label: 'Country Groups', icon: Globe2, href: '/admin/groups' },
   { label: 'Audit', icon: ScrollText, href: '/admin/audit' },

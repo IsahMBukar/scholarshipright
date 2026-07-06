@@ -19,6 +19,7 @@ from app.api import admin_extract
 from app.api import mcp_sse
 from app.api import admin_bulk
 from app.api import admin_mcp_logs
+from app.api import blog
 from app.api.notifications import router as notifications_router
 from app.api.preferences import router as preferences_router
 from app.api.unsubscribe import router as unsubscribe_router
@@ -41,6 +42,7 @@ from app.models.pending_scholarship import ensure_pending_scholarships_table
 from app.mcp.auth import ensure_mcp_api_keys_table
 from app.mcp.security import ensure_mcp_security_tables
 from app.mcp.oauth import load_oauth_config
+from app.models.blog import ensure_blog_tables
 
 settings = get_settings()
 logger = logging.getLogger("scholarshipright.startup")
@@ -149,6 +151,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:  # noqa: BLE001
         logger.exception("ensure_mcp_security_tables failed: %s", e)
 
+    # Startup: ensure blog tables exist (idempotent).
+    try:
+        await ensure_blog_tables()
+    except Exception as e:  # noqa: BLE001
+        logger.exception("ensure_blog_tables failed: %s", e)
+
     # Startup: start deadline checker in background
     deadline_task = asyncio.create_task(deadline_checker_loop())
     # Startup: start weekly digest in background
@@ -202,6 +210,7 @@ app.include_router(admin_extract.router, prefix="/api/admin", tags=["admin"])
 app.include_router(mcp_sse.router)
 app.include_router(admin_mcp_logs.router, prefix="/api/admin", tags=["admin"])
 app.include_router(admin_bulk.router, prefix="/api/admin", tags=["admin"])
+app.include_router(blog.router)
 
 
 @app.get("/healthz")

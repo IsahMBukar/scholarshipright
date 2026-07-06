@@ -11,6 +11,7 @@ const NAV_LINKS = [
   { href: '/scholarships/category/fully-funded', label: 'Scholarships' },
   { href: '/features', label: 'Features' },
   { href: '/how-it-works', label: 'How It Works' },
+  { href: '/blog', label: 'Blog' },
   { href: '/about', label: 'About' },
 ];
 
@@ -91,7 +92,7 @@ export default function LandingShell({ children }: { children: React.ReactNode }
               <ul className="space-y-2.5">
                 <li><Link href="/scholarships/category/fully-funded" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Scholarship database</Link></li>
                 <li><Link href="/faq" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">FAQ</Link></li>
-                <li><span className="text-sm text-gray-400 cursor-not-allowed" title="Coming soon">Blog</span></li>
+                <li><Link href="/blog" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Blog</Link></li>
                 <li><Link href="/faq" className="text-sm text-gray-600 hover:text-[#1a1a1a] transition">Help center</Link></li>
               </ul>
             </div>
