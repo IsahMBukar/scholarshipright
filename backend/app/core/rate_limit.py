@@ -283,3 +283,8 @@ mcp_token_rate_limit = rate_limit(
 mcp_register_rate_limit = rate_limit(
     "mcp_register", max_requests=5, window_seconds=15 * 60
 )
+
+# Blog write endpoints — protect against spam.
+blog_write_rate_limit = rate_limit(
+    "blog_write", max_requests=20, window_seconds=60 * 60
+)

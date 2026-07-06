@@ -174,12 +174,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+import os
+
+# CORS origins — localhost only in development
+_cors_origins = [settings.frontend_url]
+if os.getenv("ENVIRONMENT", "production") != "production":
+    _cors_origins.extend(["http://localhost:3000", "http://localhost:3001"])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url, "http://localhost:3000", "http://localhost:3001"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
 )
 
 # Include routers

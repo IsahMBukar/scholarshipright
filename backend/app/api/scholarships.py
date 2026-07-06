@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, update
 from typing import Optional, List
 from datetime import date
 from uuid import UUID
@@ -369,5 +369,8 @@ async def increment_view(slug: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Scholarship not found")
 
     scholarship.view_count = (scholarship.view_count or 0) + 1
+    await db.execute(
+        update(Scholarship).where(Scholarship.id == scholarship.id).values(view_count=Scholarship.view_count + 1)
+    )
     await db.commit()
     return {"view_count": scholarship.view_count}

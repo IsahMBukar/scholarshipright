@@ -29,6 +29,7 @@ from app.models.blog import BlogPost, BlogScholarshipTag, extract_scholarship_sl
 from app.models.scholarship import Scholarship
 from app.api.users import get_current_user
 from app.core.admin import require_admin
+from app.core.rate_limit import blog_write_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -240,9 +241,12 @@ async def get_post(slug: str, db: AsyncSession = Depends(get_db)):
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
-    # Increment view count
+    # Increment view count (atomic SQL expression to avoid race condition)
+    await db.execute(
+        update(BlogPost).where(BlogPost.id == post.id).values(view_count=BlogPost.view_count + 1)
+    )
+    await db.flush()
     post.view_count += 1
-    db.add(post)
 
     # Fetch scholarship tags
     tag_rows = await db.execute(
@@ -295,6 +299,7 @@ async def get_post(slug: str, db: AsyncSession = Depends(get_db)):
 @router.post("", response_model=BlogPostOut, status_code=status.HTTP_201_CREATED)
 async def create_post(
     payload: BlogCreate,
+    _rate: None = Depends(blog_write_rate_limit),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -354,6 +359,7 @@ async def create_post(
 async def update_post(
     post_id: str,
     payload: BlogUpdate,
+    _rate: None = Depends(blog_write_rate_limit),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -442,6 +448,7 @@ async def update_post(
 @router.delete("/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_post(
     post_id: str,
+    _rate: None = Depends(blog_write_rate_limit),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -477,7 +484,9 @@ async def admin_list_all_posts(
         base = base.where(BlogPost.status == status_filter)
         count_base = count_base.where(BlogPost.status == status_filter)
     if search:
-        ilike = f"%{search}%"
+        # Escape LIKE wildcards to prevent pattern-based exploration
+        safe = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        ilike = f"%{safe}%"
         base = base.where(BlogPost.title.ilike(ilike))
         count_base = count_base.where(BlogPost.title.ilike(ilike))
 
