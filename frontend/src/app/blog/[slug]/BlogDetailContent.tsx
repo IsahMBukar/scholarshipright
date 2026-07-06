@@ -1,9 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import LandingShell from '@/components/LandingShell';
-import { fetchBlogPost } from '@/lib/blog/api';
 import type { BlogPostOut, ScholarshipTagOut } from '@/lib/blog/types';
 
 // ── Inline scholarship card ───────────────────────────────────────
@@ -136,63 +134,7 @@ function RenderBody({
 
 // ── Main detail component ─────────────────────────────────────────
 
-export default function BlogDetailContent({ slug }: { slug: string }) {
-  const [post, setPost] = useState<BlogPostOut | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const fetchedRef = useRef(false);
-
-  useEffect(() => {
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
-    fetchBlogPost(slug)
-      .then(setPost)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [slug]);
-
-  if (loading) {
-    return (
-      <LandingShell>
-        <div className="pt-28 sm:pt-32 pb-20 px-4">
-          <div className="max-w-[720px] mx-auto animate-pulse space-y-6">
-            <div className="h-6 bg-gray-100 rounded w-1/4" />
-            <div className="h-10 bg-gray-100 rounded w-3/4" />
-            <div className="h-4 bg-gray-100 rounded w-1/2" />
-            <div className="aspect-[16/9] bg-gray-100 rounded-2xl" />
-            <div className="space-y-3">
-              <div className="h-4 bg-gray-100 rounded w-full" />
-              <div className="h-4 bg-gray-100 rounded w-5/6" />
-              <div className="h-4 bg-gray-100 rounded w-4/6" />
-            </div>
-          </div>
-        </div>
-      </LandingShell>
-    );
-  }
-
-  if (error || !post) {
-    return (
-      <LandingShell>
-        <div className="pt-28 sm:pt-32 pb-20 px-4 text-center">
-          <p className="text-6xl mb-4">📄</p>
-          <p className="text-lg font-semibold text-gray-600 mb-2">
-            Article not found
-          </p>
-          <p className="text-sm text-gray-400 mb-6">
-            {error || 'This post may have been removed or the link is incorrect.'}
-          </p>
-          <Link
-            href="/blog"
-            className="inline-flex items-center gap-2 text-sm font-semibold text-[#d4972e] hover:text-[#1a1a1a] transition"
-          >
-            ← Back to blog
-          </Link>
-        </div>
-      </LandingShell>
-    );
-  }
-
+export default function BlogDetailContent({ post }: { post: BlogPostOut }) {
   const dateStr = post.published_at
     ? new Date(post.published_at).toLocaleDateString('en-US', {
         month: 'long',
@@ -201,8 +143,45 @@ export default function BlogDetailContent({ slug }: { slug: string }) {
       })
     : '';
 
+  // JSON-LD structured data for Google (BlogPosting schema)
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BlogPosting',
+    headline: post.title,
+    description: post.excerpt || undefined,
+    image: post.cover_image_url || undefined,
+    datePublished: post.published_at || undefined,
+    dateModified: post.updated_at,
+    author: {
+      '@type': 'Person',
+      name: post.author_name || 'ScholarshipRight',
+    },
+    publisher: {
+      '@type': 'Organization',
+      name: 'ScholarshipRight',
+      url: 'https://scholarshipright.com',
+      logo: {
+        '@type': 'ImageObject',
+        url: 'https://scholarshipright.com/og-default.png',
+      },
+    },
+    mainEntityOfPage: {
+      '@type': 'WebPage',
+      '@id': `https://scholarshipright.com/blog/${post.slug}`,
+    },
+    wordCount: post.body.split(/\s+/).length,
+    articleSection: post.category,
+    keywords: post.tags.join(', '),
+  };
+
   return (
     <LandingShell>
+      {/* JSON-LD structured data */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+
       <article className="pt-28 sm:pt-32 pb-20 px-4">
         <div className="max-w-[720px] mx-auto">
           {/* Back link + Category */}
