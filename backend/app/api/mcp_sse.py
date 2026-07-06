@@ -851,6 +851,11 @@ async def _handle_blog_edit(args: dict[str, Any], auth: McpAuthRecord) -> dict:
                 post.published_at = datetime.now(timezone.utc)
             post.status = new_status
             changed.append("status")
+        elif post.status == "published" and changed:
+            # Agent edited a live post without explicitly setting status →
+            # revert to pending_review so admin re-approves before it goes live again.
+            post.status = "pending_review"
+            changed.append("status→pending_review")
 
         if not changed:
             return {"content": [{"type": "text", "text": f"No changes for: {post.title}"}]}
@@ -866,6 +871,8 @@ async def _handle_blog_edit(args: dict[str, Any], auth: McpAuthRecord) -> dict:
             "status": post.status,
             "updated_fields": changed,
         }
+        if post.status == "pending_review":
+            data["note"] = "Post reverted to pending_review — admin will re-approve before it goes live again."
         return {"content": [{"type": "text", "text": json.dumps(data, indent=2, default=str)}]}
 
 

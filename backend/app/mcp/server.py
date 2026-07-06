@@ -411,6 +411,10 @@ async def _handle_blog_edit(args: dict[str, Any]) -> list[TextContent]:
                 post.published_at = datetime.now(timezone.utc)
             post.status = new_status
             changed.append("status")
+        elif post.status == "published" and changed:
+            # Agent edited a live post → revert to pending_review
+            post.status = "pending_review"
+            changed.append("status→pending_review")
 
         if not changed:
             return [TextContent(type="text", text=f"No changes for: {post.title}")]
@@ -420,6 +424,8 @@ async def _handle_blog_edit(args: dict[str, Any]) -> list[TextContent]:
         await db.refresh(post)
 
         data = {"id": str(post.id), "title": post.title, "slug": post.slug, "status": post.status, "updated_fields": changed}
+        if post.status == "pending_review":
+            data["note"] = "Post reverted to pending_review — admin will re-approve before it goes live again."
         return [TextContent(type="text", text=json.dumps(data, indent=2, default=str))]
 
 
