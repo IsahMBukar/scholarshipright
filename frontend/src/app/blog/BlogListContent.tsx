@@ -129,7 +129,7 @@ export default function BlogListContent() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchBlogCategories().then(setCategories).catch(() => {});
+    fetchBlogCategories().then(setCategories).catch((e) => console.error('[BlogList] Categories:', e));
   }, []);
 
   useEffect(() => {

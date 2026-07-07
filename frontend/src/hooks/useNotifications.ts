@@ -20,7 +20,9 @@ export function useNotifications() {
       const data = await fetchNotifications();
       setNotifications(data.items);
       setUnreadCount(data.unread_count);
-    } catch {} finally {
+    } catch (e) {
+      console.error('[useNotifications] Failed to load:', e);
+    } finally {
       setLoading(false);
     }
   }, []);

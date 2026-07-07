@@ -1,22 +1,10 @@
 'use client';
 
 import { create } from 'zustand';
-import type { Scholarship, Profile } from '@/services/api';
+import type { Profile } from '@/services/api';
 
-// Auth Store
-interface AuthState {
-  user: { id: string; email: string; full_name?: string } | null;
-  isAuthenticated: boolean;
-  setUser: (user: AuthState['user']) => void;
-  logout: () => void;
-}
-
-export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
-  isAuthenticated: false,
-  setUser: (user) => set({ user, isAuthenticated: !!user }),
-  logout: () => set({ user: null, isAuthenticated: false }),
-}));
+// Auth is handled by useAuth context (src/hooks/useAuth.tsx).
+// No Zustand auth store — avoids duplicate state.
 
 // Profile Store
 interface ProfileState {

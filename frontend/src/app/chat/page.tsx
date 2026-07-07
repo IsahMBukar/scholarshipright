@@ -167,7 +167,7 @@ export default function AgentPage() {
   const chatLocked = !onboarding.loading && !(onboarding.hasProfile && onboarding.hasResume);
 
   useEffect(() => {
-    fetchAgentContext().then(setContext).catch(() => {});
+    fetchAgentContext().then(setContext).catch((e) => console.error('[Chat] Agent context:', e));
   }, []);
 
   useEffect(() => {

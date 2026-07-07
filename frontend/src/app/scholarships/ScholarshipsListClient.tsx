@@ -70,7 +70,7 @@ export default function ScholarshipsListClient() {
   // closed, so we load it at the page level too. The FilterPanel
   // loads it independently and shows it inline.
   useEffect(() => {
-    fetchFilterMetadata().then(setMeta).catch(() => {});
+    fetchFilterMetadata().then(setMeta).catch((e) => console.error('[ScholarshipsList] Filter metadata:', e));
   }, []);
 
   // Fetch scholarships whenever filters or search changes
@@ -104,7 +104,9 @@ export default function ScholarshipsListClient() {
         }
         setSavedIds(ids);
         setSavedStatuses(statuses);
-      } catch {}
+      } catch (e) {
+        console.error('[ScholarshipsList] Failed to load saved state:', e);
+      }
       await loadScholarships(EMPTY_FILTERS, '');
     }
     init();
