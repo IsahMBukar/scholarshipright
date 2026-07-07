@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
+import { SITE_URL } from '@/lib/env';
 import LandingClient from './LandingClient';
 
-const SITE_URL = 'https://scholarshipright.com';
+
 
 export const metadata: Metadata = {
   title: 'ScholarshipRight — Find Fully Funded Scholarships with AI',

@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import ScholarshipDetailClient from './ScholarshipDetailClient';
 
-const SITE_URL = 'https://scholarshipright.com';
-import { API_URL } from '@/lib/env';
+
+import { API_URL, SITE_URL } from '@/lib/env';
 
 interface ScholarshipData {
   id: string;

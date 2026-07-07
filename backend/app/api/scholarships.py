@@ -146,11 +146,12 @@ async def list_scholarships(
         query = query.where(Scholarship.deadline >= deadline_after)
 
     if search:
+        safe = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         search_filter = or_(
-            Scholarship.name.ilike(f"%{search}%"),
-            Scholarship.description.ilike(f"%{search}%"),
-            Scholarship.provider.ilike(f"%{search}%"),
-            Scholarship.host_institution.ilike(f"%{search}%"),
+            Scholarship.name.ilike(f"%{safe}%"),
+            Scholarship.description.ilike(f"%{safe}%"),
+            Scholarship.provider.ilike(f"%{safe}%"),
+            Scholarship.host_institution.ilike(f"%{safe}%"),
         )
         query = query.where(search_filter)
 
@@ -374,9 +375,12 @@ async def increment_view(
     if not scholarship:
         raise HTTPException(status_code=404, detail="Scholarship not found")
 
-    scholarship.view_count = (scholarship.view_count or 0) + 1
+    # Atomic SQL increment (avoids race condition)
     await db.execute(
         update(Scholarship).where(Scholarship.id == scholarship.id).values(view_count=Scholarship.view_count + 1)
     )
     await db.commit()
+
+    # Re-fetch to get the incremented value
+    await db.refresh(scholarship)
     return {"view_count": scholarship.view_count}

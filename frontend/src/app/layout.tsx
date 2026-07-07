@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
+import { SITE_URL } from '@/lib/env';
 import './globals.css';
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog';
 import { AuthProvider } from '@/hooks/useAuth';
 import { SessionExpiryHandler } from '@/components/SessionExpiryHandler';
 import AuthModal from '@/components/AuthModal';
 
-const SITE_URL = 'https://scholarshipright.com';
+
 const SITE_NAME = 'ScholarshipRight';
 const DEFAULT_DESC = 'AI-powered scholarship discovery platform. Find fully funded international scholarships matched to your profile.';
 

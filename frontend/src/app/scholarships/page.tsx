@@ -1,8 +1,9 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
+import { SITE_URL } from '@/lib/env';
 import ScholarshipsListClient from './ScholarshipsListClient';
 
-const SITE_URL = 'https://scholarshipright.com';
+
 
 export const metadata: Metadata = {
   title: 'Browse Fully Funded Scholarships',

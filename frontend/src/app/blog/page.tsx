@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
+import { SITE_URL } from '@/lib/env';
 import BlogListContent from './BlogListContent';
-
-const SITE_URL = 'https://scholarshipright.com';
 
 export const metadata: Metadata = {
   title: 'Blog — ScholarshipRight',

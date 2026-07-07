@@ -90,7 +90,7 @@ function MatchPreview({ m }: { m: Match }) {
         {/* Logo / placeholder */}
         <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0 border border-gray-200">
           {s.logo_url ? (
-            <Image src={s.logo_url} alt="" width={32} height={32} unoptimized className="w-8 h-8 object-contain" />
+            <Image src={s.logo_url} alt={`${s.provider || s.name} logo`} width={32} height={32} unoptimized className="w-8 h-8 object-contain" />
           ) : (
             <span className="material-symbols-outlined text-[22px] text-text-secondary">school</span>
           )}

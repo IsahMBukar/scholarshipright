@@ -335,7 +335,7 @@ async def set_password(
 
 
 class ForgotPasswordRequest(BaseModel):
-    email: str
+    email: EmailStr
 
 
 class ResetPasswordRequest(BaseModel):
