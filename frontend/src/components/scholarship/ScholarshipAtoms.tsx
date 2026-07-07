@@ -23,7 +23,7 @@ export function ScholarshipLogo({ scholarship, size = 'md' }: {
   return (
     <div className={`${dims} rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0 border border-gray-200`}>
       {scholarship.logo_url ? (
-        <Image src={scholarship.logo_url} alt="" width={imgPx} height={imgPx} className={`${imgDims} object-contain`} unoptimized />
+        <Image src={scholarship.logo_url} alt={`${scholarship.provider || scholarship.name} logo`} width={imgPx} height={imgPx} className={`${imgDims} object-contain`} unoptimized />
       ) : (
         <span className={`material-symbols-outlined ${fallbackSize} text-text-secondary`}>{fallbackIcon}</span>
       )}

@@ -1049,7 +1049,7 @@ export default function ScholarshipDetailClient() {
               <div className="flex items-center gap-4 p-5 bg-gray-50 rounded-xl border border-gray-200">
                 <div className="w-16 h-16 bg-gray-100 rounded-xl flex items-center justify-center border border-gray-200">
                   {scholarship.logo_url ? (
-                    <Image src={scholarship.logo_url} alt="" width={56} height={56} unoptimized className="w-14 h-14 object-contain" />
+                    <Image src={scholarship.logo_url} alt={`${scholarship.provider || scholarship.name} logo`} width={56} height={56} unoptimized className="w-14 h-14 object-contain" />
                   ) : (
                     <span className="text-2xl font-bold text-primary">{(scholarship.provider || 'S').charAt(0)}</span>
                   )}
@@ -1083,7 +1083,7 @@ export default function ScholarshipDetailClient() {
             <div className="flex items-center gap-4 p-5 bg-gray-50 rounded-xl border border-gray-200">
               <div className="w-16 h-16 bg-gray-100 rounded-xl flex items-center justify-center border border-gray-200">
                 {scholarship.logo_url ? (
-                  <Image src={scholarship.logo_url} alt="" width={56} height={56} unoptimized className="w-14 h-14 object-contain" />
+                  <Image src={scholarship.logo_url} alt={`${scholarship.provider || scholarship.name} logo`} width={56} height={56} unoptimized className="w-14 h-14 object-contain" />
                 ) : (
                   <span className="text-2xl font-bold text-primary">{(scholarship.provider || 'S').charAt(0)}</span>
                 )}
