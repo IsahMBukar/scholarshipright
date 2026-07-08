@@ -981,7 +981,7 @@ export default function ScholarshipDetailClient() {
               )}
 
               <p className="text-[11px] text-text-secondary pt-1">
-                Always confirm the exact document list on the scholarship's official page before submitting.
+                Always confirm the exact document list on the scholarship&apos;s official page before submitting.
               </p>
             </div>
 

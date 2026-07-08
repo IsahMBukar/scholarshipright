@@ -1,6 +1,7 @@
 'use client';
 
 import { type ReactNode } from 'react';
+import Link from 'next/link';
 
 /**
  * SlideShell — the consistent wrapper around every slide.
@@ -37,12 +38,12 @@ export default function SlideShell({
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white flex flex-col">
       {/* Top bar */}
       <div className="w-full max-w-2xl mx-auto px-4 pt-5 flex items-center justify-between">
-        <a
+        <Link
           href="/scholarships"
           className="text-[18px] font-extrabold text-primary tracking-tight"
         >
           ScholarshipRight
-        </a>
+        </Link>
         <button
           onClick={onSkip}
           className="text-[12px] text-text-secondary hover:text-text-primary transition-colors"

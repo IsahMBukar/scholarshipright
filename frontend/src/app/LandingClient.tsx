@@ -7,7 +7,7 @@
 //
 // UI DNA:
 //   - V6 bento grid + count-up stats + numbered steps
-//   - V4 floating pill nav + spotlight + border-beam + chat interface
+//   - V4 floating pill nav (desktop) + slide drawer nav (mobile) + spotlight + border-beam + chat interface
 //   - Warm golden + white palette (#fdfbf7 base, #f5b942 gold, #f0ebe0 dividers)
 //
 // Mobile-first responsive: every section scales from 1-col mobile to multi-col desktop.
@@ -90,10 +90,16 @@ const TESTIMONIALS = [
 ];
 
 const NAV_LINKS = [
-  { href: '/scholarships/category/fully-funded', label: 'Scholarships' },
-  { href: '/features', label: 'Features' },
-  { href: '/how-it-works', label: 'How It Works' },
-  { href: '/about', label: 'About' },
+  { href: '/scholarships/category/fully-funded', label: 'Scholarships', icon: '🎓' },
+  { href: '/how-it-works', label: 'How It Works', icon: '✦' },
+  { href: '/features', label: 'Features', icon: '⚡' },
+  { href: '/blog', label: 'Blog', icon: '📝' },
+  { href: '/about', label: 'About', icon: 'ℹ' },
+];
+
+const ACCOUNT_LINKS = [
+  { href: '/login', label: 'Sign in', icon: '👤' },
+  { href: '/faq', label: 'Help & FAQ', icon: '❓' },
 ];
 
 // ── Match ring (SVG progress) ──────────────────────────────────────
@@ -171,6 +177,18 @@ function CountUp({
 export default function LandingClient() {
   const router = useRouter();
   const [checking, setChecking] = useState(true);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const toggleDrawer = () => {
+    setDrawerOpen((prev) => {
+      document.body.style.overflow = !prev ? 'hidden' : '';
+      return !prev;
+    });
+  };
+  const closeDrawer = () => {
+    setDrawerOpen(false);
+    document.body.style.overflow = '';
+  };
 
   // Auth check — if already logged in, skip the pitch.
   useEffect(() => {
@@ -193,15 +211,112 @@ export default function LandingClient() {
 
   return (
     <div className="min-h-screen bg-[#fdfbf7] text-[#1a1a1a] overflow-x-hidden">
-      {/* ═══ FLOATING NAV (V4 DNA) ═══ all links visible, button has real width ═══ */}
-      <nav className="fixed left-1/2 -translate-x-1/2 z-50 bg-white/80 backdrop-blur-xl border border-[#f0ebe0] rounded-full flex items-center shadow-[0_8px_24px_-8px_rgba(0,0,0,0.08)] w-max max-w-[calc(100vw-1rem)] top-[clamp(0.5rem,0.4rem+0.3vw,1rem)] px-[clamp(0.5rem,0.25rem+0.6vw,1rem)] py-[clamp(0.25rem,0.2rem+0.2vw,0.5rem)] gap-[clamp(0.25rem,0.125rem+0.5vw,0.75rem)]">
-        <Link href="/" className="flex items-center flex-shrink-0 gap-[clamp(0.25rem,0.2rem+0.3vw,0.5rem)] px-[clamp(0.125rem,0.05rem+0.3vw,0.5rem)]">
-          <Image src="/images/logo-light.jpg" alt="ScholarshipRight" width={32} height={32} priority className="h-[clamp(1.25rem,0.5rem+1vw,2rem)] w-[clamp(1.25rem,0.5rem+1vw,2rem)] rounded-lg object-contain" />
-          <span className="text-sm font-extrabold hidden sm:block">
+      {/* ═══ MOBILE NAV — topbar + slide drawer ═══════════════════ */}
+      {/* Mobile topbar (visible < md) */}
+      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[390px] md:max-w-none z-50 flex items-center justify-between px-4 py-3 bg-[#fdfbf7]/85 backdrop-blur-xl border-b border-[#f0ebe0] md:hidden">
+        <Link href="/" className="flex items-center gap-2">
+          <Image src="/images/logo-light.jpg" alt="ScholarshipRight" width={28} height={28} priority className="h-7 w-7 rounded-lg object-contain" />
+          <span className="text-[15px] font-extrabold">
             Scholarship<span className="text-[#f5b942]">Right</span>
           </span>
         </Link>
-        <div className="w-px h-[clamp(1rem,0.7rem+0.4vw,1.25rem)] bg-[#f0ebe0] mx-[clamp(0.125rem,0.05rem+0.2vw,0.5rem)] hidden sm:block" />
+        <div className="flex items-center gap-2">
+          <Link href="/scholarships/category/fully-funded" className="text-xs font-semibold text-gray-600 px-3 py-1.5 rounded-full hover:bg-[#f5b942]/10 transition">
+            Scholarships
+          </Link>
+          <button
+            onClick={toggleDrawer}
+            className="w-9 h-9 rounded-[10px] border border-[#f0ebe0] bg-white flex flex-col items-center justify-center gap-[4px] cursor-pointer"
+            aria-label="Open menu"
+          >
+            <span className={`block w-4 h-[2px] bg-[#1a1a1a] rounded-full transition-all duration-300 ${drawerOpen ? 'rotate-45 translate-y-[6px]' : ''}`} />
+            <span className={`block w-4 h-[2px] bg-[#1a1a1a] rounded-full transition-all duration-300 ${drawerOpen ? 'opacity-0 scale-x-0' : ''}`} />
+            <span className={`block w-4 h-[2px] bg-[#1a1a1a] rounded-full transition-all duration-300 ${drawerOpen ? '-rotate-45 -translate-y-[6px]' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* Scrim */}
+      {drawerOpen && (
+        <div
+          className="fixed inset-0 z-[150] bg-[#1a1a1a]/40 backdrop-blur-sm md:hidden"
+          onClick={closeDrawer}
+        />
+      )}
+
+      {/* Slide drawer */}
+      <div className={`fixed top-0 right-0 w-[300px] max-w-[85vw] h-full z-[160] bg-white shadow-[-8px_0_40px_rgba(0,0,0,0.08)] flex flex-col transition-transform duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)] md:hidden ${drawerOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+        {/* Drawer header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#f0ebe0]">
+          <div className="flex items-center gap-2">
+            <Image src="/images/logo-light.jpg" alt="" width={24} height={24} className="h-6 w-6 rounded-md object-contain" />
+            <span className="text-sm font-bold">Menu</span>
+          </div>
+          <button onClick={closeDrawer} className="w-8 h-8 rounded-lg bg-[#fdfbf7] flex items-center justify-center text-gray-400 text-lg" aria-label="Close menu">
+            ✕
+          </button>
+        </div>
+
+        {/* Drawer body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400 pb-1.5 pt-2">Navigate</p>
+          <nav className="flex flex-col">
+            {NAV_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={closeDrawer}
+                className="flex items-center gap-3 px-3 py-3.5 rounded-xl text-[15px] font-semibold text-[#1a1a1a] hover:bg-[#fdfbf7] active:bg-[#fdfbf7] transition"
+              >
+                <span className="w-9 h-9 rounded-[10px] bg-[#f5f3ee] flex items-center justify-center text-base flex-shrink-0">{link.icon}</span>
+                <span>{link.label}</span>
+                <span className="ml-auto text-gray-300 text-sm">›</span>
+              </Link>
+            ))}
+          </nav>
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400 pb-1.5 pt-4">Account</p>
+          <nav className="flex flex-col">
+            {ACCOUNT_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={closeDrawer}
+                className="flex items-center gap-3 px-3 py-3.5 rounded-xl text-[15px] font-semibold text-[#1a1a1a] hover:bg-[#fdfbf7] active:bg-[#fdfbf7] transition"
+              >
+                <span className="w-9 h-9 rounded-[10px] bg-[#f5f3ee] flex items-center justify-center text-base flex-shrink-0">{link.icon}</span>
+                <span>{link.label}</span>
+                <span className="ml-auto text-gray-300 text-sm">›</span>
+              </Link>
+            ))}
+          </nav>
+        </div>
+
+        {/* Drawer footer */}
+        <div className="px-5 py-4 border-t border-[#f0ebe0]">
+          <Link
+            href="/signup"
+            onClick={closeDrawer}
+            className="flex items-center justify-center w-full py-3.5 bg-[#f5b942] text-[#1a1a1a] text-sm font-bold rounded-xl hover:bg-[#d4972e] transition"
+          >
+            Start free →
+          </Link>
+          <div className="flex justify-center gap-4 mt-3">
+            <Link href="/privacy" className="text-xs text-gray-400">Privacy</Link>
+            <Link href="/terms" className="text-xs text-gray-400">Terms</Link>
+            <Link href="/contact" className="text-xs text-gray-400">Contact</Link>
+          </div>
+        </div>
+      </div>
+
+      {/* ═══ DESKTOP NAV — floating pill (visible md+) ═════════════ */}
+      <nav className="hidden md:flex fixed left-1/2 -translate-x-1/2 z-50 bg-white/80 backdrop-blur-xl border border-[#f0ebe0] rounded-full items-center shadow-[0_8px_24px_-8px_rgba(0,0,0,0.08)] w-max max-w-[calc(100vw-1rem)] top-[clamp(0.5rem,0.4rem+0.3vw,1rem)] px-[clamp(0.5rem,0.25rem+0.6vw,1rem)] py-[clamp(0.25rem,0.2rem+0.2vw,0.5rem)] gap-[clamp(0.25rem,0.125rem+0.5vw,0.75rem)]">
+        <Link href="/" className="flex items-center flex-shrink-0 gap-[clamp(0.25rem,0.2rem+0.3vw,0.5rem)] px-[clamp(0.125rem,0.05rem+0.3vw,0.5rem)]">
+          <Image src="/images/logo-light.jpg" alt="ScholarshipRight" width={32} height={32} priority className="h-[clamp(1.25rem,0.5rem+1vw,2rem)] w-[clamp(1.25rem,0.5rem+1vw,2rem)] rounded-lg object-contain" />
+          <span className="text-sm font-extrabold">
+            Scholarship<span className="text-[#f5b942]">Right</span>
+          </span>
+        </Link>
+        <div className="w-px h-[clamp(1rem,0.7rem+0.4vw,1.25rem)] bg-[#f0ebe0] mx-[clamp(0.125rem,0.05rem+0.2vw,0.5rem)]" />
         <div className="flex items-center gap-[clamp(0.25rem,0.125rem+0.5vw,0.75rem)]">
           {NAV_LINKS.map((link) => (
             <Link

@@ -512,7 +512,7 @@ export default function ProfileSlide({
           </button>
           {priorEnglish && (
             <p className="mt-1.5 text-[11px] text-text-secondary leading-relaxed">
-              We'll treat this as a waiver for English-test requirements on
+              We&apos;ll treat this as a waiver for English-test requirements on
               scholarships that accept prior-English study.
             </p>
           )}

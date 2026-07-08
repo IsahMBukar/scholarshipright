@@ -130,7 +130,7 @@ export default function AdminOverviewPage() {
         <div className="space-y-6">
           {/* KPIs — backend supplies a list of {key,label,value,format,delta} */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {kpis.map((k) => (
+            {kpis.map((k: any) => (
               <StatCard
                 key={k.key}
                 label={k.label}

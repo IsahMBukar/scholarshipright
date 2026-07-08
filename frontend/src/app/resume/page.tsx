@@ -283,7 +283,7 @@ function ResumePageInner() {
           <div className="mb-5 flex items-center gap-3 p-3 rounded-xl border border-primary/20 bg-primary/5">
             <span className="material-symbols-outlined text-primary text-[18px]">arrow_back</span>
             <p className="text-[12px] text-text-secondary flex-1">
-              You're in onboarding. Upload your resume here, then return to the hub to finish setup.
+              You&apos;re in onboarding. Upload your resume here, then return to the hub to finish setup.
             </p>
             <Link
               href="/onboarding"

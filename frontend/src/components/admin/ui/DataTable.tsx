@@ -37,7 +37,7 @@ export interface Column<T> {
   key: string;
   header: string;
   // Accessor returns the sortable value (string | number | null).
-  accessor: (row: T) => string | number | null;
+  accessor?: (row: T) => string | number | null;
   // Optional custom cell renderer. Default: String(value).
   cell?: (row: T) => ReactNode;
   // Alias for cell — some pages use "render" instead.
@@ -336,7 +336,7 @@ export default function DataTable<T>({
                       />
                     </td>
                     {columns.map((col) => {
-                      const value = col.accessor(row);
+                      const value = col.accessor?.(row);
                       return (
                         <td
                           key={col.key}

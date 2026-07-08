@@ -27,7 +27,7 @@ interface ImportResult {
 }
 
 export default function BulkImportDrawer({ open, onClose }: BulkImportDrawerProps) {
-  const { addToast } = useToast();
+  const { success, error } = useToast();
   const [urlText, setUrlText] = useState('');
   const [importing, setImporting] = useState(false);
   const [results, setResults] = useState<ImportResult[] | null>(null);
@@ -56,15 +56,15 @@ export default function BulkImportDrawer({ open, onClose }: BulkImportDrawerProp
       });
 
       if (response.submitted > 0) {
-        addToast({ message: `${response.submitted} scholarship(s) submitted to review queue`, tone: 'positive' });
+        success(`${response.submitted} scholarship(s) submitted to review queue`);
       }
     } catch (err) {
       const message = err instanceof AdminApiError ? err.message : 'Import failed';
-      addToast({ message, tone: 'negative' });
+      error(message);
     } finally {
       setImporting(false);
     }
-  }, [urlText, addToast]);
+  }, [urlText, success, error]);
 
   const handleClose = useCallback(() => {
     if (!importing) {

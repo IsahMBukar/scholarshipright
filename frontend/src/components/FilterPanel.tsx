@@ -464,7 +464,7 @@ export default function FilterPanel({ filters, onChange, resultCount, collapsed,
 
       {metaError && (
         <p className="text-[12px] text-red-500">
-          Couldn't load filter options. Using last-known defaults.
+          Couldn&apos;t load filter options. Using last-known defaults.
         </p>
       )}
     </div>

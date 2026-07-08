@@ -87,7 +87,7 @@ export default function AdminAuditPage() {
   // Client-side filter on actor email (backend doesn't expose this; do it here
   // for fast typing in the toolbar — backend already narrowed by other filters).
   const filteredItems = useMemo(() => {
-    const items = audit.data?.items ?? [];
+    const items: AdminAuditEntry[] = audit.data?.items ?? [];
     if (!actorFilter.trim()) return items;
     const q = actorFilter.toLowerCase();
     return items.filter((i) => (i.admin_email ?? '').toLowerCase().includes(q));

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import {
   fetchMatches,
   fetchFeaturedScholarships,
@@ -278,13 +279,13 @@ export default function MatchesPreviewSlide({
       )}
 
       <div className="mt-5 flex flex-col sm:flex-row gap-2">
-        <a
+        <Link
           href="/scholarships"
           className="flex-1 py-3 bg-primary text-text-inverse text-[14px] font-bold rounded-btn shadow-md shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all text-center inline-flex items-center justify-center gap-2"
         >
           <span className="material-symbols-outlined text-[18px]">list</span>
           See all my matches
-        </a>
+        </Link>
         <button
           onClick={onContinue}
           className="px-5 py-3 text-[13px] font-semibold text-text-secondary hover:text-primary transition-colors"

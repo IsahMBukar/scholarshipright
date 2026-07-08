@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import Link from 'next/link';
 
 export default function BlogDetailError({
   error,
@@ -44,12 +45,12 @@ export default function BlogDetailError({
             <RefreshCw className="w-4 h-4" />
             Try again
           </button>
-          <a
+          <Link
             href="/blog"
             className="inline-flex items-center h-10 px-5 rounded-full border border-[#f0ebe0] text-sm font-medium text-gray-600 hover:border-[#f5b942]/40 transition"
           >
             Back to blog
-          </a>
+          </Link>
         </div>
       </div>
     </div>

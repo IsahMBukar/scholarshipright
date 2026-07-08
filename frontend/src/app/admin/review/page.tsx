@@ -134,9 +134,9 @@ export default function ReviewQueuePage() {
     if (!selected) return;
     const ok = await confirm({
       title: 'Approve Scholarship',
-      body: `Publish "${selected.payload?.name || 'this scholarship'}" to the live catalog?`,
+      description: `Publish "${selected.payload?.name || 'this scholarship'}" to the live catalog?`,
       confirmLabel: 'Approve',
-      variant: 'primary',
+      tone: 'primary',
     });
     if (ok) approveMutation.mutate(selected.id);
   }, [selected, confirm, approveMutation]);
@@ -146,15 +146,11 @@ export default function ReviewQueuePage() {
     if (!selected) return;
     const ok = await confirm({
       title: 'Reject Submission',
-      body: `Reject "${selected.payload?.name || 'this submission'}"? This cannot be undone.`,
+      description: `Reject "${selected.payload?.name || 'this submission'}"? This cannot be undone.`,
       confirmLabel: 'Reject',
-      variant: 'danger',
-      requireReason: true,
+      tone: 'danger',
     });
-    if (ok && typeof ok === 'object' && 'reason' in ok && ok.reason) {
-      rejectMutation.mutate({ id: selected.id, reason: ok.reason as string });
-    } else if (ok === true) {
-      // confirm without reason requirement (fallback)
+    if (ok) {
       rejectMutation.mutate({ id: selected.id, reason: 'Rejected by admin' });
     }
   }, [selected, confirm, rejectMutation]);
@@ -164,9 +160,9 @@ export default function ReviewQueuePage() {
     if (!selected) return;
     const ok = await confirm({
       title: 'Delete Submission',
-      body: 'This will permanently delete this submission. This action cannot be undone.',
+      description: 'This will permanently delete this submission. This action cannot be undone.',
       confirmLabel: 'Delete',
-      variant: 'danger',
+      tone: 'danger',
     });
     if (ok) deleteMutation.mutate(selected.id);
   }, [selected, confirm, deleteMutation]);
@@ -223,7 +219,7 @@ export default function ReviewQueuePage() {
   ];
 
   return (
-    <AdminLayout>
+    <AdminLayout title="Review Queue">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -272,13 +268,12 @@ export default function ReviewQueuePage() {
         {error ? (
           <div className="text-red-600 text-sm p-4">Error: {(error as Error).message}</div>
         ) : (
-          <DataTable
+          <DataTable<PendingScholarship>
             columns={columns}
             rows={list?.items ?? []}
-            loading={isLoading}
+            isLoading={isLoading}
             keyExtractor={(row) => row.id}
             onRowClick={(row) => setSelectedId(row.id)}
-            emptyMessage="No submissions in queue"
           />
         )}
 

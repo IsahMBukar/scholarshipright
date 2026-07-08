@@ -17,7 +17,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { adminApi, type ListInvitesParams } from '@/lib/admin/api';
 import { AdminApiError } from '@/lib/admin/client';
 import EmptyState from '@/components/admin/ui/EmptyState';
-import type { AdminInviteListEntry, AdminRole } from '@/lib/admin/types';
+import type { AdminInviteListEntry, AdminInviteResponse, AdminRole } from '@/lib/admin/types';
 
 type Status = 'pending' | 'accepted' | 'revoked' | 'expired';
 
@@ -78,7 +78,7 @@ export default function AdminInvitesPage() {
 
   const createInvite = useMutation({
     mutationFn: (body: Parameters<typeof adminApi.createInvite>[0]) => adminApi.createInvite(body),
-    onSuccess: (data) => {
+    onSuccess: (data: AdminInviteResponse) => {
       qc.invalidateQueries({ queryKey: ['admin', 'invites'] });
       setCreatedUrl(data.invite_url);
       setCopied(false);
@@ -86,7 +86,7 @@ export default function AdminInvitesPage() {
       setNote('');
       toast.success('Invite created', `Sent to ${data.email}`);
     },
-    onError: (err) => {
+    onError: (err: Error) => {
       const msg = err instanceof AdminApiError ? err.message : 'Create failed';
       toast.error('Failed to create invite', msg);
     },
@@ -98,7 +98,7 @@ export default function AdminInvitesPage() {
       qc.invalidateQueries({ queryKey: ['admin', 'invites'] });
       toast.success('Invite revoked');
     },
-    onError: (err) => {
+    onError: (err: Error) => {
       const msg = err instanceof AdminApiError ? err.message : 'Revoke failed';
       toast.error('Failed to revoke invite', msg);
     },

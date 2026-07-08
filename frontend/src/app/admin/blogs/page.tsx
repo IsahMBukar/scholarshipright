@@ -23,7 +23,7 @@ import type { BlogListOut, PaginatedBlogs } from '@/lib/blog/types';
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-function fmtDate(iso: string | null): string {
+function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en', {
     year: 'numeric',
@@ -51,7 +51,7 @@ function statusTone(status: string): BadgeTone {
 
 export default function AdminBlogsPage() {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { success, error } = useToast();
 
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>('');
@@ -72,27 +72,27 @@ export default function AdminBlogsPage() {
     mutationFn: (id: string) => updateBlogPost(id, { status: 'published' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-blogs'] });
-      toast('Post published');
+      success('Post published');
     },
-    onError: () => toast('Failed to publish post'),
+    onError: () => error('Failed to publish post'),
   });
 
   const archiveMutation = useMutation({
     mutationFn: (id: string) => updateBlogPost(id, { status: 'archived' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-blogs'] });
-      toast('Post archived');
+      success('Post archived');
     },
-    onError: () => toast('Failed to archive post'),
+    onError: () => error('Failed to archive post'),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteBlogPost(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-blogs'] });
-      toast('Post deleted');
+      success('Post deleted');
     },
-    onError: () => toast('Failed to delete post'),
+    onError: () => error('Failed to delete post'),
   });
 
   const columns: Column<BlogListOut>[] = [
@@ -253,12 +253,11 @@ export default function AdminBlogsPage() {
         </div>
 
         {/* Table */}
-        <DataTable
+        <DataTable<BlogListOut>
           columns={columns}
           rows={data?.items ?? []}
-          loading={isLoading}
-          emptyMessage="No blog posts found"
-          rowKey={(row) => row.id}
+          isLoading={isLoading}
+          keyExtractor={(row) => row.id}
         />
 
         {/* Pagination */}
@@ -270,7 +269,7 @@ export default function AdminBlogsPage() {
             <div className="flex items-center gap-2">
               <Button
                 size="sm"
-                variant="outline"
+                variant="secondary"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
               >
@@ -281,7 +280,7 @@ export default function AdminBlogsPage() {
               </span>
               <Button
                 size="sm"
-                variant="outline"
+                variant="secondary"
                 onClick={() => setPage((p) => Math.min(data.pages, p + 1))}
                 disabled={page === data.pages}
               >

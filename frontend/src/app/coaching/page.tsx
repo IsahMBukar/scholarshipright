@@ -2,6 +2,7 @@
 
 import AppLayout from '@/components/AppLayout';
 import PageHeader from '@/components/PageHeader';
+import Link from 'next/link';
 
 export default function CoachingPage() {
   return (
@@ -55,13 +56,13 @@ export default function CoachingPage() {
 
         {/* CTA */}
         <div className="flex flex-col items-center gap-3">
-          <p className="text-[13px] text-text-secondary">We're building something amazing. Stay tuned!</p>
-          <a
+          <p className="text-[13px] text-text-secondary">We&apos;re building something amazing. Stay tuned!</p>
+          <Link
             href="/scholarships"
             className="px-6 py-2.5 bg-[#f5b942] text-white text-[14px] font-semibold rounded-lg hover:brightness-110 transition-all"
           >
             Browse Scholarships
-          </a>
+          </Link>
         </div>
       </div>
     </AppLayout>

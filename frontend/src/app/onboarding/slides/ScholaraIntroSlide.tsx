@@ -1,6 +1,7 @@
 'use client';
 
 import { useOnboarding } from '@/hooks/useOnboarding';
+import Link from 'next/link';
 
 /**
  * ScholaraIntroSlide — slide 4 (final) of the onboarding carousel.
@@ -85,13 +86,13 @@ export default function ScholaraIntroSlide({
           <span className="material-symbols-outlined text-[18px]">chat</span>
           Open Scholara
         </button>
-        <a
+        <Link
           href="/scholarships"
           onClick={handleBrowseFirst}
           className="px-5 py-3 text-[13px] font-semibold text-text-secondary hover:text-primary transition-colors text-center"
         >
           Browse scholarships first →
-        </a>
+        </Link>
       </div>
 
       <button

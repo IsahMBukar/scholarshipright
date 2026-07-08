@@ -71,7 +71,7 @@ function maskIdentity(identity: string | null): string {
 
 export default function McpAdminPage() {
   const queryClient = useQueryClient();
-  const { addToast } = useToast();
+  const { success, error, info } = useToast();
   const confirm = useConfirm();
 
   const [tab, setTab] = useState<'keys' | 'logs'>('keys');
@@ -110,14 +110,14 @@ export default function McpAdminPage() {
       );
       return resp;
     },
-    onSuccess: (data) => {
+    onSuccess: (data: { id: string; key: string; name: string }) => {
       setCreatedKey(data.key);
       setShowKey(true);
       queryClient.invalidateQueries({ queryKey: ['admin', 'mcp', 'keys'] });
-      addToast({ message: `API key "${data.name}" created`, tone: 'positive' });
+      success(`API key "${data.name}" created`);
     },
     onError: () => {
-      addToast({ message: 'Failed to create key', tone: 'negative' });
+      error('Failed to create key');
     },
   });
 
@@ -128,7 +128,7 @@ export default function McpAdminPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'mcp', 'keys'] });
-      addToast({ message: 'Key revoked', tone: 'info' });
+      info('Key revoked');
     },
   });
 
@@ -136,7 +136,7 @@ export default function McpAdminPage() {
   const logItems = logs?.items ?? [];
 
   return (
-    <AdminLayout>
+    <AdminLayout title="MCP Integration">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -232,7 +232,7 @@ export default function McpAdminPage() {
                       </td>
                     </tr>
                   ) : (
-                    keyItems.map((key) => (
+                    keyItems.map((key: any) => (
                       <tr key={key.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-3 font-medium">{key.name}</td>
                         <td className="px-4 py-3">
@@ -255,9 +255,9 @@ export default function McpAdminPage() {
                               onClick={async () => {
                                 const ok = await confirm({
                                   title: 'Revoke Key',
-                                  body: `Revoke "${key.name}"? This will immediately block all agents using this key.`,
+                                  description: `Revoke "${key.name}"? This will immediately block all agents using this key.`,
                                   confirmLabel: 'Revoke',
-                                  variant: 'danger',
+                                  tone: 'danger',
                                 });
                                 if (ok) revokeKey.mutate(key.id);
                               }}
@@ -283,7 +283,7 @@ export default function McpAdminPage() {
               <div className="flex gap-2 flex-wrap">
                 {Object.entries(stats.by_tool).map(([tool, count]) => (
                   <Badge key={tool} tone="neutral">
-                    {tool}: {count}
+                    {String(tool)}: {String(count)}
                   </Badge>
                 ))}
               </div>
@@ -308,7 +308,7 @@ export default function McpAdminPage() {
                       </td>
                     </tr>
                   ) : (
-                    logItems.map((log) => (
+                    logItems.map((log: any) => (
                       <tr key={log.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-3 text-xs text-text-secondary">
                           {new Date(log.created_at).toLocaleString()}
@@ -398,7 +398,7 @@ export default function McpAdminPage() {
                   size="sm"
                   onClick={() => {
                     navigator.clipboard.writeText(createdKey);
-                    addToast({ message: 'Key copied to clipboard', tone: 'positive' });
+                    success('Key copied to clipboard');
                   }}
                 >
                   Copy
@@ -406,7 +406,7 @@ export default function McpAdminPage() {
               </div>
             </div>
             <p className="text-xs text-text-secondary">
-              Use this key in your MCP agent's Authorization header:
+              Use this key in your MCP agent&apos;s Authorization header:
             </p>
             <code className="block bg-gray-50 rounded p-3 text-xs font-mono">
               Authorization: Bearer ***
@@ -417,7 +417,7 @@ export default function McpAdminPage() {
             <div>
               <label className="text-sm font-medium text-text-primary">Key Name</label>
               <p className="text-xs text-text-secondary mb-2">
-                A descriptive name for this key (e.g. "Claude Desktop", "ChatGPT Agent")
+                A descriptive name for this key (e.g. &quot;Claude Desktop&quot;, &quot;ChatGPT Agent&quot;)
               </p>
               <input
                 type="text"

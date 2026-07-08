@@ -436,8 +436,8 @@ export default function CreateScholarshipDrawer({
           </div>
           {form.accepted_english_tests.length === 0 && (
             <p className="text-[11px] text-amber-700 mt-1">
-              ⚠ None selected — the detail page will hide the "Accepted English
-              Tests" section for this scholarship.
+              ⚠ None selected — the detail page will hide the &quot;Accepted English
+                            Tests&quot; section for this scholarship.
             </p>
           )}
         </div>

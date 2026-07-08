@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +24,7 @@ from app.models.user import User
 from app.schemas.admin import PaginatedResponse
 from app.services.admin_audit import log_admin_action
 from app.services.document_defaults import apply_auto_defaults
+from app.services.match_auto import trigger_scholarship_recompute
 
 import logging
 
@@ -157,6 +158,7 @@ async def get_pending_scholarship(
 async def approve_pending_scholarship(
     pending_id: UUID,
     body: ReviewApproveRequest = ReviewApproveRequest(),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -232,6 +234,9 @@ async def approve_pending_scholarship(
 
     await db.commit()
     await db.refresh(pending)
+
+    # Trigger incremental match: compute ONLY this scholarship against ALL users.
+    trigger_scholarship_recompute(scholarship.id, background_tasks)
 
     logger.info("Approved pending scholarship %s → created %s", pending_id, scholarship.id)
     return PendingScholarshipResponse.model_validate(pending)

@@ -14,7 +14,7 @@ export default function QueryProvider({ children }: { children: ReactNode }) {
             staleTime: 30_000,
             gcTime: 5 * 60_000,
             refetchOnWindowFocus: false,
-            retry: (failureCount, error: unknown) => {
+            retry: (failureCount: number, error: unknown) => {
               // Don't retry 4xx — they're deterministic.
               const status = (error as { status?: number } | null)?.status;
               if (status && status >= 400 && status < 500) return false;

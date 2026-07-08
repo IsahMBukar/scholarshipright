@@ -285,6 +285,166 @@ async def recompute_matches_for_user(user_id: UUID, reason: str = REASON_MANUAL)
             return {"status": "error", "reason": reason, "error": str(e)[:200]}
 
 
+async def recompute_scholarship_for_all_users(scholarship_id: UUID) -> dict:
+    """Compute match scores for ONE scholarship against ALL users.
+
+    Called when a new scholarship is created or an existing one is updated.
+    Much cheaper than a full recompute — only touches rows for this one
+    scholarship instead of wiping and rebuilding every user's entire score set.
+
+    Side effects:
+      - Upserts match_scores for this scholarship × every user with a profile
+      - Emits match_new / match_improved notifications
+      - Sends email for new matches ≥70%
+    """
+    async with AsyncSessionLocal() as db:
+        try:
+            sch = (await db.execute(
+                select(Scholarship).where(Scholarship.id == scholarship_id)
+            )).scalar_one_or_none()
+            if not sch or not sch.is_active:
+                return {"status": "skipped", "reason": "scholarship_inactive_or_missing"}
+
+            profiles = (await db.execute(
+                select(Profile.user_id).where(Profile.user_id.isnot(None))
+            )).scalars().all()
+
+            if not profiles:
+                return {"status": "skipped", "reason": "no_users"}
+
+            computed = 0
+            results: list[dict] = []
+
+            for user_id in profiles:
+                profile = (await db.execute(
+                    select(Profile).where(Profile.user_id == user_id)
+                )).scalar_one_or_none()
+                if not profile:
+                    continue
+
+                resume = (await db.execute(
+                    select(Resume).where(Resume.user_id == user_id, Resume.is_primary == True)
+                )).scalar_one_or_none()
+                if not resume:
+                    resume = (await db.execute(
+                        select(Resume).where(Resume.user_id == user_id).order_by(Resume.updated_at.desc())
+                    )).scalar_one_or_none()
+
+                eligibility_info = passes_country_gate(
+                    user_nationality=getattr(profile, "nationality_code", None),
+                    user_residency=getattr(profile, "residency_code", None),
+                    eligibility_basis=getattr(sch, "eligibility_basis", "either") or "either",
+                    resolved_countries=list(getattr(sch, "resolved_countries", []) or []),
+                    eligibility_unresolved=bool(getattr(sch, "eligibility_unresolved", False)),
+                    eligibility_display=getattr(sch, "eligibility_display", None),
+                )
+
+                result = compute_match_score(profile, sch, resume=resume, eligibility_info=eligibility_info)
+                if result["score"] > 0:
+                    # Upsert: delete old score for this user+scholarship, insert new
+                    await db.execute(
+                        delete(MatchScore).where(
+                            MatchScore.user_id == user_id,
+                            MatchScore.scholarship_id == scholarship_id,
+                        )
+                    )
+                    db.add(MatchScore(
+                        user_id=user_id,
+                        scholarship_id=scholarship_id,
+                        score=result["score"],
+                        breakdown=result["breakdown"],
+                    ))
+                    results.append({"user_id": user_id, "score": float(result["score"])})
+                    computed += 1
+
+            await db.commit()
+
+            # ── Notifications + email (separate session) ────────────
+            notif_new = 0
+            notif_improved = 0
+            email_user_ids: list[UUID] = []
+
+            async with AsyncSessionLocal() as db2:
+                for r in results:
+                    uid, new_score = r["user_id"], r["score"]
+
+                    old_q = await db2.execute(
+                        select(MatchScore.score).where(
+                            MatchScore.user_id == uid,
+                            MatchScore.scholarship_id == scholarship_id,
+                        )
+                    )
+                    old_row = old_q.scalar_one_or_none()
+
+                    if old_row is None:
+                        if is_new_match(new_score):
+                            n = await emit_match_new(
+                                db2, user_id=uid,
+                                scholarship_id=scholarship_id, score=new_score,
+                            )
+                            if n is not None:
+                                notif_new += 1
+                                email_user_ids.append(uid)
+                    else:
+                        if is_improvement(new_score, float(old_row)):
+                            n = await emit_match_improved(
+                                db2, user_id=uid,
+                                scholarship_id=scholarship_id,
+                                new_score=new_score, old_score=float(old_row),
+                            )
+                            if n is not None:
+                                notif_improved += 1
+
+                await db2.commit()
+
+            # ── New-match emails (after commit, fire-and-forget) ────
+            if email_user_ids:
+                from app.services.email import send_templated_email
+                from app.services.weekly_digest import _build_match_card
+
+                deadline_str = sch.deadline.strftime("%b %d, %Y") if sch.deadline else "Open"
+                amount = getattr(sch, "amount", None) or "See details"
+                country = getattr(sch, "host_country", None) or ""
+                card = _build_match_card(
+                    scholarship_name=sch.name, score=float(results[0]["score"]),
+                    amount=amount, deadline=deadline_str, country=country,
+                )
+                for uid in email_user_ids:
+                    user_row = (await db.execute(select(User).where(User.id == uid))).scalar_one_or_none()
+                    if user_row:
+                        score_val = next((r["score"] for r in results if r["user_id"] == uid), 0)
+                        await send_templated_email(
+                            to=user_row.email,
+                            template="new_match",
+                            variables={
+                                "RECIPIENT_NAME": user_row.full_name or "Student",
+                                "SCHOLARSHIP_NAME": sch.name,
+                                "MATCH_SCORE": str(round(score_val)),
+                                "MATCH_CARDS": card,
+                                "USER_ID": str(uid),
+                                "UNSUBSCRIBE_CATEGORY": "new_matches",
+                            },
+                            subject=f"New match: {sch.name} ({round(score_val)}%)",
+                        )
+
+            logger.info(
+                "recompute_scholarship_all_users scholarship=%s matches=%s notifs_new=%s notifs_improved=%s",
+                scholarship_id, computed, notif_new, notif_improved,
+            )
+            return {
+                "status": "computed",
+                "scholarship_id": str(scholarship_id),
+                "matches": computed,
+                "total_users": len(profiles),
+                "notifs_new": notif_new,
+                "notifs_improved": notif_improved,
+            }
+        except Exception as e:  # noqa: BLE001
+            await db.rollback()
+            logger.exception("recompute_scholarship_all_users failed scholarship=%s: %s", scholarship_id, e)
+            return {"status": "error", "error": str(e)[:200]}
+
+
 async def clear_user_matches(user_id: UUID) -> None:
     """Hard-delete a user's cached matches (e.g. after their resume is removed)."""
     async with AsyncSessionLocal() as db:
@@ -351,3 +511,29 @@ def trigger_global_invalidate(
             loop = None
         if loop is not None:
             loop.create_task(mark_all_users_dirty(reason))
+
+
+def trigger_scholarship_recompute(
+    scholarship_id: UUID,
+    background_tasks: Optional[BackgroundTasks] = None,
+) -> None:
+    """Compute ONE scholarship against ALL users (incremental).
+
+    Uses the same priority chain as trigger_recompute:
+      1. Redis task queue
+      2. FastAPI BackgroundTasks
+      3. Fire-and-forget asyncio task
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop is not None:
+        loop.create_task(recompute_scholarship_for_all_users(scholarship_id))
+        return
+
+    if background_tasks is not None:
+        background_tasks.add_task(recompute_scholarship_for_all_users, scholarship_id)
+    else:
+        asyncio.run(recompute_scholarship_for_all_users(scholarship_id))

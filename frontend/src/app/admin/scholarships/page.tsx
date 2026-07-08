@@ -124,16 +124,13 @@ export default function AdminScholarshipsPage() {
 
   const create = useMutation({
     mutationFn: (body: AdminScholarshipCreate) => adminApi.createScholarship(body),
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       qc.invalidateQueries({ queryKey: ['admin', 'scholarships'] });
       qc.invalidateQueries({ queryKey: ['admin', 'overview'] });
       toast.success('Scholarship created', data.name);
       setCreateOpen(false);
     },
-    onError: (err) => {
-      // Error is rendered in the drawer footer; we just log here. The
-      // most common case is a duplicate slug (409) which the API surfaces
-      // as a clear user_message.
+    onError: (err: Error) => {
       const msg = err instanceof AdminApiError ? err.message : 'Create failed';
       // eslint-disable-next-line no-console
       console.error('create scholarship failed:', msg);

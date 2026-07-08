@@ -442,7 +442,7 @@ export default function CreateScholarshipWizard({
               </h3>
             </div>
             <p className="text-xs text-text-secondary">
-              Paste the official scholarship URL and we'll extract the details automatically using AI.
+              Paste the official scholarship URL and we&apos;ll extract the details automatically using AI.
             </p>
             <div className="flex gap-2">
               <div className="flex-1">
@@ -485,7 +485,7 @@ export default function CreateScholarshipWizard({
             className="w-full"
             onClick={() => setStep('identity')}
           >
-            Skip — I'll fill in the fields myself
+            Skip — I&apos;ll fill in the fields myself
           </Button>
         </div>
       )}

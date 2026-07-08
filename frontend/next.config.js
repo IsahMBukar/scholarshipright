@@ -55,11 +55,11 @@ const nextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline'",  // unsafe-inline required for Next.js
+              `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''}`,
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com",
               "img-src 'self' data: https:",
-              "connect-src 'self' https:",
+              `connect-src 'self' https:${process.env.NODE_ENV === 'development' ? ' http://localhost:8000 ws:' : ''}`,
               "frame-ancestors 'none'",
             ].join('; '),
           },

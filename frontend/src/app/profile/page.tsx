@@ -1233,7 +1233,7 @@ function MatchingFieldsPrompt({
                 <span className="font-semibold text-text-primary">
                   {critical.join(', ')}
                 </span>
-                . Without these, the engine can't tell if you're eligible.
+                . Without these, the engine can&apos;t tell if you&apos;re eligible.
               </p>
             </div>
           )}

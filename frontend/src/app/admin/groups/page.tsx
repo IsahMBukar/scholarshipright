@@ -363,7 +363,7 @@ export default function AdminGroupsPage() {
     [confirm, deleteGroup]
   );
 
-  const items = groups.data?.items || [];
+  const items: AdminCountryGroup[] = groups.data?.items || [];
 
   return (
     <AdminLayout title="Country Groups">
