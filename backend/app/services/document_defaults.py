@@ -46,6 +46,7 @@ PREVIOUS_DEGREE_OPTIONS: list[str] = [
     "high_school_diploma",
     "bachelor_degree",
     "master_degree",
+    "phd_degree",
     "none",
 ]
 """Valid values for ``previous_degree_required``."""
@@ -65,9 +66,29 @@ STANDARDIZED_TEST_OPTIONS: list[str] = [
 def _is_phd(level: str) -> bool:
     """Return True for any PhD/doctoral level, regardless of casing
     or naming convention used in our data ('PhD', 'Doctorate', 'Doctoral', etc.).
+
+    Excludes 'direct_phd' — that's a separate level with different
+    previous-degree requirements (bachelor, not master).
     """
     s = (level or "").lower()
+    if "direct" in s and "phd" in s:
+        return False  # handled by _is_direct_phd
     return "phd" in s or "doctoral" in s or "doctorate" in s
+
+
+def _is_direct_phd(level: str) -> bool:
+    """Return True for direct-entry PhD (BSc → PhD, skipping master's).
+
+    Matches 'direct_phd', 'direct-phd', 'direct phd', 'bsc_to_phd', etc.
+    """
+    s = (level or "").lower()
+    return ("direct" in s and "phd" in s) or "bsc_to_phd" in s or "bsc-to-phd" in s
+
+
+def _is_postdoc(level: str) -> bool:
+    """Return True for postdoctoral level."""
+    s = (level or "").lower()
+    return "postdoc" in s or "post-doc" in s or "post_doc" in s
 
 
 def _is_master(level: str) -> bool:
@@ -81,17 +102,26 @@ def _is_bachelor(level: str) -> bool:
 
 
 def _classify_levels(degree_levels: Iterable[str] | None) -> dict[str, bool]:
-    """Return a {bachelor, master, phd} dict of which levels are present.
+    """Return a {bachelor, master, phd, direct_phd, postdoc} dict.
 
     Honours the "highest wins" rule: a multi-level scholarship (e.g.
     ['Master', 'PhD']) is classified as the most-restrictive level
     (PhD) so the auto-defaults are conservative.
+
+    direct_phd is treated as PhD-level in every way except the
+    previous-degree requirement (bachelor instead of master).
+    postdoc is the highest level — requires a PhD degree.
     """
     levels = list(degree_levels or [])
     has_phd = any(_is_phd(l) for l in levels)
+    has_direct_phd = any(_is_direct_phd(l) for l in levels)
+    has_postdoc = any(_is_postdoc(l) for l in levels)
     has_master = any(_is_master(l) for l in levels)
     has_bachelor = any(_is_bachelor(l) for l in levels)
-    return {"bachelor": has_bachelor, "master": has_master, "phd": has_phd}
+    return {
+        "bachelor": has_bachelor, "master": has_master,
+        "phd": has_phd, "direct_phd": has_direct_phd, "postdoc": has_postdoc,
+    }
 
 
 # ── The pure functions ───────────────────────────────────────────────
@@ -108,37 +138,37 @@ def derive_defaults(degree_levels: Iterable[str] | None) -> dict[str, Any]:
     Unit-testable without a DB.
     """
     cls = _classify_levels(degree_levels)
-    any_level = cls["bachelor"] or cls["master"] or cls["phd"]
+    any_level = cls["bachelor"] or cls["master"] or cls["phd"] or cls["direct_phd"] or cls["postdoc"]
 
-    # Cement — the previous-degree cert required. PhD needs master's,
-    # master's needs bachelor's, bachelor's needs high school.
-    # If multiple levels are present, use the highest (most restrictive).
-    if cls["phd"]:
+    # Cement — the previous-degree cert required.
+    # postdoc needs phd, direct_phd needs bachelor (BSc → PhD),
+    # PhD needs master's, master's needs bachelor's, bachelor's needs high school.
+    if cls["postdoc"]:
+        cement = "phd_degree"
+    elif cls["direct_phd"]:
+        cement = "bachelor_degree"  # direct entry from BSc
+    elif cls["phd"]:
         cement = "master_degree"
     elif cls["master"]:
         cement = "bachelor_degree"
     elif cls["bachelor"]:
         cement = "high_school_diploma"
     else:
-        # No levels set (or unrecognised) — default to the safest
-        # assumption (high school), matching what the old static UI
-        # effectively showed.
         cement = "high_school_diploma"
 
-    # Recommendation letters — 3 for PhD (universally academic-heavy
-    # and needs 3 strong academic refs), 2 for everything else.
-    rec_count = 3 if cls["phd"] else 2
+    # Recommendation letters — 3 for PhD/direct_phd/postdoc, 2 for rest.
+    rec_count = 3 if (cls["phd"] or cls["direct_phd"] or cls["postdoc"]) else 2
 
-    # Research proposal — required for PhD. For master's it's optional
-    # (some research-track programs want one, most don't), so we
-    # default False and let admins flip it.
-    research_proposal = bool(cls["phd"])
+    # Research proposal — required for PhD, direct_phd, and postdoc.
+    research_proposal = bool(cls["phd"] or cls["direct_phd"] or cls["postdoc"])
 
-    # Writing sample — no auto-default. Always admin-only decision.
-    writing_sample = False
+    # Writing sample — postdoc typically requires published work samples.
+    writing_sample = bool(cls["postdoc"])
 
     # Standardized test — most common by level.
-    if cls["phd"]:
+    if cls["postdoc"]:
+        test = "none"  # not needed for postdoc
+    elif cls["phd"] or cls["direct_phd"]:
         test = "gre"
     elif cls["master"]:
         test = "gre_gmat"

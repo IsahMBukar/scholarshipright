@@ -43,6 +43,8 @@ from app.mcp.auth import ensure_mcp_api_keys_table
 from app.mcp.security import ensure_mcp_security_tables
 from app.mcp.oauth import load_oauth_config
 from app.models.blog import ensure_blog_tables
+from app.models.scholarship_degree_document import ensure_degree_documents_table
+from app.models.scholarship_custom_document import ensure_custom_documents_table
 
 settings = get_settings()
 logger = logging.getLogger("scholarshipright.startup")
@@ -156,6 +158,18 @@ async def lifespan(app: FastAPI):
         await ensure_blog_tables()
     except Exception as e:  # noqa: BLE001
         logger.exception("ensure_blog_tables failed: %s", e)
+
+    # Startup: ensure scholarship_degree_documents table exists (idempotent).
+    try:
+        await ensure_degree_documents_table()
+    except Exception as e:  # noqa: BLE001
+        logger.exception("ensure_degree_documents_table failed: %s", e)
+
+    # Startup: ensure scholarship_custom_documents table exists (idempotent).
+    try:
+        await ensure_custom_documents_table()
+    except Exception as e:  # noqa: BLE001
+        logger.exception("ensure_custom_documents_table failed: %s", e)
 
     # Startup: start deadline checker in background
     deadline_task = asyncio.create_task(deadline_checker_loop())

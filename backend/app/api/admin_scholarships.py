@@ -22,7 +22,7 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,13 +35,16 @@ from app.schemas.admin import (
     AdminScholarshipPatch,
     AdminScholarshipResponse,
     PaginatedResponse,
+    DegreeDocCreate,
+    DegreeDocUpdate,
+    DegreeDocResponse,
+    CustomDocCreate,
+    CustomDocUpdate,
+    CustomDocResponse,
 )
 from app.services.admin_audit import log_admin_action
 from app.services.document_defaults import apply_auto_defaults
-from app.services.match_auto import (
-    REASON_SCHOLARSHIP_DATA_CHANGED,
-    mark_all_users_dirty,
-)
+from app.services.match_auto import trigger_scholarship_recompute
 from app.services.eligibility import resolve_eligibility, resolve_all_scholarships
 
 import logging
@@ -53,12 +56,23 @@ logger = logging.getLogger("scholara.admin")
 _DATE_FIELDS = {"open_date", "deadline", "program_start_date"}
 _DECIMAL_FIELDS = {"min_ielts_score", "min_cgpa"}
 
-# Eligibility fields that can trigger a re-resolution
+# Fields that can trigger a re-resolution of eligibility
 _ELIGIBILITY_FIELDS = {
     "eligibility_display", "eligibility_basis",
     "included_groups", "included_countries",
     "excluded_groups", "excluded_countries",
 }
+
+# Fields that, when changed, invalidate cached match scores.
+_MATCH_AFFECTING_FIELDS = {
+    "name", "description", "benefits_summary", "how_to_apply",
+    "fields_of_study", "degree_levels", "host_country", "host_institution",
+    "provider", "funding_type", "eligible_nationalities", "eligible_regions",
+    "requires_ielts", "min_ielts_score", "min_cgpa",
+    "covers_tuition", "covers_living", "covers_flight", "covers_health",
+    "deadline", "program_start_date",
+    "accepted_english_tests", "language_of_instruction",
+} | _ELIGIBILITY_FIELDS
 
 
 async def _resolve_scholarship_eligibility(db: AsyncSession, sch: Scholarship) -> None:
@@ -210,7 +224,40 @@ async def get_scholarship(
             status_code=404,
             detail={"code": "scholarship_not_found", "user_message": "Scholarship not found."},
         )
-    return AdminScholarshipResponse.model_validate(apply_auto_defaults(s))
+    apply_auto_defaults(s)
+    response = AdminScholarshipResponse.model_validate(s)
+
+    # Attach per-degree-level document overrides
+    from app.models.scholarship_degree_document import ScholarshipDegreeDocument
+    degree_docs = (
+        await db.execute(
+            select(ScholarshipDegreeDocument)
+            .where(ScholarshipDegreeDocument.scholarship_id == s.id)
+            .order_by(ScholarshipDegreeDocument.degree_level)
+        )
+    ).scalars().all()
+    if degree_docs:
+        response.degree_documents = [
+            DegreeDocResponse.model_validate(d).model_dump(mode="json")
+            for d in degree_docs
+        ]
+
+    # Attach custom document requirements
+    from app.models.scholarship_custom_document import ScholarshipCustomDocument
+    custom_docs = (
+        await db.execute(
+            select(ScholarshipCustomDocument)
+            .where(ScholarshipCustomDocument.scholarship_id == s.id)
+            .order_by(ScholarshipCustomDocument.position, ScholarshipCustomDocument.name)
+        )
+    ).scalars().all()
+    if custom_docs:
+        response.custom_documents = [
+            CustomDocResponse.model_validate(d).model_dump(mode="json")
+            for d in custom_docs
+        ]
+
+    return response
 
 
 # ── create ────────────────────────────────────────────────────────
@@ -226,9 +273,8 @@ async def create_scholarship(
 
     All admins (super_admin or support_staff) can create. After insert:
       1. Audit log row is written
-      2. If is_active is True (the default), mark_all_users_dirty() runs
-         so the next /api/matches call for each user recomputes and may
-         emit a `match_new` notification (if score ≥ 70%).
+      2. If is_active is True (the default), trigger_scholarship_recompute()
+         runs so the new scholarship is scored against every user immediately.
 
     A unique-slug conflict returns 409 (not 500) so the admin UI can show
     a clear "slug already taken" message.
@@ -284,13 +330,13 @@ async def create_scholarship(
     )
     await db.commit()
 
-    # If the new scholarship is active, every user's match cache is now
-    # stale. Mark them all dirty so their next read picks it up.
+    # If the new scholarship is active, compute it against every user
+    # incrementally (only this scholarship, not a full recompute).
     if s.is_active:
-        marked = await mark_all_users_dirty(reason=REASON_SCHOLARSHIP_DATA_CHANGED)
+        trigger_scholarship_recompute(s.id)
         logger.info(
-            "scholarship.create: marked %s users dirty (scholarship_id=%s slug=%s)",
-            marked, s.id, s.slug,
+            "scholarship.create: triggered incremental recompute (scholarship_id=%s slug=%s)",
+            s.id, s.slug,
         )
 
     return AdminScholarshipResponse.model_validate(apply_auto_defaults(s))
@@ -333,6 +379,7 @@ async def patch_scholarship(
     changes: dict = {}
     is_active_flipped_on = False
     eligibility_changed = False
+    match_affecting_changed = False
     for k, v in coerced.items():
         if not hasattr(s, k):
             continue
@@ -345,6 +392,9 @@ async def patch_scholarship(
             # Track eligibility field changes
             if k in _ELIGIBILITY_FIELDS:
                 eligibility_changed = True
+            # Track match-affecting field changes
+            if k in _MATCH_AFFECTING_FIELDS:
+                match_affecting_changed = True
             setattr(s, k, v)
 
     if changes:
@@ -367,14 +417,13 @@ async def patch_scholarship(
         )
         await db.commit()
 
-    # If we flipped is_active false→true, every user's match cache is now
-    # stale. Mark all users dirty so their next read recomputes and may
-    # emit a `match_new` notification.
-    if is_active_flipped_on:
-        marked = await mark_all_users_dirty(reason=REASON_SCHOLARSHIP_DATA_CHANGED)
+    # If we flipped is_active false→true OR changed any match-affecting
+    # field, recompute this scholarship against every user incrementally.
+    if is_active_flipped_on or match_affecting_changed:
+        trigger_scholarship_recompute(s.id)
         logger.info(
-            "scholarship.patch: marked %s users dirty (is_active false→true, scholarship_id=%s)",
-            marked, s.id,
+            "scholarship.patch: triggered incremental recompute (scholarship_id=%s, active_flip=%s, fields_changed=%s)",
+            s.id, is_active_flipped_on, match_affecting_changed,
         )
 
     return AdminScholarshipResponse.model_validate(apply_auto_defaults(s))
@@ -409,6 +458,10 @@ async def delete_scholarship(
         "application_count": s.application_count,
     }
     name = s.name
+
+    # Clean up orphaned match scores for this scholarship before deleting it.
+    from app.models.match_score import MatchScore
+    await db.execute(delete(MatchScore).where(MatchScore.scholarship_id == sch_id))
 
     await db.delete(s)
     await db.commit()
@@ -461,3 +514,295 @@ async def resolve_all_eligibility(
     """
     stats = await resolve_all_scholarships()
     return stats
+
+
+# ── Per-degree-level documents CRUD ────────────────────────────────
+
+
+@router.get("/scholarships/{sch_id}/degree-docs")
+async def list_degree_docs(
+    sch_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """List all per-degree-level document rows for a scholarship."""
+    from app.models.scholarship_degree_document import ScholarshipDegreeDocument
+    from app.schemas.admin import DegreeDocResponse
+    rows = (
+        await db.execute(
+            select(ScholarshipDegreeDocument)
+            .where(ScholarshipDegreeDocument.scholarship_id == sch_id)
+            .order_by(ScholarshipDegreeDocument.degree_level)
+        )
+    ).scalars().all()
+    return [DegreeDocResponse.model_validate(r).model_dump(mode="json") for r in rows]
+
+
+@router.post("/scholarships/{sch_id}/degree-docs")
+async def create_degree_doc(
+    sch_id: UUID,
+    body: DegreeDocCreate,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Create a per-degree-level document row for a scholarship.
+
+    Auto-derives defaults for fields left at their model defaults.
+    """
+    from app.models.scholarship_degree_document import (
+        ScholarshipDegreeDocument, auto_derive_for_level,
+    )
+
+    # Verify scholarship exists
+    sch = (await db.execute(select(Scholarship).where(Scholarship.id == sch_id))).scalar_one_or_none()
+    if not sch:
+        raise HTTPException(status_code=404, detail={"code": "scholarship_not_found"})
+
+    # Check for duplicate degree_level
+    existing = (
+        await db.execute(
+            select(ScholarshipDegreeDocument).where(
+                ScholarshipDegreeDocument.scholarship_id == sch_id,
+                ScholarshipDegreeDocument.degree_level == body.degree_level,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "degree_level_exists", "user_message": f"Document config for '{body.degree_level}' already exists."},
+        )
+
+    data = body.model_dump()
+    data["scholarship_id"] = sch_id
+
+    # Auto-derive defaults for None fields
+    defaults = auto_derive_for_level(body.degree_level)
+    for key, default_val in defaults.items():
+        if data.get(key) is None:
+            data[key] = default_val
+
+    doc = ScholarshipDegreeDocument(**data)
+    db.add(doc)
+    await db.commit()
+    await db.refresh(doc)
+
+    await log_admin_action(
+        db, admin_id=admin.id, admin_email=admin.email,
+        action="degree_doc.create", target_type="scholarship",
+        target_id=str(sch_id),
+        payload={"degree_level": body.degree_level},
+    )
+    await db.commit()
+
+    return DegreeDocResponse.model_validate(doc).model_dump(mode="json")
+
+
+@router.patch("/scholarships/{sch_id}/degree-docs/{doc_id}")
+async def update_degree_doc(
+    sch_id: UUID,
+    doc_id: UUID,
+    body: DegreeDocUpdate,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Update a per-degree-level document row."""
+    from app.models.scholarship_degree_document import ScholarshipDegreeDocument
+
+    doc = (
+        await db.execute(
+            select(ScholarshipDegreeDocument).where(
+                ScholarshipDegreeDocument.id == doc_id,
+                ScholarshipDegreeDocument.scholarship_id == sch_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail={"code": "degree_doc_not_found"})
+
+    updates = body.model_dump(exclude_unset=True)
+    for k, v in updates.items():
+        setattr(doc, k, v)
+
+    await db.commit()
+    await db.refresh(doc)
+
+    await log_admin_action(
+        db, admin_id=admin.id, admin_email=admin.email,
+        action="degree_doc.update", target_type="scholarship",
+        target_id=str(sch_id),
+        payload={"doc_id": str(doc_id), "fields": list(updates.keys())},
+    )
+    await db.commit()
+
+    return DegreeDocResponse.model_validate(doc).model_dump(mode="json")
+
+
+@router.delete("/scholarships/{sch_id}/degree-docs/{doc_id}")
+async def delete_degree_doc(
+    sch_id: UUID,
+    doc_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Delete a per-degree-level document row."""
+    from app.models.scholarship_degree_document import ScholarshipDegreeDocument
+
+    doc = (
+        await db.execute(
+            select(ScholarshipDegreeDocument).where(
+                ScholarshipDegreeDocument.id == doc_id,
+                ScholarshipDegreeDocument.scholarship_id == sch_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail={"code": "degree_doc_not_found"})
+
+    level = doc.degree_level
+    await db.delete(doc)
+    await db.commit()
+
+    await log_admin_action(
+        db, admin_id=admin.id, admin_email=admin.email,
+        action="degree_doc.delete", target_type="scholarship",
+        target_id=str(sch_id),
+        payload={"degree_level": level},
+    )
+    await db.commit()
+
+    return {"deleted": True, "degree_level": level}
+
+
+# ── Custom/flexible documents CRUD ─────────────────────────────────
+
+
+@router.get("/scholarships/{sch_id}/custom-docs")
+async def list_custom_docs(
+    sch_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """List all custom document requirements for a scholarship."""
+    from app.models.scholarship_custom_document import ScholarshipCustomDocument
+    rows = (
+        await db.execute(
+            select(ScholarshipCustomDocument)
+            .where(ScholarshipCustomDocument.scholarship_id == sch_id)
+            .order_by(ScholarshipCustomDocument.position, ScholarshipCustomDocument.name)
+        )
+    ).scalars().all()
+    return [CustomDocResponse.model_validate(r).model_dump(mode="json") for r in rows]
+
+
+@router.post("/scholarships/{sch_id}/custom-docs")
+async def create_custom_doc(
+    sch_id: UUID,
+    body: CustomDocCreate,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Add a custom document requirement to a scholarship."""
+    from app.models.scholarship_custom_document import ScholarshipCustomDocument
+
+    sch = (await db.execute(select(Scholarship).where(Scholarship.id == sch_id))).scalar_one_or_none()
+    if not sch:
+        raise HTTPException(status_code=404, detail={"code": "scholarship_not_found"})
+
+    doc = ScholarshipCustomDocument(
+        scholarship_id=sch_id,
+        name=body.name,
+        description=body.description,
+        required=body.required,
+        degree_level=body.degree_level,
+        position=body.position,
+    )
+    db.add(doc)
+    await db.commit()
+    await db.refresh(doc)
+
+    await log_admin_action(
+        db, admin_id=admin.id, admin_email=admin.email,
+        action="custom_doc.create", target_type="scholarship",
+        target_id=str(sch_id),
+        payload={"name": body.name, "degree_level": body.degree_level},
+    )
+    await db.commit()
+
+    return CustomDocResponse.model_validate(doc).model_dump(mode="json")
+
+
+@router.patch("/scholarships/{sch_id}/custom-docs/{doc_id}")
+async def update_custom_doc(
+    sch_id: UUID,
+    doc_id: UUID,
+    body: CustomDocUpdate,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Update a custom document requirement."""
+    from app.models.scholarship_custom_document import ScholarshipCustomDocument
+
+    doc = (
+        await db.execute(
+            select(ScholarshipCustomDocument).where(
+                ScholarshipCustomDocument.id == doc_id,
+                ScholarshipCustomDocument.scholarship_id == sch_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail={"code": "custom_doc_not_found"})
+
+    updates = body.model_dump(exclude_unset=True)
+    for k, v in updates.items():
+        setattr(doc, k, v)
+
+    await db.commit()
+    await db.refresh(doc)
+
+    await log_admin_action(
+        db, admin_id=admin.id, admin_email=admin.email,
+        action="custom_doc.update", target_type="scholarship",
+        target_id=str(sch_id),
+        payload={"doc_id": str(doc_id), "fields": list(updates.keys())},
+    )
+    await db.commit()
+
+    return CustomDocResponse.model_validate(doc).model_dump(mode="json")
+
+
+@router.delete("/scholarships/{sch_id}/custom-docs/{doc_id}")
+async def delete_custom_doc(
+    sch_id: UUID,
+    doc_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Delete a custom document requirement."""
+    from app.models.scholarship_custom_document import ScholarshipCustomDocument
+
+    doc = (
+        await db.execute(
+            select(ScholarshipCustomDocument).where(
+                ScholarshipCustomDocument.id == doc_id,
+                ScholarshipCustomDocument.scholarship_id == sch_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail={"code": "custom_doc_not_found"})
+
+    name = doc.name
+    await db.delete(doc)
+    await db.commit()
+
+    await log_admin_action(
+        db, admin_id=admin.id, admin_email=admin.email,
+        action="custom_doc.delete", target_type="scholarship",
+        target_id=str(sch_id),
+        payload={"name": name},
+    )
+    await db.commit()
+
+    return {"deleted": True, "name": name}

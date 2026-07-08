@@ -94,6 +94,41 @@ export interface Scholarship {
   writing_sample_required: boolean;
   standardized_test: StandardizedTest;
   additional_required_documents: string | null;
+  // Per-degree-level document overrides. When present, the detail page
+  // shows tabs per degree level instead of the flat document list.
+  degree_documents?: DegreeDocument[];
+  // Custom/flexible document requirements added by admin
+  custom_documents?: CustomDocument[];
+}
+
+export interface CustomDocument {
+  id: string;
+  scholarship_id: string;
+  degree_level: string | null;
+  name: string;
+  description: string | null;
+  required: boolean;
+  position: number;
+}
+
+export interface DegreeDocument {
+  id: string;
+  scholarship_id: string;
+  degree_level: string;
+  req_transcripts: boolean;
+  req_cv_resume: boolean;
+  req_sop_motivation_letter: boolean;
+  req_recommendation_letters: boolean;
+  req_english_test: boolean;
+  req_passport_or_id: boolean;
+  req_financial_proof: boolean;
+  req_photo: boolean;
+  previous_degree_required: string;
+  recommendation_letters_count: number;
+  research_proposal_required: boolean;
+  writing_sample_required: boolean;
+  standardized_test: string;
+  additional_required_documents: string | null;
 }
 
 export interface ScholarshipListResponse {

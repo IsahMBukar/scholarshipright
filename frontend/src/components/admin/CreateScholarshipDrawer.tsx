@@ -29,6 +29,8 @@ import { Plus, AlertTriangle, Info, ExternalLink, Link2 } from 'lucide-react';
 import Drawer from './ui/Drawer';
 import Button from './ui/Button';
 import type { AdminScholarshipCreate } from '@/lib/admin/types';
+import DegreeDocumentsEditor from './DegreeDocumentsEditor';
+import CustomDocumentsEditor from './CustomDocumentsEditor';
 import {
   FUNDING_OPTIONS,
   ENGLISH_TEST_OPTIONS,
@@ -598,6 +600,16 @@ export default function CreateScholarshipDrawer({
           />
         </div>
       </div>
+
+      {/* ── Per-Level Document Overrides ──────────────────────── */}
+      <DegreeDocumentsEditor
+        degreeLevels={form.degree_levels || []}
+      />
+
+      {/* ── Custom Document Requirements ──────────────────────── */}
+      <CustomDocumentsEditor
+        degreeLevels={form.degree_levels || []}
+      />
 
       {/* ── Dates ─────────────────────────────────────────────── */}
       <SectionHeader>Dates</SectionHeader>

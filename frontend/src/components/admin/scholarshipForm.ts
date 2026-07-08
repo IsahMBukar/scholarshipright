@@ -141,6 +141,7 @@ export const PREVIOUS_DEGREE_OPTIONS: ReadonlyArray<{ value: PreviousDegree | 'a
   { value: 'high_school_diploma',   label: 'High school diploma (for Bachelor scholarships)' },
   { value: 'bachelor_degree',       label: "Bachelor's degree (for Master's scholarships)" },
   { value: 'master_degree',         label: "Master's degree (for PhD/Doctoral scholarships)" },
+  { value: 'phd_degree',            label: "PhD degree (for Postdoc scholarships)" },
   { value: 'none',                  label: 'No previous degree required' },
 ];
 
@@ -188,6 +189,7 @@ export const DEGREE_LEVEL_OPTIONS: ReadonlyArray<{ value: string; label: string 
   { value: 'bachelor',    label: 'Bachelor / Undergraduate' },
   { value: 'master',      label: "Master's (MSc, MA, MBA, MPhil)" },
   { value: 'phd',         label: 'PhD / Doctoral' },
+  { value: 'direct_phd',  label: 'Direct PhD (BSc entry)' },
   { value: 'postdoc',     label: 'Postdoctoral' },
   { value: 'certificate', label: 'Certificate' },
   { value: 'diploma',     label: 'Diploma' },

@@ -13,6 +13,7 @@ from app.db.session import get_db
 from app.models.scholarship import Scholarship
 from app.models.match_score import MatchScore
 from app.schemas.scholarship import ScholarshipResponse, ScholarshipListResponse
+from app.schemas.admin import DegreeDocResponse
 from app.services.document_defaults import apply_auto_defaults
 from app.api.users import COOKIE_NAME
 from app.api.auth import decode_token
@@ -350,6 +351,37 @@ async def get_scholarship(slug: str, request: Request, db: AsyncSession = Depend
     # Materialise the 5 "cement + flexible" fields from degree_levels
     apply_auto_defaults(scholarship)
     response = ScholarshipResponse.model_validate(scholarship)
+
+    # Attach per-degree-level document overrides if any exist
+    from app.models.scholarship_degree_document import ScholarshipDegreeDocument
+    degree_docs = (
+        await db.execute(
+            select(ScholarshipDegreeDocument)
+            .where(ScholarshipDegreeDocument.scholarship_id == scholarship.id)
+            .order_by(ScholarshipDegreeDocument.degree_level)
+        )
+    ).scalars().all()
+    if degree_docs:
+        response.degree_documents = [
+            DegreeDocResponse.model_validate(d).model_dump(mode="json")
+            for d in degree_docs
+        ]
+
+    # Attach custom document requirements
+    from app.models.scholarship_custom_document import ScholarshipCustomDocument
+    from app.schemas.admin import CustomDocResponse
+    custom_docs = (
+        await db.execute(
+            select(ScholarshipCustomDocument)
+            .where(ScholarshipCustomDocument.scholarship_id == scholarship.id)
+            .order_by(ScholarshipCustomDocument.position, ScholarshipCustomDocument.name)
+        )
+    ).scalars().all()
+    if custom_docs:
+        response.custom_documents = [
+            CustomDocResponse.model_validate(d).model_dump(mode="json")
+            for d in custom_docs
+        ]
 
     # Cache the anonymous detail
     if not user_id:

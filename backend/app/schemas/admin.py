@@ -188,6 +188,10 @@ class AdminScholarshipResponse(BaseModel):
     application_count: int = 0
     created_at: datetime
     updated_at: datetime
+    # Per-degree-level document overrides (loaded separately)
+    degree_documents: Optional[List[dict]] = None
+    # Custom/flexible document requirements added by admin
+    custom_documents: Optional[List[dict]] = None
 
     class Config:
         from_attributes = True
@@ -376,6 +380,96 @@ class AdminInviteListEntry(BaseModel):
     expires_at: datetime
     accepted_at: Optional[datetime] = None
     revoked_at: Optional[datetime] = None
+
+
+# ── Per-degree-level documents ─────────────────────────────────────
+
+
+class DegreeDocBase(BaseModel):
+    """Shared fields for degree-level document rows."""
+    degree_level: str = Field(..., description="'bachelor' | 'master' | 'phd'")
+    req_transcripts: bool = True
+    req_cv_resume: bool = True
+    req_sop_motivation_letter: bool = True
+    req_recommendation_letters: bool = True
+    req_english_test: bool = True
+    req_passport_or_id: bool = True
+    req_financial_proof: bool = False
+    req_photo: bool = False
+    previous_degree_required: Optional[str] = None
+    recommendation_letters_count: Optional[int] = None
+    research_proposal_required: Optional[bool] = None
+    writing_sample_required: Optional[bool] = None
+    standardized_test: Optional[str] = None
+    additional_required_documents: Optional[str] = None
+
+
+class DegreeDocCreate(DegreeDocBase):
+    """Create a per-degree-level document row for a scholarship."""
+    pass
+
+
+class DegreeDocUpdate(BaseModel):
+    """Partial update — only send fields you want to change."""
+    req_transcripts: Optional[bool] = None
+    req_cv_resume: Optional[bool] = None
+    req_sop_motivation_letter: Optional[bool] = None
+    req_recommendation_letters: Optional[bool] = None
+    req_english_test: Optional[bool] = None
+    req_passport_or_id: Optional[bool] = None
+    req_financial_proof: Optional[bool] = None
+    req_photo: Optional[bool] = None
+    previous_degree_required: Optional[str] = None
+    recommendation_letters_count: Optional[int] = None
+    research_proposal_required: Optional[bool] = None
+    writing_sample_required: Optional[bool] = None
+    standardized_test: Optional[str] = None
+    additional_required_documents: Optional[str] = None
+
+
+class DegreeDocResponse(DegreeDocBase):
+    """Full degree-level document row returned by the API."""
+    id: UUID
+    scholarship_id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ── Custom/flexible documents ─────────────────────────────────────
+
+
+class CustomDocCreate(BaseModel):
+    """Create a custom document requirement for a scholarship."""
+    name: str = Field(..., max_length=256, description="Document name, e.g. 'Portfolio', 'Video essay'")
+    description: Optional[str] = Field(None, description="What to submit, e.g. '5-10 pieces of original work'")
+    required: bool = True
+    degree_level: Optional[str] = Field(None, description="If set, only for this level. Null = all levels.")
+    position: int = Field(0, description="Display order (lower = higher)")
+
+
+class CustomDocUpdate(BaseModel):
+    """Partial update for a custom document."""
+    name: Optional[str] = Field(None, max_length=256)
+    description: Optional[str] = None
+    required: Optional[bool] = None
+    degree_level: Optional[str] = None
+    position: Optional[int] = None
+
+
+class CustomDocResponse(BaseModel):
+    """Custom document returned by the API."""
+    id: UUID
+    scholarship_id: UUID
+    degree_level: Optional[str] = None
+    name: str
+    description: Optional[str] = None
+    required: bool
+    position: int
+    created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True

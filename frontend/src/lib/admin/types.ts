@@ -87,6 +87,7 @@ export type PreviousDegree =
   | 'high_school_diploma'
   | 'bachelor_degree'
   | 'master_degree'
+  | 'phd_degree'
   | 'none';
 
 // Values for the standardized test field. Keep in sync with
@@ -156,6 +157,36 @@ export interface AdminScholarship {
   application_count: number;
   created_at: string;
   updated_at: string;
+  // Per-degree-level document overrides
+  degree_documents?: Array<{
+    id: string;
+    scholarship_id: string;
+    degree_level: string;
+    req_transcripts: boolean;
+    req_cv_resume: boolean;
+    req_sop_motivation_letter: boolean;
+    req_recommendation_letters: boolean;
+    req_english_test: boolean;
+    req_passport_or_id: boolean;
+    req_financial_proof: boolean;
+    req_photo: boolean;
+    previous_degree_required: string;
+    recommendation_letters_count: number;
+    research_proposal_required: boolean;
+    writing_sample_required: boolean;
+    standardized_test: string;
+    additional_required_documents: string | null;
+  }>;
+  // Custom/flexible document requirements
+  custom_documents?: Array<{
+    id: string;
+    scholarship_id: string;
+    degree_level: string | null;
+    name: string;
+    description: string | null;
+    required: boolean;
+    position: number;
+  }>;
 }
 
 export type ScholarshipsListResponse = PaginatedResponse<AdminScholarship>;

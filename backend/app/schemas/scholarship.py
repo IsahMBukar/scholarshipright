@@ -71,6 +71,11 @@ class ScholarshipResponse(ScholarshipBase):
     updated_at: datetime
     match_score: Optional[float] = None  # Added when user is authenticated
     match_breakdown: Optional[dict] = None
+    # Per-degree-level document overrides. When present, the detail page
+    # should show tabs per degree level instead of the flat document list.
+    degree_documents: Optional[List[dict]] = None
+    # Custom/flexible document requirements added by admin
+    custom_documents: Optional[List[dict]] = None
 
     class Config:
         from_attributes = True

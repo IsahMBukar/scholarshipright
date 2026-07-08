@@ -28,6 +28,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db, AsyncSessionLocal
 from app.models.scholarship import Scholarship
+from app.models.scholarship_degree_document import ScholarshipDegreeDocument, auto_derive_for_level
+from app.models.scholarship_custom_document import ScholarshipCustomDocument
 from app.models.pending_scholarship import PendingScholarship
 from app.models.blog import BlogPost, BlogScholarshipTag, extract_scholarship_slugs
 from app.models.user import User
@@ -298,7 +300,7 @@ async def _call_tool(
     ua = request.headers.get("user-agent", "unknown")
 
     # Scope check: write operations require appropriate write scope
-    _sch_write_tools = {"add_scholarship", "edit_scholarship"}
+    _sch_write_tools = {"add_scholarship", "edit_scholarship", "set_degree_documents", "add_custom_document", "remove_custom_document"}
     _blog_write_tools = {"create_blog_post", "edit_blog_post"}
 
     if name in _sch_write_tools and not auth.has_scope("scholarships:write"):
@@ -343,6 +345,14 @@ async def _call_tool(
             result = await _handle_blog_edit(args, auth)
         elif name == "list_blog_categories":
             result = await _handle_blog_categories()
+        elif name == "get_scholarship_documents":
+            result = await _handle_get_documents(args)
+        elif name == "set_degree_documents":
+            result = await _handle_set_degree_documents(args)
+        elif name == "add_custom_document":
+            result = await _handle_add_custom_document(args)
+        elif name == "remove_custom_document":
+            result = await _handle_remove_custom_document(args)
         else:
             result = {
                 "content": [{"type": "text", "text": f"Unknown tool: {name}"}],
@@ -579,7 +589,11 @@ async def _handle_edit(args: dict[str, Any]) -> dict:
             "updated_fields": changed_fields,
         }
 
-        return {"content": [{"type": "text", "text": json.dumps(data, indent=2, default=str)}]}
+    # Trigger incremental recompute: this scholarship against all users.
+    from app.services.match_auto import trigger_scholarship_recompute
+    trigger_scholarship_recompute(sch.id)
+
+    return {"content": [{"type": "text", "text": json.dumps(data, indent=2, default=str)}]}
 
 
 # ── Blog tool handlers ────────────────────────────────────────────
@@ -618,6 +632,133 @@ async def _sync_blog_scholarship_tags(db: AsyncSession, post_id, body: str) -> N
                 position_hint=i,
             )
             db.add(tag)
+
+
+# ── Document handlers ─────────────────────────────────────────────
+
+async def _resolve_sch(id_or_slug: str, db):
+    """Resolve scholarship by slug or UUID."""
+    result = await db.execute(select(Scholarship).where(Scholarship.slug == id_or_slug))
+    sch = result.scalar_one_or_none()
+    if not sch:
+        from uuid import UUID
+        try:
+            result = await db.execute(select(Scholarship).where(Scholarship.id == UUID(id_or_slug)))
+            sch = result.scalar_one_or_none()
+        except (ValueError, AttributeError):
+            pass
+    return sch
+
+
+async def _handle_get_documents(args: dict[str, Any]) -> dict:
+    id_or_slug = args.get("id_or_slug", "")
+    async with AsyncSessionLocal() as db:
+        sch = await _resolve_sch(id_or_slug, db)
+        if not sch:
+            return {"content": [{"type": "text", "text": f"Not found: {id_or_slug}"}], "isError": True}
+
+        degree_docs = (await db.execute(
+            select(ScholarshipDegreeDocument).where(ScholarshipDegreeDocument.scholarship_id == sch.id).order_by(ScholarshipDegreeDocument.degree_level)
+        )).scalars().all()
+        custom_docs = (await db.execute(
+            select(ScholarshipCustomDocument).where(ScholarshipCustomDocument.scholarship_id == sch.id).order_by(ScholarshipCustomDocument.position)
+        )).scalars().all()
+
+        result = {"scholarship": sch.name, "slug": sch.slug, "degree_levels": sch.degree_levels or []}
+        if degree_docs:
+            result["degree_documents"] = [{
+                "degree_level": d.degree_level, "previous_degree_required": d.previous_degree_required,
+                "recommendation_letters_count": d.recommendation_letters_count,
+                "research_proposal_required": d.research_proposal_required,
+                "writing_sample_required": d.writing_sample_required, "standardized_test": d.standardized_test,
+                "req_transcripts": d.req_transcripts, "req_cv_resume": d.req_cv_resume,
+                "req_sop_motivation_letter": d.req_sop_motivation_letter,
+                "req_recommendation_letters": d.req_recommendation_letters,
+                "req_english_test": d.req_english_test, "req_passport_or_id": d.req_passport_or_id,
+            } for d in degree_docs]
+        else:
+            result["degree_documents"] = "No per-level overrides."
+        if custom_docs:
+            result["custom_documents"] = [{"id": str(d.id), "name": d.name, "description": d.description, "required": d.required, "degree_level": d.degree_level} for d in custom_docs]
+        else:
+            result["custom_documents"] = "No custom documents."
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2, default=str)}]}
+
+
+async def _handle_set_degree_documents(args: dict[str, Any]) -> dict:
+    id_or_slug = args.get("id_or_slug", "")
+    documents = args.get("documents", [])
+    if not documents:
+        return {"content": [{"type": "text", "text": "documents array required."}], "isError": True}
+    async with AsyncSessionLocal() as db:
+        sch = await _resolve_sch(id_or_slug, db)
+        if not sch:
+            return {"content": [{"type": "text", "text": f"Not found: {id_or_slug}"}], "isError": True}
+        levels = [d["degree_level"] for d in documents if "degree_level" in d]
+        if levels:
+            await db.execute(sa_text("DELETE FROM scholarship_degree_documents WHERE scholarship_id = :sid AND degree_level = ANY(:levels)"), {"sid": str(sch.id), "levels": levels})
+        created = []
+        for dd in documents:
+            level = dd.get("degree_level")
+            if not level: continue
+            defaults = auto_derive_for_level(level)
+            doc = ScholarshipDegreeDocument(
+                scholarship_id=sch.id, degree_level=level,
+                req_transcripts=dd.get("req_transcripts", True), req_cv_resume=dd.get("req_cv_resume", True),
+                req_sop_motivation_letter=dd.get("req_sop_motivation_letter", True),
+                req_recommendation_letters=dd.get("req_recommendation_letters", True),
+                req_english_test=dd.get("req_english_test", True), req_passport_or_id=dd.get("req_passport_or_id", True),
+                req_financial_proof=dd.get("req_financial_proof", False), req_photo=dd.get("req_photo", False),
+                previous_degree_required=dd.get("previous_degree_required") or defaults["previous_degree_required"],
+                recommendation_letters_count=dd.get("recommendation_letters_count") or defaults["recommendation_letters_count"],
+                research_proposal_required=dd.get("research_proposal_required") if "research_proposal_required" in dd else defaults["research_proposal_required"],
+                writing_sample_required=dd.get("writing_sample_required") if "writing_sample_required" in dd else defaults["writing_sample_required"],
+                standardized_test=dd.get("standardized_test") or defaults["standardized_test"],
+                additional_required_documents=dd.get("additional_required_documents"),
+            )
+            db.add(doc)
+            created.append(level)
+        await db.commit()
+        return {"content": [{"type": "text", "text": f"Set degree documents for {sch.name}: {', '.join(created)}"}]}
+
+
+async def _handle_add_custom_document(args: dict[str, Any]) -> dict:
+    id_or_slug = args.get("id_or_slug", "")
+    name = args.get("name", "").strip()
+    if not name:
+        return {"content": [{"type": "text", "text": "name required."}], "isError": True}
+    async with AsyncSessionLocal() as db:
+        sch = await _resolve_sch(id_or_slug, db)
+        if not sch:
+            return {"content": [{"type": "text", "text": f"Not found: {id_or_slug}"}], "isError": True}
+        max_pos = (await db.execute(select(func.max(ScholarshipCustomDocument.position)).where(ScholarshipCustomDocument.scholarship_id == sch.id))).scalar() or 0
+        doc = ScholarshipCustomDocument(scholarship_id=sch.id, name=name, description=args.get("description"), required=args.get("required", True), degree_level=args.get("degree_level"), position=max_pos + 1)
+        db.add(doc)
+        await db.commit()
+        await db.refresh(doc)
+        return {"content": [{"type": "text", "text": json.dumps({"action": "created", "id": str(doc.id), "name": doc.name, "scholarship": sch.name}, indent=2)}]}
+
+
+async def _handle_remove_custom_document(args: dict[str, Any]) -> dict:
+    id_or_slug = args.get("id_or_slug", "")
+    doc_id = args.get("document_id", "")
+    if not doc_id:
+        return {"content": [{"type": "text", "text": "document_id required."}], "isError": True}
+    from uuid import UUID
+    async with AsyncSessionLocal() as db:
+        sch = await _resolve_sch(id_or_slug, db)
+        if not sch:
+            return {"content": [{"type": "text", "text": f"Not found: {id_or_slug}"}], "isError": True}
+        try:
+            doc = (await db.execute(select(ScholarshipCustomDocument).where(ScholarshipCustomDocument.id == UUID(doc_id), ScholarshipCustomDocument.scholarship_id == sch.id))).scalar_one_or_none()
+        except ValueError:
+            return {"content": [{"type": "text", "text": "Invalid document_id."}], "isError": True}
+        if not doc:
+            return {"content": [{"type": "text", "text": f"Document not found: {doc_id}"}], "isError": True}
+        name = doc.name
+        await db.delete(doc)
+        await db.commit()
+        return {"content": [{"type": "text", "text": f"Removed '{name}' from {sch.name}"}]}
 
 
 async def _handle_blog_create(args: dict[str, Any], auth: McpAuthRecord) -> dict:

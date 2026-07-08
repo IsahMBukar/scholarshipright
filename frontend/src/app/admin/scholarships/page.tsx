@@ -48,6 +48,8 @@ import type { AdminScholarshipCreate, AdminScholarshipPatch } from '@/lib/admin/
 import { AdminApiError } from '@/lib/admin/client';
 import SearchInput from '@/components/admin/ui/SearchInput';
 import type { AdminScholarship } from '@/lib/admin/types';
+import DegreeDocumentsEditor from '@/components/admin/DegreeDocumentsEditor';
+import CustomDocumentsEditor from '@/components/admin/CustomDocumentsEditor';
 
 // Page-level filter values for the funding_type dropdown above the table.
 // Note: these are the values admins can FILTER by, not the values in the
@@ -932,6 +934,24 @@ function ScholarshipDrawer({
               />
             </div>
           </div>
+
+          {/* ── Per-Level Document Overrides ────────────────────── */}
+          {scholarship && (
+            <DegreeDocumentsEditor
+              degreeLevels={scholarship.degree_levels || []}
+              scholarshipId={scholarship.id}
+              initialDocs={(scholarship as any).degree_documents}
+            />
+          )}
+
+          {/* ── Custom Document Requirements ────────────────────── */}
+          {scholarship && (
+            <CustomDocumentsEditor
+              scholarshipId={scholarship.id}
+              initialDocs={(scholarship as any).custom_documents}
+              degreeLevels={scholarship.degree_levels || []}
+            />
+          )}
 
           {/* ── Dates ────────────────────────────────────────── */}
           <SectionHeader>Dates</SectionHeader>

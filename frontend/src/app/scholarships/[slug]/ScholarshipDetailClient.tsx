@@ -8,7 +8,155 @@ import AppLayout from '@/components/AppLayout';
 import { ScholarshipDetailSkeleton } from '@/components/Skeletons';
 import { useAuth } from '@/hooks/useAuth';
 import { fetchScholarship, saveScholarship, removeSavedScholarship, fetchSavedScholarships, updateSavedScholarship, incrementScholarshipView } from '@/services/api';
-import type { Scholarship, MatchBreakdown } from '@/services/api';
+import type { Scholarship, MatchBreakdown, DegreeDocument, CustomDocument } from '@/services/api';
+
+// ── Helper: build doc list from a degree-level document row ────────
+type Doc = { name: string; note?: string; required: boolean };
+
+function buildDocsFromDegreeDoc(
+  dd: DegreeDocument,
+  acceptedEnglishTests?: string[],
+): Doc[] {
+  const docs: Doc[] = [];
+  docs.push({ name: 'Completed online application form', required: true });
+
+  if (dd.req_transcripts) docs.push({ name: 'Academic transcripts', note: 'Official, sealed copies', required: true });
+  if (dd.req_cv_resume) docs.push({ name: 'CV / Resume', required: true });
+  if (dd.req_sop_motivation_letter) docs.push({ name: 'Statement of Purpose / Motivation Letter', required: true });
+  if (dd.req_recommendation_letters) {
+    const n = dd.recommendation_letters_count;
+    const note = n === 3 ? 'Typically 3 references' : n === 2 ? 'Typically 2 academic references' : `${n} references required`;
+    docs.push({ name: 'Letters of Recommendation', note, required: true });
+  }
+  if (dd.req_english_test && acceptedEnglishTests?.length) {
+    docs.push({ name: 'English proficiency test score', note: `Accepted: ${acceptedEnglishTests.join(', ')}`, required: true });
+  }
+  if (dd.req_passport_or_id) docs.push({ name: 'Passport or national ID copy', note: 'Valid for at least 6 months', required: true });
+  if (dd.req_financial_proof) docs.push({ name: 'Financial statement / bank letter', note: 'Proof of funds or sponsorship', required: true });
+
+  const cement = dd.previous_degree_required;
+  if (cement === 'high_school_diploma') docs.push({ name: 'High school diploma', required: true, note: 'Final-year students: expected graduation letter accepted' });
+  else if (cement === 'bachelor_degree') docs.push({ name: "Bachelor's degree certificate", required: true, note: 'Final-year students: expected graduation letter accepted' });
+  else if (cement === 'master_degree') docs.push({ name: "Master's degree certificate", required: true, note: 'Final-year students: expected graduation letter accepted' });
+  else if (cement === 'phd_degree') docs.push({ name: "PhD degree certificate", required: true });
+
+  if (dd.research_proposal_required) docs.push({ name: 'Research proposal', note: '2-5 page outline of intended research', required: true });
+  if (dd.writing_sample_required) docs.push({ name: 'Writing sample', note: 'Published papers or academic writing', required: true });
+
+  const test = dd.standardized_test;
+  if (test === 'sat_act') docs.push({ name: 'SAT or ACT scores', required: true });
+  else if (test === 'gre_gmat') docs.push({ name: 'GRE or GMAT scores', required: true });
+  else if (test === 'gre') docs.push({ name: 'GRE scores', required: true });
+  else if (test === 'gmat') docs.push({ name: 'GMAT scores', required: true });
+
+  if (dd.additional_required_documents) {
+    const extra = dd.additional_required_documents.split(/[\n•·|]/).map((s) => s.trim()).filter((s) => s.length > 0);
+    for (const item of extra) docs.push({ name: item, required: true });
+  }
+
+  if (dd.req_photo) docs.push({ name: 'Passport-size photo', required: true });
+  return docs;
+}
+
+// ── Helper: render a doc list ──────────────────────────────────────
+function DocList({ docs }: { docs: Doc[] }) {
+  return (
+    <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
+      {docs.map((doc, i) => (
+        <li key={`${doc.name}-${i}`} className="flex items-start gap-2.5">
+          <span className="material-symbols-outlined text-[20px] text-primary mt-0.5 flex-shrink-0">
+            {doc.required ? 'check_box' : 'circle'}
+          </span>
+          <div className="min-w-0">
+            <p className={`text-[14px] leading-snug ${doc.required ? 'text-text-primary font-medium' : 'text-text-secondary'}`}>
+              {doc.name}
+              {!doc.required && (
+                <span className="ml-1.5 text-[10px] uppercase tracking-wider font-bold text-text-secondary/70">Optional</span>
+              )}
+            </p>
+            {doc.note && <p className="text-[12px] text-text-secondary mt-0.5">{doc.note}</p>}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// ── Tabbed per-degree-level documents ──────────────────────────────
+function DegreeLevelDocs({
+  degreeDocs,
+  acceptedEnglishTests,
+}: {
+  degreeDocs: DegreeDocument[];
+  acceptedEnglishTests?: string[];
+}) {
+  const [activeTab, setActiveTab] = useState(0);
+  const current = degreeDocs[activeTab];
+  const docs = current ? buildDocsFromDegreeDoc(current, acceptedEnglishTests) : [];
+
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-1 border-b border-gray-200">
+        {degreeDocs.map((dd, i) => (
+          <button
+            key={dd.degree_level}
+            type="button"
+            onClick={() => setActiveTab(i)}
+            className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${
+              activeTab === i
+                ? 'text-primary border-b-2 border-primary -mb-[2px]'
+                : 'text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            {dd.degree_level}
+          </button>
+        ))}
+      </div>
+      <DocList docs={docs} />
+    </div>
+  );
+}
+
+// ── Flat doc list (legacy fallback — no per-level overrides) ───────
+function FlatDocList({ scholarship }: { scholarship: Scholarship }) {
+  const docs: Doc[] = [];
+  docs.push({ name: 'Completed online application form', required: true });
+  if (scholarship.req_transcripts) docs.push({ name: 'Academic transcripts', note: 'Official, sealed copies', required: true });
+  if (scholarship.req_cv_resume) docs.push({ name: 'CV / Resume', required: true });
+  if (scholarship.req_sop_motivation_letter) docs.push({ name: 'Statement of Purpose / Motivation Letter', required: true });
+  if (scholarship.req_recommendation_letters) {
+    const n = scholarship.recommendation_letters_count;
+    const note = n === 3 ? 'Typically 3 references (common for PhD)' : n === 2 ? 'Typically 2 academic references' : `${n} references required`;
+    docs.push({ name: 'Letters of Recommendation', note, required: true });
+  }
+  if (scholarship.req_english_test && scholarship.accepted_english_tests?.length) {
+    docs.push({ name: 'English proficiency test score', note: `Accepted: ${scholarship.accepted_english_tests.join(', ')}`, required: true });
+  }
+  if (scholarship.req_passport_or_id) docs.push({ name: 'Passport or national ID copy', note: 'Valid for at least 6 months', required: true });
+  if (scholarship.req_financial_proof) docs.push({ name: 'Financial statement / bank letter', note: 'Proof of funds or sponsorship', required: true });
+
+  const cement = scholarship.previous_degree_required;
+  if (cement === 'high_school_diploma') docs.push({ name: 'High school diploma', required: true, note: 'Final-year students: expected graduation letter accepted' });
+  else if (cement === 'bachelor_degree') docs.push({ name: "Bachelor's degree certificate", required: true, note: 'Final-year students: expected graduation letter accepted' });
+  else if (cement === 'master_degree') docs.push({ name: "Master's degree certificate", required: true, note: 'Final-year students: expected graduation letter accepted' });
+  else if (cement === 'phd_degree') docs.push({ name: "PhD degree certificate", required: true });
+
+  if (scholarship.research_proposal_required) docs.push({ name: 'Research proposal', note: '2-5 page outline of intended research', required: true });
+  if (scholarship.writing_sample_required) docs.push({ name: 'Writing sample', note: 'Published papers or academic writing', required: true });
+  const test = scholarship.standardized_test;
+  if (test === 'sat_act') docs.push({ name: 'SAT or ACT scores', required: true });
+  else if (test === 'gre_gmat') docs.push({ name: 'GRE or GMAT scores', required: true });
+  else if (test === 'gre') docs.push({ name: 'GRE scores', required: true });
+  else if (test === 'gmat') docs.push({ name: 'GMAT scores', required: true });
+
+  if (scholarship.additional_required_documents) {
+    const extra = scholarship.additional_required_documents.split(/[\n•·|]/).map((s) => s.trim()).filter((s) => s.length > 0);
+    for (const item of extra) docs.push({ name: item, required: true });
+  }
+  if (scholarship.req_photo) docs.push({ name: 'Passport-size photo', required: true });
+
+  return <DocList docs={docs} />;
+}
 
 export default function ScholarshipDetailClient() {
   const params = useParams();
@@ -782,150 +930,55 @@ export default function ScholarshipDetailClient() {
 
             {/* 8. REQUIRED DOCUMENTS — data-driven from the scholarship's
                  required_documents fields (req_* booleans + cement +
-                 flexible). Same UI (Material check_box vs circle) so the
-                 look matches the rest of the design system. The static
-                 list was here pre-feature; now every scholarship's doc
-                 checklist is editable in the admin drawer. */}
+                 flexible). When degree_documents is present (per-level
+                 overrides), shows tabs per degree level. Otherwise falls
+                 back to the flat document list. */}
             <div className="space-y-4">
               <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
                 <div className="w-2 h-6 bg-primary rounded-full" />
                 <h2 className="text-lg font-bold text-text-primary">Required Documents</h2>
               </div>
 
-              {(() => {
-                // Build the list in display order. Each item: { name, note?, required }.
-                type Doc = { name: string; note?: string; required: boolean };
-                const docs: Doc[] = [];
+              {scholarship.degree_documents && scholarship.degree_documents.length > 0 ? (
+                <DegreeLevelDocs
+                  degreeDocs={scholarship.degree_documents}
+                  acceptedEnglishTests={scholarship.accepted_english_tests}
+                />
+              ) : (
+                <FlatDocList scholarship={scholarship} />
+              )}
 
-                // 1. Application form — always required (no field, the
-                //    scholarship is the form on the official site)
-                docs.push({ name: 'Completed online application form', required: true });
-
-                // 2. The 8 standard booleans
-                if (scholarship.req_transcripts) {
-                  docs.push({ name: 'Academic transcripts', note: 'Official, sealed copies', required: true });
-                }
-                if (scholarship.req_cv_resume) {
-                  docs.push({ name: 'CV / Resume', required: true });
-                }
-                if (scholarship.req_sop_motivation_letter) {
-                  docs.push({ name: 'Statement of Purpose / Motivation Letter', required: true });
-                }
-                if (scholarship.req_recommendation_letters) {
-                  const n = scholarship.recommendation_letters_count;
-                  const note = n
-                    ? n === 2
-                      ? 'Typically 2 academic references'
-                      : n === 3
-                        ? 'Typically 3 references (common for PhD)'
-                        : `${n} references required`
-                    : undefined;
-                  docs.push({ name: 'Letters of Recommendation', note, required: true });
-                }
-                if (scholarship.req_english_test && scholarship.accepted_english_tests?.length) {
-                  docs.push({
-                    name: 'English proficiency test score',
-                    note: `Accepted: ${scholarship.accepted_english_tests.join(', ')}`,
-                    required: true,
-                  });
-                }
-                if (scholarship.req_passport_or_id) {
-                  docs.push({ name: 'Passport or national ID copy', note: 'Valid for at least 6 months', required: true });
-                }
-                if (scholarship.req_financial_proof) {
-                  docs.push({ name: 'Financial statement / bank letter', note: 'Proof of funds or sponsorship', required: true });
-                }
-
-                // 3. Cement — previous-degree certificate. Backend always
-                //    materialises this, so it's safe to switch on the
-                //    string. 'none' means skip the item.
-                const cement = scholarship.previous_degree_required;
-                if (cement === 'high_school_diploma') {
-                  docs.push({
-                    name: 'High school diploma',
-                    required: true,
-                    note: 'Final-year students: expected graduation letter accepted',
-                  });
-                } else if (cement === 'bachelor_degree') {
-                  docs.push({
-                    name: "Bachelor's degree certificate",
-                    required: true,
-                    note: "Final-year students: expected graduation letter accepted",
-                  });
-                } else if (cement === 'master_degree') {
-                  docs.push({
-                    name: "Master's degree certificate",
-                    required: true,
-                    note: 'Final-year students: expected graduation letter accepted',
-                  });
-                }
-                // 'none' → don't show
-
-                // 4. Flexible toggles
-                if (scholarship.research_proposal_required) {
-                  docs.push({ name: 'Research proposal', note: '2-5 page outline of intended research', required: true });
-                }
-                if (scholarship.writing_sample_required) {
-                  docs.push({ name: 'Writing sample', note: 'Academic essay, 5-15 pages', required: true });
-                }
-                const test = scholarship.standardized_test;
-                if (test === 'sat_act') {
-                  docs.push({ name: 'SAT or ACT scores', required: true });
-                } else if (test === 'gre_gmat') {
-                  docs.push({ name: 'GRE or GMAT scores', required: true });
-                } else if (test === 'gre') {
-                  docs.push({ name: 'GRE scores', required: true });
-                } else if (test === 'gmat') {
-                  docs.push({ name: 'GMAT scores', required: true });
-                }
-
-                // 5. Long tail — free text. Split on newlines or
-                //    sentence-enders so the admin can list multiple
-                //    things ("portfolio · video essay · DS-260").
-                if (scholarship.additional_required_documents) {
-                  const extra = scholarship.additional_required_documents
-                    .split(/[\n•·|]/)
-                    .map((s) => s.trim())
-                    .filter((s) => s.length > 0);
-                  for (const item of extra) {
-                    docs.push({ name: item, required: true });
-                  }
-                }
-
-                // 6. Optional: photo (if admin wants it shown)
-                if (scholarship.req_photo) {
-                  docs.push({ name: 'Passport-size photo', required: true });
-                }
-
-                return (
+              {/* Custom document requirements */}
+              {scholarship.custom_documents && scholarship.custom_documents.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-[13px] font-semibold text-text-primary">Additional Requirements</p>
                   <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
-                    {docs.map((doc, i) => (
-                      <li key={`${doc.name}-${i}`} className="flex items-start gap-2.5">
+                    {scholarship.custom_documents.map((doc) => (
+                      <li key={doc.id} className="flex items-start gap-2.5">
                         <span className="material-symbols-outlined text-[20px] text-primary mt-0.5 flex-shrink-0">
-                          {doc.required ? 'check_box' : 'circle'}
+                          {doc.required ? 'check_box' : 'check_box_outline_blank'}
                         </span>
                         <div className="min-w-0">
-                          <p
-                            className={`text-[14px] leading-snug ${
-                              doc.required ? 'text-text-primary font-medium' : 'text-text-secondary'
-                            }`}
-                          >
+                          <p className={`text-[14px] leading-snug ${doc.required ? 'text-text-primary font-medium' : 'text-text-secondary'}`}>
                             {doc.name}
                             {!doc.required && (
-                              <span className="ml-1.5 text-[10px] uppercase tracking-wider font-bold text-text-secondary/70">
-                                Optional
+                              <span className="ml-1.5 text-[10px] uppercase tracking-wider font-bold text-text-secondary/70">Optional</span>
+                            )}
+                            {doc.degree_level && (
+                              <span className="ml-1.5 text-[10px] capitalize px-1.5 py-0.5 bg-gray-100 rounded text-text-secondary">
+                                {doc.degree_level}
                               </span>
                             )}
                           </p>
-                          {doc.note && (
-                            <p className="text-[12px] text-text-secondary mt-0.5">{doc.note}</p>
+                          {doc.description && (
+                            <p className="text-[12px] text-text-secondary mt-0.5">{doc.description}</p>
                           )}
                         </div>
                       </li>
                     ))}
                   </ul>
-                );
-              })()}
+                </div>
+              )}
 
               <p className="text-[11px] text-text-secondary pt-1">
                 Always confirm the exact document list on the scholarship's official page before submitting.
