@@ -279,7 +279,16 @@ async def create_scholarship(
     A unique-slug conflict returns 409 (not 500) so the admin UI can show
     a clear "slug already taken" message.
     """
+    # Extract inline documents before building the Scholarship object
+    # (they're separate tables, not columns on scholarships).
+    inline_degree_docs = body.degree_documents or []
+    inline_custom_docs = body.custom_documents or []
+
     raw = body.model_dump(exclude_unset=True)
+    # Remove nested document arrays from the raw dict — they're not
+    # Scholarship columns and would cause a TypeError on **coerced.
+    raw.pop("degree_documents", None)
+    raw.pop("custom_documents", None)
     coerced, errors = _coerce_patch(raw)
     if errors:
         raise HTTPException(
@@ -319,6 +328,43 @@ async def create_scholarship(
     # Resolve eligibility (compute resolved_countries from structured fields)
     await _resolve_scholarship_eligibility(db, s)
 
+    # ── Inline degree-level documents ──────────────────────────────
+    if inline_degree_docs:
+        from app.models.scholarship_degree_document import ScholarshipDegreeDocument
+        from app.models.scholarship_degree_document import auto_derive_for_level
+
+        for dd in inline_degree_docs:
+            dd_data = dd.model_dump()
+            level = dd_data.pop("degree_level")
+            # Fill None cement/flexible fields with smart defaults
+            defaults = auto_derive_for_level(level)
+            for k, v in defaults.items():
+                if dd_data.get(k) is None:
+                    dd_data[k] = v
+            row = ScholarshipDegreeDocument(
+                scholarship_id=s.id,
+                degree_level=level,
+                **dd_data,
+            )
+            db.add(row)
+
+    # ── Inline custom documents ────────────────────────────────────
+    if inline_custom_docs:
+        from app.models.scholarship_custom_document import ScholarshipCustomDocument
+
+        for i, cd in enumerate(inline_custom_docs):
+            row = ScholarshipCustomDocument(
+                scholarship_id=s.id,
+                name=cd.name,
+                description=cd.description,
+                required=cd.required,
+                degree_level=cd.degree_level,
+                position=cd.position if cd.position else i,
+            )
+            db.add(row)
+
+    await db.commit()
+
     await log_admin_action(
         db,
         admin_id=admin.id,
@@ -339,7 +385,36 @@ async def create_scholarship(
             s.id, s.slug,
         )
 
-    return AdminScholarshipResponse.model_validate(apply_auto_defaults(s))
+    response = AdminScholarshipResponse.model_validate(apply_auto_defaults(s))
+
+    # Attach inline documents to the response so the client sees them
+    # immediately without a follow-up GET.
+    if inline_degree_docs:
+        from app.models.scholarship_degree_document import ScholarshipDegreeDocument as SDD
+        degree_rows = (
+            await db.execute(
+                select(SDD).where(SDD.scholarship_id == s.id)
+                .order_by(SDD.degree_level)
+            )
+        ).scalars().all()
+        response.degree_documents = [
+            DegreeDocResponse.model_validate(d).model_dump(mode="json")
+            for d in degree_rows
+        ]
+    if inline_custom_docs:
+        from app.models.scholarship_custom_document import ScholarshipCustomDocument as SCD
+        custom_rows = (
+            await db.execute(
+                select(SCD).where(SCD.scholarship_id == s.id)
+                .order_by(SCD.position, SCD.name)
+            )
+        ).scalars().all()
+        response.custom_documents = [
+            CustomDocResponse.model_validate(d).model_dump(mode="json")
+            for d in custom_rows
+        ]
+
+    return response
 
 
 # ── patch ──────────────────────────────────────────────────────────

@@ -101,6 +101,32 @@ export interface ScholarshipForm {
   writing_sample_required: boolean;
   standardized_test: StandardizedTest | 'auto';
   additional_required_documents: string;
+  // Unified per-degree documents + custom documents (managed by
+  // UnifiedDocumentsEditor). These are sent inline with the create
+  // body so the backend can write them atomically.
+  degree_documents: Array<{
+    degree_level: string;
+    req_transcripts: boolean;
+    req_cv_resume: boolean;
+    req_sop_motivation_letter: boolean;
+    req_recommendation_letters: boolean;
+    req_english_test: boolean;
+    req_passport_or_id: boolean;
+    req_financial_proof: boolean;
+    req_photo: boolean;
+    previous_degree_required: string;
+    recommendation_letters_count: number;
+    research_proposal_required: boolean;
+    writing_sample_required: boolean;
+    standardized_test: string;
+  }>;
+  custom_documents: Array<{
+    name: string;
+    description: string;
+    required: boolean;
+    degree_level: string | null;
+    position: number;
+  }>;
 }
 
 // ── Option lists ──────────────────────────────────────────────────
@@ -337,6 +363,8 @@ export function emptyForm(): ScholarshipForm {
     writing_sample_required: false,
     standardized_test: 'auto',
     additional_required_documents: '',
+    degree_documents: [],
+    custom_documents: [],
   };
 }
 
@@ -398,6 +426,29 @@ export function formFromScholarship(s: AdminScholarship): ScholarshipForm {
     writing_sample_required: s.writing_sample_required ?? false,
     standardized_test: s.standardized_test ?? 'none',
     additional_required_documents: s.additional_required_documents ?? '',
+    degree_documents: (s.degree_documents ?? []).map((d) => ({
+      degree_level: d.degree_level,
+      req_transcripts: d.req_transcripts,
+      req_cv_resume: d.req_cv_resume,
+      req_sop_motivation_letter: d.req_sop_motivation_letter,
+      req_recommendation_letters: d.req_recommendation_letters,
+      req_english_test: d.req_english_test,
+      req_passport_or_id: d.req_passport_or_id,
+      req_financial_proof: d.req_financial_proof,
+      req_photo: d.req_photo,
+      previous_degree_required: d.previous_degree_required ?? 'high_school_diploma',
+      recommendation_letters_count: d.recommendation_letters_count ?? 2,
+      research_proposal_required: d.research_proposal_required ?? false,
+      writing_sample_required: d.writing_sample_required ?? false,
+      standardized_test: d.standardized_test ?? 'none',
+    })),
+    custom_documents: (s.custom_documents ?? []).map((d) => ({
+      name: d.name,
+      description: d.description ?? '',
+      required: d.required,
+      degree_level: d.degree_level,
+      position: d.position,
+    })),
   };
 }
 
@@ -557,6 +608,16 @@ export function buildCreateBody(form: ScholarshipForm): AdminScholarshipCreate {
     form.standardized_test === 'auto' ? null : form.standardized_test;
   const additional = opt(form.additional_required_documents);
   if (additional) body.additional_required_documents = additional;
+
+  // Inline degree-level documents + custom documents.
+  // The UnifiedDocumentsEditor manages these and writes them into
+  // form.degree_documents / form.custom_documents via onChange.
+  if (form.degree_documents.length > 0) {
+    body.degree_documents = form.degree_documents;
+  }
+  if (form.custom_documents.length > 0) {
+    body.custom_documents = form.custom_documents;
+  }
 
   return body;
 }

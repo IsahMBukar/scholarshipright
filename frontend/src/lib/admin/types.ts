@@ -320,6 +320,31 @@ export interface AdminScholarshipCreate {
   writing_sample_required?: boolean | null;
   standardized_test?: StandardizedTest | null;
   additional_required_documents?: string | null;
+  // Inline degree-level document overrides (saved atomically with the scholarship)
+  degree_documents?: Array<{
+    degree_level: string;
+    req_transcripts?: boolean;
+    req_cv_resume?: boolean;
+    req_sop_motivation_letter?: boolean;
+    req_recommendation_letters?: boolean;
+    req_english_test?: boolean;
+    req_passport_or_id?: boolean;
+    req_financial_proof?: boolean;
+    req_photo?: boolean;
+    previous_degree_required?: string | null;
+    recommendation_letters_count?: number | null;
+    research_proposal_required?: boolean | null;
+    writing_sample_required?: boolean;
+    standardized_test?: string | null;
+  }> | null;
+  // Inline custom/flexible document requirements
+  custom_documents?: Array<{
+    name: string;
+    description?: string | null;
+    required?: boolean;
+    degree_level?: string | null;
+    position?: number;
+  }> | null;
   // Optional — status
   is_active?: boolean | null;
   is_verified?: boolean | null;

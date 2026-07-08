@@ -21,9 +21,6 @@ import BulkImportDrawer from '@/components/admin/BulkImportDrawer';
 import {
   FUNDING_OPTIONS as FORM_FUNDING_OPTIONS,
   ENGLISH_TEST_OPTIONS,
-  PREVIOUS_DEGREE_OPTIONS,
-  STANDARDIZED_TEST_OPTIONS,
-  RECOMMENDATION_COUNT_OPTIONS,
   DEGREE_LEVEL_OPTIONS,
   FIELD_OF_STUDY_OPTIONS,
   COUNTRY_OPTIONS,
@@ -48,8 +45,7 @@ import type { AdminScholarshipCreate, AdminScholarshipPatch } from '@/lib/admin/
 import { AdminApiError } from '@/lib/admin/client';
 import SearchInput from '@/components/admin/ui/SearchInput';
 import type { AdminScholarship } from '@/lib/admin/types';
-import DegreeDocumentsEditor from '@/components/admin/DegreeDocumentsEditor';
-import CustomDocumentsEditor from '@/components/admin/CustomDocumentsEditor';
+import UnifiedDocumentsEditor from '@/components/admin/UnifiedDocumentsEditor';
 
 // Page-level filter values for the funding_type dropdown above the table.
 // Note: these are the values admins can FILTER by, not the values in the
@@ -774,88 +770,15 @@ function ScholarshipDrawer({
             )}
           </div>
 
-          {/* ── Required Documents ──────────────────────────── */}
-          {/* New per-level + custom editors are the primary UI.
-              Legacy flat defaults are collapsed below. */}
-          <SectionHeader hint="Configure documents per degree level, then add any custom requirements.">
-            Required Documents
-          </SectionHeader>
-
-          {/* Per-Level Document Overrides (primary) */}
+          {/* ── Required Documents (unified) ─────────────────── */}
           {scholarship && (
-            <DegreeDocumentsEditor
+            <UnifiedDocumentsEditor
               degreeLevels={scholarship.degree_levels || []}
               scholarshipId={scholarship.id}
-              initialDocs={(scholarship as any).degree_documents}
+              initialDegreeDocs={(scholarship as any).degree_documents}
+              initialCustomDocs={(scholarship as any).custom_documents}
             />
           )}
-
-          {/* Custom Document Requirements (primary) */}
-          {scholarship && (
-            <CustomDocumentsEditor
-              scholarshipId={scholarship.id}
-              initialDocs={(scholarship as any).custom_documents}
-              degreeLevels={scholarship.degree_levels || []}
-            />
-          )}
-
-          {/* Legacy flat defaults — collapsed for multi-level, expanded for single-level */}
-          <details className="mt-2" open={(scholarship?.degree_levels?.length || 0) <= 1}>
-            <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-700">
-              ⚙️ Document requirements{(scholarship?.degree_levels?.length || 0) <= 1 ? '' : ' (legacy fallback)'}
-            </summary>
-            <div className="space-y-3 mt-2 pl-2 border-l-2 border-gray-100">
-              <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-                <CheckboxRow label="Transcripts" checked={form.req_transcripts} onChange={(v) => set('req_transcripts', v)} />
-                <CheckboxRow label="CV / Resume" checked={form.req_cv_resume} onChange={(v) => set('req_cv_resume', v)} />
-                <CheckboxRow label="Statement of Purpose" checked={form.req_sop_motivation_letter} onChange={(v) => set('req_sop_motivation_letter', v)} />
-                <CheckboxRow label="Recommendation letters" checked={form.req_recommendation_letters} onChange={(v) => set('req_recommendation_letters', v)} />
-                <CheckboxRow label="English test" checked={form.req_english_test} onChange={(v) => set('req_english_test', v)} description="Uses accepted tests above." />
-                <CheckboxRow label="Passport or ID" checked={form.req_passport_or_id} onChange={(v) => set('req_passport_or_id', v)} />
-                <CheckboxRow label="Financial proof" checked={form.req_financial_proof} onChange={(v) => set('req_financial_proof', v)} />
-                <CheckboxRow label="Photo" checked={form.req_photo} onChange={(v) => set('req_photo', v)} />
-              </div>
-              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-100">
-                <div>
-                  <FieldLabel>Previous degree</FieldLabel>
-                  <select value={form.previous_degree_required} onChange={(e) => set('previous_degree_required', e.target.value as any)} className="w-full h-9 px-2 text-sm bg-white border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary">
-                    {PREVIOUS_DEGREE_OPTIONS.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
-                  </select>
-                </div>
-                <div>
-                  <FieldLabel>Rec. letters</FieldLabel>
-                  <select value={String(form.recommendation_letters_count)} onChange={(e) => set('recommendation_letters_count', e.target.value === 'auto' ? 'auto' : e.target.value)} className="w-full h-9 px-2 text-sm bg-white border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary">
-                    {RECOMMENDATION_COUNT_OPTIONS.map((opt) => (<option key={String(opt.value)} value={String(opt.value)}>{opt.label}</option>))}
-                  </select>
-                </div>
-                <div>
-                  <FieldLabel>Research proposal</FieldLabel>
-                  <select value={String(form.research_proposal_required)} onChange={(e) => set('research_proposal_required', e.target.value === 'auto' ? 'auto' : e.target.value === 'true')} className="w-full h-9 px-2 text-sm bg-white border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary">
-                    <option value="auto">Auto (true for PhD)</option>
-                    <option value="true">Required</option>
-                    <option value="false">Not required</option>
-                  </select>
-                </div>
-                <div>
-                  <FieldLabel>Writing sample</FieldLabel>
-                  <select value={String(form.writing_sample_required)} onChange={(e) => set('writing_sample_required', e.target.value === 'true')} className="w-full h-9 px-2 text-sm bg-white border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary">
-                    <option value="false">Not required</option>
-                    <option value="true">Required</option>
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  <FieldLabel>Standardized test</FieldLabel>
-                  <select value={form.standardized_test} onChange={(e) => set('standardized_test', e.target.value as any)} className="w-full h-9 px-2 text-sm bg-white border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary">
-                    {STANDARDIZED_TEST_OPTIONS.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
-                  </select>
-                </div>
-              </div>
-              <div className="pt-2 border-t border-gray-100">
-                <FieldLabel>Additional documents (legacy)</FieldLabel>
-                <TextArea value={form.additional_required_documents} onChange={(v) => set('additional_required_documents', v)} placeholder="Use Custom Documents above instead." rows={2} />
-              </div>
-            </div>
-          </details>
 
           {/* ── Dates ────────────────────────────────────────── */}
           <SectionHeader>Dates</SectionHeader>

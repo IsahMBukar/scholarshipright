@@ -262,6 +262,12 @@ class AdminScholarshipCreate(BaseModel):
     writing_sample_required: Optional[bool] = None
     standardized_test: Optional[str] = None
     additional_required_documents: Optional[str] = None
+    # Inline degree-level document overrides. When provided, the create
+    # endpoint writes ScholarshipDegreeDocument rows alongside the
+    # scholarship so admins don't need a separate save step.
+    degree_documents: Optional[List['DegreeDocCreate']] = None
+    # Inline custom/flexible document requirements.
+    custom_documents: Optional[List['CustomDocCreate']] = None
     is_active: Optional[bool] = None
     is_verified: Optional[bool] = None
     source: Optional[str] = None
@@ -473,3 +479,9 @@ class CustomDocResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# Resolve forward references in AdminScholarshipCreate (degree_documents
+# and custom_documents reference DegreeDocCreate / CustomDocCreate which
+# are defined above).
+AdminScholarshipCreate.model_rebuild()
