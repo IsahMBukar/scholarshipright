@@ -87,7 +87,7 @@ SCHOLARSHIP_FIELDS = {
         "description": "English tests accepted (e.g. ['IELTS', 'TOEFL'])",
     },
 
-    # Required documents
+    # Flat required document fields (legacy — prefer degree_documents for per-level control)
     "previous_degree_required": {
         "type": "string",
         "enum": ["high_school_diploma", "bachelor_degree", "master_degree", "phd_degree", "none"],
@@ -110,6 +110,53 @@ SCHOLARSHIP_FIELDS = {
     "req_passport_or_id": {"type": "boolean", "description": "Passport or ID required"},
     "req_financial_proof": {"type": "boolean", "description": "Financial proof required"},
     "req_photo": {"type": "boolean", "description": "Photo required"},
+
+    # Per-degree-level document overrides (inline with add/edit).
+    # Each entry sets the doc requirements for one degree level.
+    # Omitted levels use auto-derived defaults. When provided, these
+    # override the flat fields above for the specified levels.
+    "degree_documents": {
+        "type": "array",
+        "description": "Per-degree-level document configs. Each sets req toggles + cement/flexible fields for one level. Auto-derived defaults fill any gaps. Example: [{\"degree_level\": \"phd\", \"recommendation_letters_count\": 3, \"research_proposal_required\": true}]",
+        "items": {
+            "type": "object",
+            "properties": {
+                "degree_level": {"type": "string", "enum": ["bachelor", "master", "phd", "direct_phd", "postdoc"], "description": "Degree level"},
+                "req_transcripts": {"type": "boolean", "description": "Transcripts required (default: true)"},
+                "req_cv_resume": {"type": "boolean", "description": "CV/Resume required (default: true)"},
+                "req_sop_motivation_letter": {"type": "boolean", "description": "Statement of purpose required (default: true)"},
+                "req_recommendation_letters": {"type": "boolean", "description": "Recommendation letters required (default: true)"},
+                "req_english_test": {"type": "boolean", "description": "English test required (default: true)"},
+                "req_passport_or_id": {"type": "boolean", "description": "Passport/ID required (default: true)"},
+                "req_financial_proof": {"type": "boolean", "description": "Financial proof required (default: false)"},
+                "req_photo": {"type": "boolean", "description": "Photo required (default: false)"},
+                "previous_degree_required": {"type": "string", "enum": ["high_school_diploma", "bachelor_degree", "master_degree", "phd_degree", "none"], "description": "Previous degree required (auto-derived if omitted)"},
+                "recommendation_letters_count": {"type": "integer", "description": "Number of recommendation letters (auto-derived if omitted)"},
+                "research_proposal_required": {"type": "boolean", "description": "Research proposal required (auto-derived if omitted)"},
+                "writing_sample_required": {"type": "boolean", "description": "Writing sample required (auto-derived if omitted)"},
+                "standardized_test": {"type": "string", "enum": ["none", "sat_act", "gre_gmat", "gre", "gmat"], "description": "Standardized test required (auto-derived if omitted)"},
+            },
+            "required": ["degree_level"],
+        },
+    },
+
+    # Custom/flexible document requirements (inline with add/edit).
+    # For anything not covered by the standard toggles — portfolio, video
+    # essay, workshop certificate, etc.
+    "custom_documents": {
+        "type": "array",
+        "description": "Custom document requirements. For documents not covered by standard fields — portfolio, video essay, certificate, etc. Example: [{\"name\": \"Portfolio\", \"description\": \"5-10 pieces\", \"required\": true}]",
+        "items": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Document name (e.g. 'Portfolio', 'Video essay')"},
+                "description": {"type": "string", "description": "What to submit (e.g. '5-10 pieces of original work')"},
+                "required": {"type": "boolean", "description": "Whether required (default: true)"},
+                "degree_level": {"type": "string", "description": "If set, only for this degree level. Omit for all levels."},
+            },
+            "required": ["name"],
+        },
+    },
 
     # Eligibility
     "eligibility_display": {"type": "string", "description": "Human-readable eligibility text (e.g. 'All Commonwealth countries except Pakistan')"},
@@ -178,7 +225,7 @@ def get_tool_schemas() -> dict:
     return {
         # Scholarship tools
         "add_scholarship": {
-            "description": "Add a new scholarship to the review queue. Submissions are reviewed by an admin before going live.",
+            "description": "Add a new scholarship to the review queue. Submissions are reviewed by an admin before going live. Use degree_documents for per-level doc configs and custom_documents for non-standard requirements (portfolio, video essay, etc.).",
             "inputSchema": {
                 "type": "object",
                 "properties": sch_properties,
@@ -196,7 +243,7 @@ def get_tool_schemas() -> dict:
             },
         },
         "get_scholarship": {
-            "description": "Get details of a specific scholarship by ID or slug.",
+            "description": "Get details of a specific scholarship by ID or slug. Returns all fields including per-degree document overrides and custom documents.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -206,7 +253,7 @@ def get_tool_schemas() -> dict:
             },
         },
         "edit_scholarship": {
-            "description": "Edit an existing scholarship. Only pass the fields you want to change — omitted fields stay unchanged.",
+            "description": "Edit an existing scholarship. Only pass the fields you want to change — omitted fields stay unchanged. Use degree_documents to set per-level doc configs (replaces existing for specified levels) and custom_documents to replace all custom docs.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -269,77 +316,6 @@ def get_tool_schemas() -> dict:
             "inputSchema": {
                 "type": "object",
                 "properties": {},
-            },
-        },
-        # ── Document tools ──────────────────────────────────────────
-        "get_scholarship_documents": {
-            "description": "Get all document requirements for a scholarship — degree-level overrides and custom documents. Use this to understand what documents an applicant needs to submit.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "id_or_slug": {"type": "string", "description": "Scholarship ID (UUID) or slug"},
-                },
-                "required": ["id_or_slug"],
-            },
-        },
-        "set_degree_documents": {
-            "description": "Set per-degree-level document requirements for a scholarship. Each degree level (bachelor, master, phd, direct_phd, postdoc) can have different required documents. Replaces existing degree-level docs for the specified levels.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "id_or_slug": {"type": "string", "description": "Scholarship ID (UUID) or slug"},
-                    "documents": {
-                        "type": "array",
-                        "description": "List of per-degree-level document configs",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "degree_level": {"type": "string", "enum": ["bachelor", "master", "phd", "direct_phd", "postdoc"], "description": "Degree level"},
-                                "req_transcripts": {"type": "boolean", "description": "Transcripts required (default: true)"},
-                                "req_cv_resume": {"type": "boolean", "description": "CV/Resume required (default: true)"},
-                                "req_sop_motivation_letter": {"type": "boolean", "description": "Statement of purpose required (default: true)"},
-                                "req_recommendation_letters": {"type": "boolean", "description": "Recommendation letters required (default: true)"},
-                                "req_english_test": {"type": "boolean", "description": "English test required (default: true)"},
-                                "req_passport_or_id": {"type": "boolean", "description": "Passport/ID required (default: true)"},
-                                "req_financial_proof": {"type": "boolean", "description": "Financial proof required (default: false)"},
-                                "req_photo": {"type": "boolean", "description": "Photo required (default: false)"},
-                                "previous_degree_required": {"type": "string", "enum": ["high_school_diploma", "bachelor_degree", "master_degree", "phd_degree", "none"], "description": "Previous degree required (auto-derived if omitted)"},
-                                "recommendation_letters_count": {"type": "integer", "description": "Number of recommendation letters (auto-derived if omitted)"},
-                                "research_proposal_required": {"type": "boolean", "description": "Research proposal required (auto-derived if omitted)"},
-                                "writing_sample_required": {"type": "boolean", "description": "Writing sample required (auto-derived if omitted)"},
-                                "standardized_test": {"type": "string", "enum": ["none", "sat_act", "gre_gmat", "gre", "gmat"], "description": "Standardized test required (auto-derived if omitted)"},
-                                "additional_required_documents": {"type": "string", "description": "Extra documents (free text)"},
-                            },
-                            "required": ["degree_level"],
-                        },
-                    },
-                },
-                "required": ["id_or_slug", "documents"],
-            },
-        },
-        "add_custom_document": {
-            "description": "Add a custom document requirement to a scholarship. Use this for any document not covered by the standard fields — portfolio, video essay, workshop certificate, event registration, etc.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "id_or_slug": {"type": "string", "description": "Scholarship ID (UUID) or slug"},
-                    "name": {"type": "string", "description": "Document name (e.g. 'Portfolio', 'Video essay', 'Workshop certificate')"},
-                    "description": {"type": "string", "description": "What to submit (e.g. '5-10 pieces of original work')"},
-                    "required": {"type": "boolean", "description": "Whether the document is required (default: true)"},
-                    "degree_level": {"type": "string", "description": "If set, only for this degree level. Omit for all levels."},
-                },
-                "required": ["id_or_slug", "name"],
-            },
-        },
-        "remove_custom_document": {
-            "description": "Remove a custom document requirement from a scholarship.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "id_or_slug": {"type": "string", "description": "Scholarship ID (UUID) or slug"},
-                    "document_id": {"type": "string", "description": "Custom document UUID to remove"},
-                },
-                "required": ["id_or_slug", "document_id"],
             },
         },
     }

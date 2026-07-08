@@ -77,14 +77,6 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         return await _handle_blog_edit(arguments)
     elif name == "list_blog_categories":
         return await _handle_blog_categories()
-    elif name == "get_scholarship_documents":
-        return await _handle_get_documents(arguments)
-    elif name == "set_degree_documents":
-        return await _handle_set_degree_documents(arguments)
-    elif name == "add_custom_document":
-        return await _handle_add_custom_document(arguments)
-    elif name == "remove_custom_document":
-        return await _handle_remove_custom_document(arguments)
     return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
 
@@ -112,6 +104,15 @@ async def _handle_add(args: dict[str, Any]) -> list[TextContent]:
             f"Submitted to review queue (ID: {pending.id})",
             "Status: pending_review — admin will review before it goes live.",
         ]
+        # Mention inline documents if provided
+        dd = args.get("degree_documents", [])
+        cd = args.get("custom_documents", [])
+        if dd:
+            levels = [d.get("degree_level", "?") for d in dd]
+            lines.append(f"  Degree documents: {', '.join(levels)}")
+        if cd:
+            names = [d.get("name", "?") for d in cd]
+            lines.append(f"  Custom documents: {', '.join(names)}")
         if dupes:
             lines.append("\nPotential duplicates:")
             for d in dupes[:3]:
@@ -195,8 +196,13 @@ async def _handle_edit(args: dict[str, Any]) -> list[TextContent]:
     id_or_slug = args.get("id_or_slug", "").strip()
     if not id_or_slug:
         return [TextContent(type="text", text="id_or_slug is required.")]
-    editable = {k: v for k, v in args.items() if k != "id_or_slug" and k in SCHOLARSHIP_FIELDS}
-    if not editable:
+
+    # Extract inline documents — these are handled separately from flat fields
+    inline_degree_docs = args.get("degree_documents")
+    inline_custom_docs = args.get("custom_documents")
+
+    editable = {k: v for k, v in args.items() if k not in ("id_or_slug", "degree_documents", "custom_documents") and k in SCHOLARSHIP_FIELDS}
+    if not editable and inline_degree_docs is None and inline_custom_docs is None:
         return [TextContent(type="text", text="No fields to update.")]
 
     async with AsyncSessionLocal() as db:
@@ -224,202 +230,78 @@ async def _handle_edit(args: dict[str, Any]) -> list[TextContent]:
                 setattr(sch, field, value)
                 changed.append(field)
 
-        if not changed:
+        doc_changes = []
+
+        # ── Inline degree-level documents ─────────────────────────
+        if inline_degree_docs is not None:
+            for dd in inline_degree_docs:
+                level = dd.get("degree_level")
+                if not level:
+                    continue
+                # Delete existing row for this level, then create new one
+                await db.execute(
+                    sa_text("DELETE FROM scholarship_degree_documents WHERE scholarship_id = :sid AND degree_level = :lvl"),
+                    {"sid": str(sch.id), "lvl": level},
+                )
+                defaults = auto_derive_for_level(level)
+                doc = ScholarshipDegreeDocument(
+                    scholarship_id=sch.id,
+                    degree_level=level,
+                    req_transcripts=dd.get("req_transcripts", True),
+                    req_cv_resume=dd.get("req_cv_resume", True),
+                    req_sop_motivation_letter=dd.get("req_sop_motivation_letter", True),
+                    req_recommendation_letters=dd.get("req_recommendation_letters", True),
+                    req_english_test=dd.get("req_english_test", True),
+                    req_passport_or_id=dd.get("req_passport_or_id", True),
+                    req_financial_proof=dd.get("req_financial_proof", False),
+                    req_photo=dd.get("req_photo", False),
+                    previous_degree_required=dd.get("previous_degree_required") or defaults["previous_degree_required"],
+                    recommendation_letters_count=dd.get("recommendation_letters_count") or defaults["recommendation_letters_count"],
+                    research_proposal_required=dd.get("research_proposal_required") if "research_proposal_required" in dd else defaults["research_proposal_required"],
+                    writing_sample_required=dd.get("writing_sample_required") if "writing_sample_required" in dd else defaults["writing_sample_required"],
+                    standardized_test=dd.get("standardized_test") or defaults["standardized_test"],
+                )
+                db.add(doc)
+                doc_changes.append(f"degree_docs:{level}")
+
+        # ── Inline custom documents ───────────────────────────────
+        if inline_custom_docs is not None:
+            # Replace all custom docs for this scholarship
+            await db.execute(
+                sa_text("DELETE FROM scholarship_custom_documents WHERE scholarship_id = :sid"),
+                {"sid": str(sch.id)},
+            )
+            for i, cd in enumerate(inline_custom_docs):
+                name = cd.get("name", "").strip()
+                if not name:
+                    continue
+                doc = ScholarshipCustomDocument(
+                    scholarship_id=sch.id,
+                    name=name,
+                    description=cd.get("description"),
+                    required=cd.get("required", True),
+                    degree_level=cd.get("degree_level"),
+                    position=cd.get("position", i),
+                )
+                db.add(doc)
+                doc_changes.append(f"custom_doc:{name}")
+
+        if not changed and not doc_changes:
             return [TextContent(type="text", text=f"No changes for: {sch.name}")]
 
         sch.updated_at = datetime.now(timezone.utc)
         await db.commit()
         data = _fmt(sch)
-        data["updated_fields"] = changed
+        if changed:
+            data["updated_fields"] = changed
+        if doc_changes:
+            data["document_changes"] = doc_changes
 
     # Trigger incremental recompute: this scholarship against all users.
     from app.services.match_auto import trigger_scholarship_recompute
     trigger_scholarship_recompute(sch.id)
 
     return [TextContent(type="text", text=json.dumps(data, indent=2, default=str))]
-
-
-# ── Document handlers ─────────────────────────────────────────────
-
-async def _resolve_scholarship(db, id_or_slug):
-    """Resolve scholarship by slug or UUID. Returns (sch, error_text)."""
-    result = await db.execute(select(Scholarship).where(Scholarship.slug == id_or_slug))
-    sch = result.scalar_one_or_none()
-    if not sch:
-        from uuid import UUID
-        try:
-            result = await db.execute(select(Scholarship).where(Scholarship.id == UUID(id_or_slug)))
-            sch = result.scalar_one_or_none()
-        except (ValueError, AttributeError):
-            pass
-    return sch
-
-
-async def _handle_get_documents(args):
-    id_or_slug = args.get("id_or_slug", "")
-    async with AsyncSessionLocal() as db:
-        sch = await _resolve_scholarship(db, id_or_slug)
-        if not sch:
-            return [TextContent(type="text", text=f"Not found: {id_or_slug}")]
-
-        degree_docs = (await db.execute(
-            select(ScholarshipDegreeDocument).where(ScholarshipDegreeDocument.scholarship_id == sch.id).order_by(ScholarshipDegreeDocument.degree_level)
-        )).scalars().all()
-
-        custom_docs = (await db.execute(
-            select(ScholarshipCustomDocument).where(ScholarshipCustomDocument.scholarship_id == sch.id).order_by(ScholarshipCustomDocument.position)
-        )).scalars().all()
-
-        result = {"scholarship": sch.name, "slug": sch.slug, "degree_levels": sch.degree_levels or []}
-
-        if degree_docs:
-            result["degree_documents"] = [{
-                "degree_level": d.degree_level,
-                "previous_degree_required": d.previous_degree_required,
-                "recommendation_letters_count": d.recommendation_letters_count,
-                "research_proposal_required": d.research_proposal_required,
-                "writing_sample_required": d.writing_sample_required,
-                "standardized_test": d.standardized_test,
-                "req_transcripts": d.req_transcripts,
-                "req_cv_resume": d.req_cv_resume,
-                "req_sop_motivation_letter": d.req_sop_motivation_letter,
-                "req_recommendation_letters": d.req_recommendation_letters,
-                "req_english_test": d.req_english_test,
-                "req_passport_or_id": d.req_passport_or_id,
-                "req_financial_proof": d.req_financial_proof,
-                "req_photo": d.req_photo,
-            } for d in degree_docs]
-        else:
-            result["degree_documents"] = "No per-level overrides — using flat defaults from scholarship fields."
-
-        if custom_docs:
-            result["custom_documents"] = [{
-                "id": str(d.id), "name": d.name, "description": d.description,
-                "required": d.required, "degree_level": d.degree_level,
-            } for d in custom_docs]
-        else:
-            result["custom_documents"] = "No custom documents."
-
-        return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
-
-
-async def _handle_set_degree_documents(args):
-    id_or_slug = args.get("id_or_slug", "")
-    documents = args.get("documents", [])
-    if not documents:
-        return [TextContent(type="text", text="documents array is required.")]
-
-    async with AsyncSessionLocal() as db:
-        sch = await _resolve_scholarship(db, id_or_slug)
-        if not sch:
-            return [TextContent(type="text", text=f"Not found: {id_or_slug}")]
-
-        # Delete existing degree docs for the specified levels
-        levels_specified = [d["degree_level"] for d in documents if "degree_level" in d]
-        if levels_specified:
-            await db.execute(
-                sa_text("DELETE FROM scholarship_degree_documents WHERE scholarship_id = :sid AND degree_level = ANY(:levels)"),
-                {"sid": str(sch.id), "levels": levels_specified},
-            )
-
-        created = []
-        for doc_data in documents:
-            level = doc_data.get("degree_level")
-            if not level:
-                continue
-            defaults = auto_derive_for_level(level)
-            doc = ScholarshipDegreeDocument(
-                scholarship_id=sch.id,
-                degree_level=level,
-                req_transcripts=doc_data.get("req_transcripts", True),
-                req_cv_resume=doc_data.get("req_cv_resume", True),
-                req_sop_motivation_letter=doc_data.get("req_sop_motivation_letter", True),
-                req_recommendation_letters=doc_data.get("req_recommendation_letters", True),
-                req_english_test=doc_data.get("req_english_test", True),
-                req_passport_or_id=doc_data.get("req_passport_or_id", True),
-                req_financial_proof=doc_data.get("req_financial_proof", False),
-                req_photo=doc_data.get("req_photo", False),
-                previous_degree_required=doc_data.get("previous_degree_required") or defaults["previous_degree_required"],
-                recommendation_letters_count=doc_data.get("recommendation_letters_count") or defaults["recommendation_letters_count"],
-                research_proposal_required=doc_data.get("research_proposal_required") if "research_proposal_required" in doc_data else defaults["research_proposal_required"],
-                writing_sample_required=doc_data.get("writing_sample_required") if "writing_sample_required" in doc_data else defaults["writing_sample_required"],
-                standardized_test=doc_data.get("standardized_test") or defaults["standardized_test"],
-                additional_required_documents=doc_data.get("additional_required_documents"),
-            )
-            db.add(doc)
-            created.append(level)
-
-        await db.commit()
-        return [TextContent(type="text", text=f"Set degree documents for {sch.name}: {', '.join(created)}")]
-
-
-async def _handle_add_custom_document(args):
-    id_or_slug = args.get("id_or_slug", "")
-    name = args.get("name", "").strip()
-    if not name:
-        return [TextContent(type="text", text="name is required.")]
-
-    async with AsyncSessionLocal() as db:
-        sch = await _resolve_scholarship(db, id_or_slug)
-        if not sch:
-            return [TextContent(type="text", text=f"Not found: {id_or_slug}")]
-
-        # Get next position
-        max_pos = (await db.execute(
-            select(func.max(ScholarshipCustomDocument.position)).where(ScholarshipCustomDocument.scholarship_id == sch.id)
-        )).scalar() or 0
-
-        doc = ScholarshipCustomDocument(
-            scholarship_id=sch.id,
-            name=name,
-            description=args.get("description"),
-            required=args.get("required", True),
-            degree_level=args.get("degree_level"),
-            position=max_pos + 1,
-        )
-        db.add(doc)
-        await db.commit()
-        await db.refresh(doc)
-
-        return [TextContent(type="text", text=json.dumps({
-            "action": "created",
-            "document": {
-                "id": str(doc.id), "name": doc.name, "description": doc.description,
-                "required": doc.required, "degree_level": doc.degree_level,
-            },
-            "scholarship": sch.name,
-        }, indent=2))]
-
-
-async def _handle_remove_custom_document(args):
-    id_or_slug = args.get("id_or_slug", "")
-    document_id = args.get("document_id", "")
-    if not document_id:
-        return [TextContent(type="text", text="document_id is required.")]
-
-    from uuid import UUID
-    async with AsyncSessionLocal() as db:
-        sch = await _resolve_scholarship(db, id_or_slug)
-        if not sch:
-            return [TextContent(type="text", text=f"Not found: {id_or_slug}")]
-
-        try:
-            doc = (await db.execute(
-                select(ScholarshipCustomDocument).where(
-                    ScholarshipCustomDocument.id == UUID(document_id),
-                    ScholarshipCustomDocument.scholarship_id == sch.id,
-                )
-            )).scalar_one_or_none()
-        except ValueError:
-            return [TextContent(type="text", text="Invalid document_id — must be a UUID.")]
-
-        if not doc:
-            return [TextContent(type="text", text=f"Document not found: {document_id}")]
-
-        name = doc.name
-        await db.delete(doc)
-        await db.commit()
-        return [TextContent(type="text", text=f"Removed custom document '{name}' from {sch.name}")]
 
 
 # ── Blog helpers (imported from app.utils.blog) ──────────────────
