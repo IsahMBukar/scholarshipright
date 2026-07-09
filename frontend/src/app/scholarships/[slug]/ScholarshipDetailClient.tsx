@@ -7,8 +7,10 @@ import Image from 'next/image';
 import AppLayout from '@/components/AppLayout';
 import { ScholarshipDetailSkeleton } from '@/components/Skeletons';
 import { useAuth } from '@/hooks/useAuth';
-import { fetchScholarship, saveScholarship, removeSavedScholarship, fetchSavedScholarships, updateSavedScholarship, incrementScholarshipView } from '@/services/api';
-import type { Scholarship, MatchBreakdown, DegreeDocument, CustomDocument } from '@/services/api';
+import { fetchScholarship, saveScholarship, removeSavedScholarship, fetchSavedScholarships, updateSavedScholarship, incrementScholarshipView, fetchProfile } from '@/services/api';
+import type { Scholarship, MatchBreakdown, DegreeDocument, CustomDocument, Profile } from '@/services/api';
+import { isProfileComplete } from '@/hooks/useOnboarding';
+import { getDeadlineInfo } from '@/components/scholarship/ScholarshipAtoms';
 
 // ── Helper: build doc list from a degree-level document row ────────
 type Doc = { name: string; note?: string; required: boolean };
@@ -169,6 +171,7 @@ export default function ScholarshipDetailClient() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const viewedRef = useRef<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [profileComplete, setProfileComplete] = useState<boolean | null>(null); // null = still loading
   const { isAuthenticated, setPendingAction } = useAuth();
 
   function handleShare() {
@@ -190,11 +193,13 @@ export default function ScholarshipDetailClient() {
       Promise.all([
         fetchScholarship(slug),
         fetchSavedScholarships().catch(() => []),
-      ]).then(([sch, saved]) => {
+        isAuthenticated ? fetchProfile().catch(() => null) : Promise.resolve(null),
+      ]).then(([sch, saved, profile]) => {
         setScholarship(sch);
         const found = saved.find((s: { scholarship_id?: string; id: string; status?: string }) => (s.scholarship_id || s.id) === sch.id);
         setIsSaved(!!found);
         if (found) setSavedStatus(found.status || 'saved');
+        setProfileComplete(isProfileComplete(profile));
       }).catch((err) => {
         console.error(err);
         if (err?.status === 404 || err?.message?.includes('404')) {
@@ -313,12 +318,11 @@ export default function ScholarshipDetailClient() {
     );
   }
 
-  const daysUntilDeadline = Math.max(0, Math.ceil(
-    (new Date(scholarship.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-  ));
+  const dl = getDeadlineInfo(scholarship.deadline, scholarship.open_date);
   const score = scholarship.match_score;
-  const matchLabel = score != null
-    ? (score >= 85 ? 'STRONG MATCH' : score >= 70 ? 'GOOD MATCH' : score >= 50 ? 'FAIR MATCH' : 'LOW MATCH')
+  const roundedScore = score != null ? Math.round(score) : null;
+  const matchLabel = roundedScore != null
+    ? (roundedScore >= 85 ? 'STRONG MATCH' : roundedScore >= 70 ? 'GOOD MATCH' : roundedScore >= 50 ? 'FAIR MATCH' : 'LOW MATCH')
     : null;
 
   // Derive data from scholarship
@@ -429,12 +433,21 @@ export default function ScholarshipDetailClient() {
               >
                 <span className="material-symbols-outlined text-[18px]">{isSaved ? 'bookmark' : 'bookmark_border'}</span>
               </button>
-              <button
-                onClick={handleApplyNow}
-                className="px-4 py-2 bg-primary hover:brightness-110 text-white font-semibold rounded-lg text-[13px] md:text-sm flex items-center gap-1 shadow-sm transition"
-              >
-                APPLY <span className="material-symbols-outlined text-[14px]">open_in_new</span>
-              </button>
+              {dl.isUpcoming ? (
+                <button
+                  disabled
+                  className="px-4 py-2 bg-gray-200 text-gray-400 font-semibold rounded-lg text-[13px] md:text-sm flex items-center gap-1 cursor-not-allowed"
+                >
+                  NOT YET OPEN
+                </button>
+              ) : (
+                <button
+                  onClick={handleApplyNow}
+                  className="px-4 py-2 bg-primary hover:brightness-110 text-white font-semibold rounded-lg text-[13px] md:text-sm flex items-center gap-1 shadow-sm transition"
+                >
+                  APPLY <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -535,37 +548,34 @@ export default function ScholarshipDetailClient() {
 
                 {/* Deadline bar — prominent urgency indicator */}
                 {(() => {
-                  const isPassed = daysUntilDeadline <= 0;
-                  const isUrgent = !isPassed && daysUntilDeadline <= 7;
-                  const isSoon = !isPassed && daysUntilDeadline <= 30;
-                  const wrapperClass = isPassed
+                  const wrapperClass = dl.isExpired
                     ? 'bg-gray-100 text-text-secondary'
-                    : isUrgent
+                    : dl.isUrgent
                     ? 'bg-red-50 text-red-600 ring-1 ring-red-200'
-                    : isSoon
+                    : dl.isSoon
                     ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
                     : 'bg-primary-light/20 text-text-primary';
                   return (
                     <div className={`flex items-center gap-3 px-4 py-3 rounded-xl ${wrapperClass}`}>
-                      {!isPassed && (
+                      {!dl.isExpired && (
                         <span className="relative flex w-2.5 h-2.5 flex-shrink-0">
-                          {(isUrgent || isSoon) && (
-                            <span className={`absolute inset-0 rounded-full animate-ping opacity-75 ${isUrgent ? 'bg-red-500' : 'bg-amber-500'}`} />
+                          {(dl.isUrgent || dl.isSoon) && (
+                            <span className={`absolute inset-0 rounded-full animate-ping opacity-75 ${dl.isUrgent ? 'bg-red-500' : 'bg-amber-500'}`} />
                           )}
-                          <span className={`relative inline-flex rounded-full w-2.5 h-2.5 ${isUrgent ? 'bg-red-500' : isSoon ? 'bg-amber-500' : 'bg-primary'}`} />
+                          <span className={`relative inline-flex rounded-full w-2.5 h-2.5 ${dl.isUrgent ? 'bg-red-500' : dl.isSoon ? 'bg-amber-500' : 'bg-primary'}`} />
                         </span>
                       )}
-                      <span className="material-symbols-outlined text-[20px]">{isPassed ? 'event_busy' : 'event'}</span>
+                      <span className="material-symbols-outlined text-[20px]">{dl.icon}</span>
                       <div className="flex-1 min-w-0">
-                        {isPassed ? (
-                          <span className="font-semibold text-[15px]">Applications closed</span>
+                        {dl.isExpired ? (
+                          <span className="font-semibold text-[15px]">Application closed</span>
                         ) : (
                           <>
                             <span className="font-bold text-[18px] leading-none">
-                              {daysUntilDeadline} day{daysUntilDeadline === 1 ? '' : 's'} left
+                              {dl.label}
                             </span>
                             <span className="block text-xs opacity-80 mt-0.5">
-                              {isUrgent ? 'Apply now — closing soon' : isSoon ? 'Don\'t miss the deadline' : 'Time remaining to apply'}
+                              {dl.isUpcoming ? 'Applications not yet open' : dl.isClosing ? 'Apply now!' : dl.isUrgent ? 'Apply now — closing soon' : dl.isSoon ? 'Don\'t miss the deadline' : 'Time remaining to apply'}
                             </span>
                           </>
                         )}
@@ -580,10 +590,43 @@ export default function ScholarshipDetailClient() {
 
               {/* Right: Match Score Card */}
               <div className="border border-primary-light bg-white rounded-xl p-5 shadow-sm space-y-4">
-                {score != null ? (
+                {!isAuthenticated ? (
+                  <div className="flex flex-col items-center justify-center py-6 gap-3">
+                    <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-[24px] text-text-secondary">lock</span>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-semibold text-text-primary">Sign in to see your match score</p>
+                      <p className="text-[11px] text-text-secondary mt-1">Create a free profile to find out how well you fit this scholarship.</p>
+                    </div>
+                    <Link
+                      href="/signup"
+                      className="mt-1 px-5 py-2 bg-primary hover:brightness-110 text-white text-sm font-semibold rounded-lg shadow-sm transition"
+                    >
+                      Create free profile
+                    </Link>
+                  </div>
+                ) : profileComplete === false ? (
+                  <div className="flex flex-col items-center justify-center py-6 gap-3">
+                    <div className="relative w-10 h-10">
+                      <div className="absolute inset-0 rounded-full border-2 border-gray-100"></div>
+                      <div className="absolute inset-0 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-semibold text-text-primary">Complete your profile first</p>
+                      <p className="text-[11px] text-text-secondary mt-1">Fill in your country, degree and field to see your match score.</p>
+                    </div>
+                    <Link
+                      href="/profile"
+                      className="mt-1 px-5 py-2 bg-primary hover:brightness-110 text-white text-sm font-semibold rounded-lg shadow-sm transition"
+                    >
+                      Complete profile
+                    </Link>
+                  </div>
+                ) : score != null ? (
                   <>
                 <div className="flex justify-between items-baseline">
-                  <span className="text-4xl font-extrabold text-text-primary">{score}%</span>
+                  <span className="text-4xl font-extrabold text-text-primary">{roundedScore}%</span>
                   <span className="bg-primary-light/40 text-text-primary text-xs font-bold px-2.5 py-1 rounded-md">
                     {matchLabel}
                   </span>
@@ -667,22 +710,6 @@ export default function ScholarshipDetailClient() {
                   </div>
                 )}
                   </>
-                ) : !isAuthenticated ? (
-                  <div className="flex flex-col items-center justify-center py-6 gap-3">
-                    <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
-                      <span className="material-symbols-outlined text-[24px] text-text-secondary">lock</span>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-sm font-semibold text-text-primary">Sign in to see your match score</p>
-                      <p className="text-[11px] text-text-secondary mt-1">Create a free profile to find out how well you fit this scholarship.</p>
-                    </div>
-                    <Link
-                      href="/signup"
-                      className="mt-1 px-5 py-2 bg-primary hover:brightness-110 text-white text-sm font-semibold rounded-lg shadow-sm transition"
-                    >
-                      Create free profile
-                    </Link>
-                  </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center py-6 gap-3">
                     <div className="relative w-10 h-10">
@@ -1082,9 +1109,9 @@ export default function ScholarshipDetailClient() {
                         <p className="text-[12px] text-text-secondary">
                           Deadline: <span className="font-semibold text-text-primary">{fmtFullLong(new Date(scholarship.deadline))}</span>
                           {' · '}
-                          {daysUntilDeadline > 0
-                            ? <span className="font-semibold text-primary">{daysUntilDeadline} days from today</span>
-                            : <span className="text-text-secondary">Applications closed</span>}
+                          {dl.isExpired
+                            ? <span className="text-text-secondary">Application closed</span>
+                            : <span className="font-semibold text-primary">{dl.label}</span>}
                         </p>
                       </div>
                     </div>

@@ -5,6 +5,7 @@ import { fetchProfile, fetchSavedScholarships, fetchScholarships, type Profile, 
 import { useRouter } from 'next/navigation';
 import NotificationBell from './NotificationBell';
 import OnboardingProgress from './OnboardingProgress';
+import { getDeadlineInfo } from './scholarship/ScholarshipAtoms';
 
 // ── Module-level cache ────────────────────────────────────────────
 // Stale-while-revalidate: first mount shows cached data instantly and
@@ -18,7 +19,7 @@ interface CachedData {
   scholarshipCount: number;
   savedCount: number;
   appliedCount: number;
-  deadlines: Array<{ name: string; slug: string; days: number }>;
+  deadlines: Array<{ name: string; slug: string; days: number; deadline: string; openDate?: string | null }>;
 }
 
 let cachedData: CachedData | null = null;
@@ -48,7 +49,7 @@ async function loadRightPanelData(): Promise<CachedData> {
       .slice(0, 5)
       .map(s => {
         const days = Math.ceil((new Date(s.deadline).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-        return { name: s.name, slug: s.slug, days };
+        return { name: s.name, slug: s.slug, days, deadline: s.deadline, openDate: s.open_date };
       });
   }
 
@@ -204,20 +205,21 @@ export default function RightPanel() {
           </div>
         ) : data.deadlines.length > 0 ? (
           <div className="space-y-2">
-            {data.deadlines.map((item) => (
+            {data.deadlines.map((item) => {
+              const dl = getDeadlineInfo(item.deadline);
+              return (
               <button
                 key={item.slug}
                 onClick={() => router.push(`/scholarships/${item.slug}`)}
                 className="flex items-center justify-between py-1.5 w-full hover:bg-gray-50 rounded px-1 transition-colors"
               >
                 <span className="text-[13px] text-text-primary truncate max-w-[140px]">{item.name}</span>
-                <span className={`text-[12px] font-medium whitespace-nowrap ${
-                  item.days <= 14 ? 'text-red-500' : item.days <= 30 ? 'text-amber-600' : 'text-text-secondary'
-                }`}>
-                  {item.days}d left
+                <span className={`text-[12px] font-medium whitespace-nowrap ${dl.isUrgent ? 'text-red-500' : dl.isSoon ? 'text-amber-600' : 'text-text-secondary'}`}>
+                  {dl.shortLabel}
                 </span>
               </button>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="text-[12px] text-text-secondary">No upcoming deadlines</p>

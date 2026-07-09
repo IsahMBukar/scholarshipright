@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_, update
+from sqlalchemy import select, func, or_, and_, update, case
 from typing import Optional, List
 from datetime import date
 from uuid import UUID
@@ -172,13 +172,19 @@ async def list_scholarships(
             match_subq, match_subq.c.scholarship_id == Scholarship.id
         )
 
-    # Sort
+    # Sort — active first, upcoming second, expired last
+    today = date.today()
+    status_flag = case(
+        (Scholarship.deadline < today, 2),                          # expired
+        (and_(Scholarship.open_date.isnot(None), Scholarship.open_date > today), 1),  # upcoming
+        else_=0,                                                     # active (open)
+    )
     if sort == "newest":
-        query = query.order_by(Scholarship.created_at.desc())
+        query = query.order_by(status_flag, Scholarship.created_at.desc())
     elif user_id:
-        query = query.order_by(match_subq.c.score.desc().nullslast(), Scholarship.deadline.asc())
+        query = query.order_by(status_flag, match_subq.c.score.desc().nullslast(), Scholarship.deadline.asc())
     else:
-        query = query.order_by(Scholarship.deadline.asc())
+        query = query.order_by(status_flag, Scholarship.deadline.asc())
 
     # Paginate
     offset = (page - 1) * limit
@@ -228,7 +234,7 @@ async def featured_scholarships(request: Request, db: AsyncSession = Depends(get
 
     query = (
         query
-        .where(Scholarship.is_active == True, Scholarship.is_verified == True)
+        .where(Scholarship.is_active == True, Scholarship.is_verified == True, Scholarship.deadline >= date.today())
         .limit(6)
     )
     if user_id:

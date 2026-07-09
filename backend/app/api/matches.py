@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
+from datetime import date
 from uuid import UUID
 
 from app.core.rate_limit import matches_rate_limit
@@ -42,15 +43,29 @@ async def get_matches(
         # Refresh the row so we don't re-enter on the next call.
         await db.refresh(user_row)
 
+    today = date.today()
     query = (
         select(MatchScore, Scholarship)
         .join(Scholarship, MatchScore.scholarship_id == Scholarship.id)
         .where(MatchScore.user_id == user.id)
+        .where(Scholarship.deadline >= today)
         .order_by(MatchScore.score.desc())
         .limit(50)
     )
     result = await db.execute(query)
     rows = result.all()
+
+    # Fallback: if no active scholarships exist, return all (including expired)
+    if not rows:
+        query = (
+            select(MatchScore, Scholarship)
+            .join(Scholarship, MatchScore.scholarship_id == Scholarship.id)
+            .where(MatchScore.user_id == user.id)
+            .order_by(MatchScore.score.desc())
+            .limit(50)
+        )
+        result = await db.execute(query)
+        rows = result.all()
 
     return [
         {

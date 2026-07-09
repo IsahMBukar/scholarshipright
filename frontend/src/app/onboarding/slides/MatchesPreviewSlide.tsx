@@ -8,6 +8,7 @@ import {
   fetchFeaturedScholarships,
   type Scholarship,
 } from '@/services/api';
+import { getDeadlineInfo } from '@/components/scholarship/ScholarshipAtoms';
 
 /**
  * MatchesPreviewSlide — slide 3 of the onboarding carousel.
@@ -77,10 +78,7 @@ function topReasons(breakdown: Record<string, unknown> | undefined, n = 2): stri
 
 function MatchPreview({ m }: { m: Match }) {
   const s = m.scholarship;
-  const daysUntilDeadline = s.deadline
-    ? Math.max(0, Math.ceil((new Date(s.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-    : null;
-  const isUrgent = daysUntilDeadline !== null && daysUntilDeadline <= 30;
+  const dl = s.deadline ? getDeadlineInfo(s.deadline, s.open_date) : null;
   const score = Math.round(m.score);
   const colors = colorForScore(score);
   const reasons = topReasons(m.breakdown as Record<string, number> | undefined, 2);
@@ -106,9 +104,10 @@ function MatchPreview({ m }: { m: Match }) {
                 Verified
               </span>
             )}
-            {isUrgent && daysUntilDeadline !== null && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-red-50 text-[10px] font-semibold text-red-500">
-                {daysUntilDeadline}d left
+            {dl && (
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold border ${dl.color}`}>
+                <span className="material-symbols-outlined text-[11px]">{dl.icon}</span>
+                {dl.shortLabel}
               </span>
             )}
           </div>

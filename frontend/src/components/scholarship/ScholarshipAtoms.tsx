@@ -9,6 +9,104 @@ export function daysUntil(dateStr: string): number {
   return Math.max(0, Math.ceil((new Date(dateStr).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
 }
 
+// ── Deadline info — single source of truth for all deadline UI ───
+export interface DeadlineInfo {
+  days: number;          // 0 = today, negative = expired
+  status: 'upcoming' | 'open' | 'expired';
+  isUpcoming: boolean;   // open_date in the future
+  isExpired: boolean;
+  isClosing: boolean;    // today or tomorrow
+  isUrgent: boolean;     // ≤7 days
+  isSoon: boolean;       // ≤30 days
+  label: string;         // "Opens in 5 days", "Closing today", "Application closed"
+  shortLabel: string;    // "5d", "Today", "Closed"
+  color: string;         // Tailwind bg/text classes
+  icon: string;          // material symbol name
+}
+
+export function getDeadlineInfo(deadline: string, openDate?: string | null): DeadlineInfo {
+  // ── Upcoming: application hasn't opened yet ───────────────────
+  if (openDate) {
+    const openDiffMs = new Date(openDate).getTime() - Date.now();
+    const openDays = Math.ceil(openDiffMs / (1000 * 60 * 60 * 24));
+    if (openDays > 0) {
+      const isOpeningSoon = openDays <= 7;
+      return {
+        days: openDays, status: 'upcoming', isUpcoming: true, isExpired: false,
+        isClosing: false, isUrgent: false, isSoon: isOpeningSoon,
+        label: openDays === 1 ? 'Opens tomorrow' : `Opens in ${openDays} days`,
+        shortLabel: openDays === 1 ? 'Tomorrow' : `${openDays}d`,
+        color: 'bg-blue-50 text-blue-700 border-blue-200',
+        icon: 'event_upcoming',
+      };
+    }
+  }
+
+  // ── Deadline-based statuses ───────────────────────────────────
+  const diffMs = new Date(deadline).getTime() - Date.now();
+  const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  const isExpired = days <= 0 && diffMs < 0;
+
+  if (isExpired) {
+    return {
+      days, status: 'expired', isUpcoming: false, isExpired: true,
+      isClosing: false, isUrgent: false, isSoon: false,
+      label: 'Application closed',
+      shortLabel: 'Closed',
+      color: 'bg-gray-100 text-gray-500 border-gray-200',
+      icon: 'event_busy',
+    };
+  }
+  if (days === 0) {
+    return {
+      days: 0, status: 'open', isUpcoming: false, isExpired: false,
+      isClosing: true, isUrgent: true, isSoon: true,
+      label: 'Closing today',
+      shortLabel: 'Today',
+      color: 'bg-red-50 text-red-700 border-red-200',
+      icon: 'today',
+    };
+  }
+  if (days === 1) {
+    return {
+      days: 1, status: 'open', isUpcoming: false, isExpired: false,
+      isClosing: true, isUrgent: true, isSoon: true,
+      label: 'Closing tomorrow',
+      shortLabel: 'Tomorrow',
+      color: 'bg-red-50 text-red-700 border-red-200',
+      icon: 'event_upcoming',
+    };
+  }
+  if (days <= 7) {
+    return {
+      days, status: 'open', isUpcoming: false, isExpired: false,
+      isClosing: false, isUrgent: true, isSoon: true,
+      label: `Closing in ${days} days`,
+      shortLabel: `${days}d`,
+      color: 'bg-red-50 text-red-700 border-red-200',
+      icon: 'schedule',
+    };
+  }
+  if (days <= 30) {
+    return {
+      days, status: 'open', isUpcoming: false, isExpired: false,
+      isClosing: false, isUrgent: false, isSoon: true,
+      label: `Closing in ${days} days`,
+      shortLabel: `${days}d`,
+      color: 'bg-amber-50 text-amber-700 border-amber-200',
+      icon: 'schedule',
+    };
+  }
+  return {
+    days, status: 'open', isUpcoming: false, isExpired: false,
+    isClosing: false, isUrgent: false, isSoon: false,
+    label: `Closing in ${days} days`,
+    shortLabel: `${days}d`,
+    color: 'bg-primary-light/20 text-text-secondary border-gray-200',
+    icon: 'event',
+  };
+}
+
 // ── Logo thumbnail ───────────────────────────────────────────────
 export function ScholarshipLogo({ scholarship, size = 'md' }: {
   scholarship: Scholarship;

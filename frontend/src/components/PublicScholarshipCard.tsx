@@ -2,19 +2,22 @@
 
 import Link from 'next/link';
 import type { Scholarship } from '@/services/api';
-import { daysUntil, ScholarshipLogo, DegreeChips, FundingBadge } from '@/components/scholarship/ScholarshipAtoms';
+import { getDeadlineInfo, ScholarshipLogo, DegreeChips, FundingBadge } from '@/components/scholarship/ScholarshipAtoms';
 
-function DeadlineBadge({ deadline }: { deadline: string }) {
-  const days = daysUntil(deadline);
-  const isUrgent = days <= 30;
+function DeadlineBadge({ deadline, openDate }: { deadline: string; openDate?: string | null }) {
+  const dl = getDeadlineInfo(deadline, openDate);
+  if (dl.isExpired) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+        <span className="material-symbols-outlined text-[12px]">event_busy</span>
+        Closed
+      </span>
+    );
+  }
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-      isUrgent
-        ? 'bg-red-50 text-red-700 border border-red-200'
-        : 'bg-surface-brand text-gray-600 border border-[#f0ebe0]'
-    }`}>
-      {isUrgent ? '⏰' : '📅'}
-      {days === 0 ? 'Deadline passed' : `${days}d left`}
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${dl.color}`}>
+      <span className="material-symbols-outlined text-[12px]">{dl.icon}</span>
+      {dl.shortLabel}
     </span>
   );
 }
@@ -37,7 +40,7 @@ export default function PublicScholarshipCard({ scholarship }: { scholarship: Sc
             </p>
           </div>
         </div>
-        <DeadlineBadge deadline={scholarship.deadline} />
+        <DeadlineBadge deadline={scholarship.deadline} openDate={scholarship.open_date} />
       </div>
 
       <p className="text-xs sm:text-sm text-gray-600 leading-relaxed line-clamp-2 mb-3">

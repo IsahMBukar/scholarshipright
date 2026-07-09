@@ -32,6 +32,7 @@ export default function ScholarshipsListClient() {
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [savedStatuses, setSavedStatuses] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [page, setPage] = useState(1);
@@ -42,6 +43,7 @@ export default function ScholarshipsListClient() {
   const showConfirm = useConfirm();
   const pathname = usePathname();
   const { isAuthenticated, setPendingAction } = useAuth();
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   // Desktop filter expand/collapse state. Starts collapsed so the user
   // sees maximum scholarship content; expands on click, auto-collapses on scroll.
@@ -73,14 +75,15 @@ export default function ScholarshipsListClient() {
     fetchFilterMetadata().then(setMeta).catch((e) => console.error('[ScholarshipsList] Filter metadata:', e));
   }, []);
 
-  // Fetch scholarships whenever filters or search changes
+  // Fetch scholarships whenever filters or search changes (resets to page 1)
   const loadScholarships = useCallback(async (nextFilters: FilterState, search: string) => {
     setLoading(true);
     try {
-      const params = filtersToApiParams(nextFilters, { search });
+      const params = filtersToApiParams(nextFilters, { search, page: '1' });
       const schData = await fetchScholarships(params);
       setScholarships(schData.items || []);
       setTotal(schData.total || 0);
+      setPage(1);
       setError(null);
     } catch (err) {
       console.error('Failed to load scholarships:', err);
@@ -89,6 +92,23 @@ export default function ScholarshipsListClient() {
       setLoading(false);
     }
   }, []);
+
+  // Load next page and append
+  const loadMore = useCallback(async () => {
+    if (loadingMore) return;
+    const nextPage = page + 1;
+    setLoadingMore(true);
+    try {
+      const params = filtersToApiParams(filters, { search: searchQuery, page: String(nextPage) });
+      const schData = await fetchScholarships(params);
+      setScholarships(prev => [...prev, ...(schData.items || [])]);
+      setPage(nextPage);
+    } catch (err) {
+      console.error('Failed to load more scholarships:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [page, filters, searchQuery, loadingMore]);
 
   // Initial load: scholarships + saved IDs
   useEffect(() => {
@@ -119,6 +139,24 @@ export default function ScholarshipsListClient() {
     }, 400);
     return () => clearTimeout(timer);
   }, [searchQuery, filters, loadScholarships]);
+
+  // Infinite scroll — observe the sentinel at the bottom of the list
+  const hasMore = scholarships.length < total;
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || !hasMore || loading || loadingMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          loadMore();
+        }
+      },
+      { rootMargin: '200px' } // trigger slightly before reaching the bottom
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadingMore, loadMore]);
 
   // Auto-collapse desktop filters when user scrolls the main content area.
   // This prevents the filter panel from blocking scholarship cards.
@@ -447,6 +485,17 @@ export default function ScholarshipsListClient() {
                   >
                     Clear all filters
                   </button>
+                )}
+              </div>
+            )}
+            {/* Infinite scroll sentinel — observer watches this element */}
+            {hasMore && activeTab === 'Recommended' && (
+              <div ref={sentinelRef} className="flex justify-center py-6">
+                {loadingMore && (
+                  <div className="flex items-center gap-2 text-[13px] text-text-secondary">
+                    <div className="w-5 h-5 border-2 border-gray-200 border-t-primary rounded-full animate-spin" />
+                    Loading more scholarships…
+                  </div>
                 )}
               </div>
             )}
