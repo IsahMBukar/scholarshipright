@@ -54,14 +54,14 @@ echo ""
 # ── Start task queue worker (background) ─────────────────────────
 
 echo "Starting task queue worker..."
-./venv/bin/python -m app.core.task_queue &
+uv run python -m app.core.task_queue &
 WORKER_PID=$!
 echo "  Worker PID: $WORKER_PID"
 
 # ── Start API server (multi-worker) ─────────────────────────────
 
 echo "Starting API server ($WORKERS workers on port $API_PORT)..."
-exec ./venv/bin/python -m uvicorn app.main:app \
+exec uv run python -m uvicorn app.main:app \
     --host 0.0.0.0 \
     --port "$API_PORT" \
     --workers "$WORKERS" \

@@ -38,18 +38,16 @@ docker compose up -d
 
 ```bash
 cd backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+uv sync
 
 # Seed scholarships
-python seeds/seed_scholarships.py
+uv run python seeds/seed_scholarships.py
 
 # Generate embeddings
-python scripts/embed_scholarships.py
+uv run python scripts/embed_scholarships.py
 
 # Start API server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### 4. Frontend Setup
