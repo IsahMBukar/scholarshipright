@@ -1,6 +1,6 @@
 // Shared form input primitives for admin drawers.
 //
-// Used by CreateScholarshipDrawer and the Edit drawer inside
+// Used by CreateScholarshipWizard and the Edit drawer inside
 // /admin/scholarships/page.tsx. Keeping them in one place ensures the
 // two drawers look and behave identically — same field label styling,
 // same focus rings, same hint placement, same checkbox row layout.

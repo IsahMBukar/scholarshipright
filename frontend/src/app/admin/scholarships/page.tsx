@@ -3,7 +3,7 @@
 // Scholarships admin page.
 // - DataTable over /api/admin/scholarships (paginated, sortable, filterable).
 // - Top search + active/verified/funding filters.
-// - Primary CTA: "+ New scholarship" → CreateScholarshipDrawer (full form).
+// - Primary CTA: "+ New scholarship" → CreateScholarshipWizard (full form).
 // - Click row → ScholarshipDrawer (Edit) with all 34 fields, save → PATCH.
 // - Bulk-activate / bulk-deactivate via the DataTable toolbar.
 

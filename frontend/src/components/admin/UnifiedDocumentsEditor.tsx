@@ -13,7 +13,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronUp, Info, AlertTriangle } from 'lucide-react';
 import { FieldLabel, CheckboxRow } from './FormPrimitives';
 import {
   PREVIOUS_DEGREE_OPTIONS,
@@ -65,10 +65,45 @@ interface Props {
 
 // ── Defaults per level ────────────────────────────────────────────
 
+// Returns true for degree levels that have well-known document defaults
+// (bachelor, master, phd, direct_phd, postdoc). Levels without smart-fill
+// (certificate, diploma, associate, other) get a blank slate so the admin
+// picks from scratch.
+function hasSmartFill(level: string): boolean {
+  const l = level.toLowerCase();
+  if (l.includes('direct') && l.includes('phd')) return true;
+  if (l.includes('postdoc') || l.includes('post-doc') || l.includes('post_doc')) return true;
+  if (l.includes('phd') || l.includes('doctoral') || l.includes('doctorate')) return true;
+  if (l.includes('master') || l.includes('msc') || l.includes('mba') || l.includes('meng') || l.includes('mfa') || l.includes('mphil')) return true;
+  if (l.includes('bachelor') || l.includes('undergrad') || l.includes('bsc') || l.includes('b.sc')) return true;
+  return false;
+}
+
 function defaultsForLevel(level: string): Omit<UnifiedDegreeDoc, 'custom_documents'> {
   const l = level.toLowerCase();
   const is = (s: string) => l.includes(s);
 
+  // Non-smart-fill levels: blank slate — admin picks everything from scratch.
+  if (!hasSmartFill(level)) {
+    return {
+      degree_level: level,
+      req_transcripts: false,
+      req_cv_resume: false,
+      req_sop_motivation_letter: false,
+      req_recommendation_letters: false,
+      req_english_test: false,
+      req_passport_or_id: false,
+      req_financial_proof: false,
+      req_photo: false,
+      previous_degree_required: 'none',
+      recommendation_letters_count: 0,
+      research_proposal_required: false,
+      writing_sample_required: false,
+      standardized_test: 'none',
+    };
+  }
+
+  // Smart-fill levels: intelligent defaults the admin can tweak.
   let prev = 'high_school_diploma';
   let recCount = 2;
   let research = false;
@@ -91,7 +126,7 @@ function defaultsForLevel(level: string): Omit<UnifiedDegreeDoc, 'custom_documen
     recCount = 3;
     research = true;
     test = 'gre';
-  } else if (is('master') || is('msc') || is('mba')) {
+  } else if (is('master') || is('msc') || is('mba') || is('meng') || is('mfa') || is('mphil')) {
     prev = 'bachelor_degree';
     recCount = 2;
     research = false;
@@ -389,6 +424,19 @@ export default function UnifiedDocumentsEditor({
 
           {current && (
             <div className="space-y-3 bg-white rounded-lg p-3 border border-gray-100">
+              {/* Smart-fill indicator */}
+              {hasSmartFill(current.degree_level) ? (
+                <div className="flex items-center gap-1.5 text-[11px] text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-1.5">
+                  <Info className="w-3 h-3 shrink-0" />
+                  <span>Defaults auto-filled for <strong>{current.degree_level}</strong> — adjust as needed.</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1.5">
+                  <AlertTriangle className="w-3 h-3 shrink-0" />
+                  <span>No smart defaults for <strong>{current.degree_level}</strong> — tick what applies or add custom docs below.</span>
+                </div>
+              )}
+
               {/* 8 standard booleans */}
               <div className="grid grid-cols-2 gap-x-3 gap-y-1">
                 <CheckboxRow label="Transcripts" checked={current.req_transcripts} onChange={(v) => updateDoc(activeTab, 'req_transcripts', v)} />
@@ -422,8 +470,8 @@ export default function UnifiedDocumentsEditor({
                     onChange={(e) => updateDoc(activeTab, 'recommendation_letters_count', Number(e.target.value))}
                     className="w-full h-9 px-2 text-sm bg-white border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary"
                   >
-                    {[1, 2, 3, 4].map((n) => (
-                      <option key={n} value={n}>{n}</option>
+                    {[0, 1, 2, 3, 4].map((n) => (
+                      <option key={n} value={n}>{n === 0 ? 'None' : n}</option>
                     ))}
                   </select>
                 </div>

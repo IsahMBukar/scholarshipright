@@ -1,6 +1,6 @@
 // Shared scholarship form state + body construction.
 //
-// Used by both CreateScholarshipDrawer (POST /api/admin/scholarships) and
+// Used by CreateScholarshipWizard (POST /api/admin/scholarships) and
 // the Edit drawer inside /admin/scholarships (PATCH /api/admin/scholarships/{id}).
 // Keeping the form shape, validation rules, and serialisation logic in one
 // place means the two drawers can't drift apart — the Edit drawer is now a

@@ -2,7 +2,7 @@
 
 // Stepped wizard for creating scholarships.
 //
-// Drop-in replacement for CreateScholarshipDrawer — same props interface.
+// Same props interface as the admin page expects.
 // Organizes the 34-field form into 5 logical steps:
 //
 //   Step 1: Source    — paste URL (auto-fill) or manual entry
@@ -58,6 +58,7 @@ import {
   SectionHeader,
   CheckboxRow,
 } from './FormPrimitives';
+import UnifiedDocumentsEditor from './UnifiedDocumentsEditor';
 import MultiSelect from './ui/MultiSelect';
 
 // ── Steps ─────────────────────────────────────────────────────────
@@ -72,7 +73,7 @@ const STEPS = [
 
 type StepId = (typeof STEPS)[number]['id'];
 
-// ── Props (same as CreateScholarshipDrawer) ───────────────────────
+// ── Props ────────────────────────────────────────────────────────────
 
 export interface CreateScholarshipWizardProps {
   open: boolean;
@@ -177,6 +178,17 @@ export default function CreateScholarshipWizard({
       value: ScholarshipForm[K]
     ) => {
       setForm((f) => ({ ...f, [key]: value }));
+    },
+    []
+  );
+
+  const handleDocsChange = useCallback(
+    (value: { degree_documents: ScholarshipForm['degree_documents']; custom_documents: ScholarshipForm['custom_documents'] }) => {
+      setForm((f) => ({
+        ...f,
+        degree_documents: value.degree_documents,
+        custom_documents: value.custom_documents,
+      }));
     },
     []
   );
@@ -576,6 +588,7 @@ export default function CreateScholarshipWizard({
               value={form.degree_levels}
               onChange={(v) => set('degree_levels', v)}
               options={DEGREE_LEVEL_OPTIONS}
+              maxVisible={DEGREE_LEVEL_OPTIONS.length}
               placeholder="Pick degree levels…"
               ariaLabel="Degree levels"
               id="wizard-degree-levels"
@@ -675,6 +688,12 @@ export default function CreateScholarshipWizard({
               </div>
             </div>
           </div>
+
+          {/* Required Documents */}
+          <UnifiedDocumentsEditor
+            degreeLevels={form.degree_levels || []}
+            onChange={handleDocsChange}
+          />
 
           {/* Dates */}
           <SectionHeader>Dates</SectionHeader>
