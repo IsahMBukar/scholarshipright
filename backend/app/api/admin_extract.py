@@ -62,11 +62,12 @@ async def extract_url(
     """
     try:
         data = await extract_from_url(body.url)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
+    except ValueError:
+        logger.warning("Invalid URL for extraction: %s", body.url)
+        raise HTTPException(400, "Invalid URL or unsupported page format.")
     except Exception as e:
         logger.exception("URL extraction failed for %s", body.url)
-        raise HTTPException(500, f"Extraction failed: {e}")
+        raise HTTPException(500, "Extraction failed. Please try again.")
 
     # Count fields found/missing
     all_fields = {
@@ -106,11 +107,12 @@ async def extract_url_and_submit(
     """
     try:
         data = await extract_from_url(body.url)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
+    except ValueError:
+        logger.warning("Invalid URL for extraction: %s", body.url)
+        raise HTTPException(400, "Invalid URL or unsupported page format.")
     except Exception as e:
         logger.exception("URL extraction failed for %s", body.url)
-        raise HTTPException(500, f"Extraction failed: {e}")
+        raise HTTPException(500, "Extraction failed. Please try again.")
 
     # Submit to review queue
     pending = PendingScholarship(

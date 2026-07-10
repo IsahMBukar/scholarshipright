@@ -293,3 +293,18 @@ blog_write_rate_limit = rate_limit(
 scholarship_view_rate_limit = rate_limit(
     "scholarship_view", max_requests=60, window_seconds=60 * 60
 )
+
+# Saved scholarships write — protect against spam/abuse.
+saved_write_rate_limit = rate_limit(
+    "saved_write", max_requests=60, window_seconds=60 * 60
+)
+
+# Reminders write — protect against abuse.
+reminder_write_rate_limit = rate_limit(
+    "reminder_write", max_requests=30, window_seconds=60 * 60
+)
+
+# Profile write — protect against abuse.
+profile_write_rate_limit = rate_limit(
+    "profile_write", max_requests=20, window_seconds=60 * 60
+)

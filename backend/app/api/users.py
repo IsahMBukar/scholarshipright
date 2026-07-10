@@ -11,6 +11,7 @@ from app.services.match_auto import (
     REASON_PROFILE_UPDATED,
     trigger_recompute,
 )
+from app.core.rate_limit import profile_write_rate_limit
 
 router = APIRouter()
 
@@ -58,6 +59,7 @@ async def get_profile(
 async def create_or_update_profile(
     profile_data: ProfileCreate,
     background_tasks: BackgroundTasks,
+    _rate: None = Depends(profile_write_rate_limit),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):

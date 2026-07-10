@@ -10,6 +10,7 @@ from app.models.scholarship import Scholarship
 from app.schemas.saved_scholarship import SavedScholarshipCreate, SavedScholarshipUpdate, SavedScholarshipResponse
 from app.api.users import get_current_user
 from app.models.user import User
+from app.core.rate_limit import saved_write_rate_limit
 
 router = APIRouter()
 
@@ -81,6 +82,7 @@ async def get_stats(
 @router.post("/{scholarship_id}", response_model=SavedScholarshipResponse)
 async def save_scholarship(
     scholarship_id: UUID,
+    _rate: None = Depends(saved_write_rate_limit),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -122,6 +124,7 @@ async def save_scholarship(
 async def update_saved(
     scholarship_id: UUID,
     update_data: SavedScholarshipUpdate,
+    _rate: None = Depends(saved_write_rate_limit),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -170,6 +173,7 @@ async def update_saved(
 @router.delete("/{scholarship_id}")
 async def delete_saved(
     scholarship_id: UUID,
+    _rate: None = Depends(saved_write_rate_limit),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):

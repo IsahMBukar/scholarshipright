@@ -7,6 +7,7 @@ from app.db.session import get_db
 from app.models.saved_scholarship import SavedScholarship
 from app.api.users import get_current_user
 from app.models.user import User
+from app.core.rate_limit import reminder_write_rate_limit
 
 router = APIRouter()
 
@@ -28,6 +29,7 @@ async def list_reminders(
 @router.post("/{saved_id}")
 async def enable_reminder(
     saved_id: UUID,
+    _rate: None = Depends(reminder_write_rate_limit),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -48,6 +50,7 @@ async def enable_reminder(
 @router.delete("/{saved_id}")
 async def disable_reminder(
     saved_id: UUID,
+    _rate: None = Depends(reminder_write_rate_limit),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
