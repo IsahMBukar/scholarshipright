@@ -49,6 +49,12 @@ export interface ScholarshipForm {
   fields_of_study: string[];
   eligible_nationalities: string[];
   eligible_regions: string[];
+  // Structured eligibility (composable include/exclude)
+  included_groups: string[];
+  included_countries: string[];
+  excluded_groups: string[];
+  excluded_countries: string[];
+  eligibility_basis: 'citizenship' | 'residency' | 'either';
   // Funding
   funding_type: string;
   covers_tuition: boolean;
@@ -322,6 +328,11 @@ export function emptyForm(): ScholarshipForm {
     fields_of_study: [],
     eligible_nationalities: [],
     eligible_regions: [],
+    included_groups: [],
+    included_countries: [],
+    excluded_groups: [],
+    excluded_countries: [],
+    eligibility_basis: 'either',
     funding_type: 'fully_funded',
     covers_tuition: true,
     covers_living: false,
@@ -383,6 +394,11 @@ export function formFromScholarship(s: AdminScholarship): ScholarshipForm {
     fields_of_study: [...(s.fields_of_study ?? [])],
     eligible_nationalities: [...(s.eligible_nationalities ?? [])],
     eligible_regions: [...(s.eligible_regions ?? [])],
+    included_groups: [...(s.included_groups ?? [])],
+    included_countries: [...(s.included_countries ?? [])],
+    excluded_groups: [...(s.excluded_groups ?? [])],
+    excluded_countries: [...(s.excluded_countries ?? [])],
+    eligibility_basis: s.eligibility_basis ?? 'either',
     funding_type: s.funding_type,
     covers_tuition: s.covers_tuition,
     covers_living: s.covers_living,
@@ -540,6 +556,17 @@ export function buildCreateBody(form: ScholarshipForm): AdminScholarshipCreate {
   if (form.fields_of_study.length) body.fields_of_study = form.fields_of_study;
   if (form.eligible_nationalities.length) body.eligible_nationalities = form.eligible_nationalities;
   if (form.eligible_regions.length) body.eligible_regions = form.eligible_regions;
+  // Structured eligibility
+  if (form.included_groups.length) body.included_groups = form.included_groups;
+  if (form.included_countries.length) body.included_countries = form.included_countries;
+  if (form.excluded_groups.length) body.excluded_groups = form.excluded_groups;
+  if (form.excluded_countries.length) body.excluded_countries = form.excluded_countries;
+  body.eligibility_basis = form.eligibility_basis;
+  // Auto-generate display text
+  if (form.included_groups.length || form.included_countries.length ||
+      form.excluded_groups.length || form.excluded_countries.length) {
+    body.eligibility_display = buildEligibilityDisplay(form);
+  }
 
   body.covers_tuition = form.covers_tuition;
   body.covers_living = form.covers_living;
@@ -629,6 +656,33 @@ export function buildCreateBody(form: ScholarshipForm): AdminScholarshipCreate {
 //
 // Array fields are compared as sets (order-independent): "a, b" and "b, a"
 // are considered the same edit.
+// ── Eligibility display builder ───────────────────────────────────
+
+// Group code → human label map (populated lazily from API data).
+// We keep it simple: just uppercase the code as the fallback label.
+function groupLabel(code: string): string {
+  return code.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function buildEligibilityDisplay(form: ScholarshipForm): string {
+  const parts: string[] = [];
+  if (form.included_groups.length) {
+    parts.push(form.included_groups.map(groupLabel).join(' + '));
+  }
+  if (form.included_countries.length) {
+    parts.push(form.included_countries.join(' + '));
+  }
+  if (form.excluded_groups.length || form.excluded_countries.length) {
+    const exc: string[] = [];
+    if (form.excluded_groups.length) exc.push(...form.excluded_groups.map(groupLabel));
+    if (form.excluded_countries.length) exc.push(...form.excluded_countries);
+    parts.push(`except ${exc.join(' + ')}`);
+  }
+  return parts.join(' ');
+}
+
+// ── Patch body builder ────────────────────────────────────────────
+
 export function buildPatchBody(
   form: ScholarshipForm,
   original: AdminScholarship
@@ -705,6 +759,18 @@ export function buildPatchBody(
   arr(form.fields_of_study, original.fields_of_study, 'fields_of_study');
   arr(form.eligible_nationalities, original.eligible_nationalities, 'eligible_nationalities');
   arr(form.eligible_regions, original.eligible_regions, 'eligible_regions');
+  // Structured eligibility
+  arr(form.included_groups, original.included_groups ?? [], 'included_groups');
+  arr(form.included_countries, original.included_countries ?? [], 'included_countries');
+  arr(form.excluded_groups, original.excluded_groups ?? [], 'excluded_groups');
+  arr(form.excluded_countries, original.excluded_countries ?? [], 'excluded_countries');
+  if (form.eligibility_basis !== (original.eligibility_basis ?? 'either')) {
+    body.eligibility_basis = form.eligibility_basis;
+  }
+  // Re-generate display text if structured fields changed
+  if (body.included_groups || body.included_countries || body.excluded_groups || body.excluded_countries) {
+    body.eligibility_display = buildEligibilityDisplay(form);
+  }
 
   // accepted_english_tests — set compare (also preserves order in form)
   const aet = [...form.accepted_english_tests].sort();

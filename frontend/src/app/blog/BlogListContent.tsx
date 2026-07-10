@@ -119,32 +119,46 @@ function CategoryTabs({
 
 // ── Main component ────────────────────────────────────────────────
 
-export default function BlogListContent() {
-  const [posts, setPosts] = useState<BlogListOut[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+export default function BlogListContent({
+  initialPosts,
+  initialCategories,
+}: {
+  initialPosts: PaginatedBlogs;
+  initialCategories: string[];
+}) {
+  const [posts, setPosts] = useState<BlogListOut[]>(initialPosts.items);
+  const [categories, setCategories] = useState<string[]>(initialCategories);
   const [activeCategory, setActiveCategory] = useState('');
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [totalPages, setTotalPages] = useState(initialPosts.pages);
+  const [total, setTotal] = useState(initialPosts.total);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
-    fetchBlogCategories().then(setCategories).catch((e) => console.error('[BlogList] Categories:', e));
-  }, []);
+    if (initialCategories.length === 0) {
+      fetchBlogCategories().then(setCategories).catch((e) => console.error('[BlogList] Categories:', e));
+    }
+  }, [initialCategories]);
 
   useEffect(() => {
+    // Skip fetch on mount when using initial data
+    if (page === 1 && activeCategory === '' && initialPosts.items.length > 0) return;
     setLoading(true);
+    setLoadError(false);
     fetchBlogPosts({ page, limit: 12, category: activeCategory || undefined })
       .then((data: PaginatedBlogs) => {
         setPosts(data.items);
         setTotalPages(data.pages);
         setTotal(data.total);
       })
-      .catch(() => {
+      .catch((e) => {
+        console.error('[BlogList] Posts:', e);
+        setLoadError(true);
         setPosts([]);
       })
       .finally(() => setLoading(false));
-  }, [page, activeCategory]);
+  }, [page, activeCategory, initialPosts]);
 
   const handleCategoryChange = (cat: string) => {
     setActiveCategory(cat);
@@ -214,13 +228,23 @@ export default function BlogListContent() {
           {/* Empty state */}
           {!loading && posts.length === 0 && (
             <div className="text-center py-20">
-              <p className="text-6xl mb-4">📝</p>
+              <p className="text-6xl mb-4">{loadError ? '⚠️' : '📝'}</p>
               <p className="text-lg font-semibold text-gray-600 mb-2">
-                No articles yet
+                {loadError ? 'Failed to load articles' : 'No articles yet'}
               </p>
               <p className="text-sm text-gray-400">
-                Check back soon for scholarship guides and tips.
+                {loadError
+                  ? 'Something went wrong. Please try again later.'
+                  : 'Check back soon for scholarship guides and tips.'}
               </p>
+              {loadError && (
+                <button
+                  onClick={() => { setPage(1); setActiveCategory(''); }}
+                  className="mt-4 px-4 py-2 rounded-full text-sm font-medium border border-[#f0ebe0] text-gray-600 hover:border-[#f5b942]/40"
+                >
+                  Try again
+                </button>
+              )}
             </div>
           )}
 

@@ -70,6 +70,15 @@ class Settings(BaseSettings):
     # Backend server URL (used for OAuth callback construction)
     server_url: str = "http://localhost:8000"
 
+    # Claude/Anthropic API key for URL extraction (scholarship scraping).
+    # Reads CLAUDE_API_KEY first, falls back to ANTHROPIC_API_KEY.
+    claude_api_key: str = ""
+    anthropic_api_key: str = ""
+
+    # MCP OAuth overrides. Falls back to server_url if empty.
+    mcp_oauth_server_url: str = ""
+    mcp_oauth_audience: str = ""
+
     # pydantic-settings v2 model_config. extra="ignore" lets us keep
     # extra env vars (agent_*, dev_return_reset_token) in .env without
     # declaring them on the model. The original inner-class Config
@@ -88,6 +97,14 @@ class Settings(BaseSettings):
     @property
     def resolved_llm_model(self) -> str:
         return self.llm_model or self.agent_model or self.openai_model or ""
+
+    @property
+    def resolved_claude_api_key(self) -> str:
+        return self.claude_api_key or self.anthropic_api_key or ""
+
+    @property
+    def resolved_mcp_oauth_server_url(self) -> str:
+        return self.mcp_oauth_server_url or self.server_url
 
 
 def _validate_security_settings(settings: "Settings") -> None:

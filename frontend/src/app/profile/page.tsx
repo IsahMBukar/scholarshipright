@@ -515,16 +515,16 @@ function ProfilePageInner() {
     const load = async () => {
       try {
         const [resumes, profileData] = await Promise.all([
-          fetchResumes().catch(() => []),
+          fetchResumes().catch((err) => { console.error('[Profile] Failed to fetch resumes:', err); return []; }),
           // fetchProfile returns null on 404 (no profile row yet — common for
           // fresh users right after onboarding). Coerce to {} so all downstream
           // `profile.X` reads return undefined instead of crashing.
-          fetchProfile().catch(() => null),
+          fetchProfile().catch((err) => { console.error('[Profile] Failed to fetch profile:', err); return null; }),
         ]);
         const primary = resumes.find((r) => r.is_primary) || resumes[0];
         setResume(primary || null);
         setProfile(profileData || {});
-      } catch (e) { /* ignore */ }
+      } catch (err) { console.error('[Profile] Failed to load profile data:', err); }
       finally { setLoading(false); }
     };
     load();
@@ -610,8 +610,8 @@ function ProfilePageInner() {
               try {
                 const stub = await createManualResume();
                 setResume(stub);
-              } catch {
-                /* ignore */
+              } catch (err) {
+                console.error('[Profile] Failed to create manual resume:', err);
               }
             }}
           />

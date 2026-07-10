@@ -20,8 +20,8 @@ export async function GET() {
       const data = await res.json();
       posts = data.items || [];
     }
-  } catch {
-    // Return empty feed on error
+  } catch (err) {
+    console.error('[BlogFeed] Failed to fetch blog posts for RSS feed:', err);
   }
 
   const items = posts

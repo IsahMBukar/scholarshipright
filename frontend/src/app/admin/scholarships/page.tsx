@@ -24,8 +24,6 @@ import {
   DEGREE_LEVEL_OPTIONS,
   FIELD_OF_STUDY_OPTIONS,
   COUNTRY_OPTIONS,
-  REGION_OPTIONS,
-  NATIONALITY_SUGGESTIONS,
   formFromScholarship,
   emptyForm,
   validateForm,
@@ -46,6 +44,7 @@ import { AdminApiError } from '@/lib/admin/client';
 import SearchInput from '@/components/admin/ui/SearchInput';
 import type { AdminScholarship } from '@/lib/admin/types';
 import UnifiedDocumentsEditor from '@/components/admin/UnifiedDocumentsEditor';
+import EligibilityBuilder from '@/components/admin/EligibilityBuilder';
 
 // Page-level filter values for the funding_type dropdown above the table.
 // Note: these are the values admins can FILTER by, not the values in the
@@ -611,27 +610,22 @@ function ScholarshipDrawer({
               />
             </div>
             <div>
-              <FieldLabel>Eligible nationalities</FieldLabel>
-              <MultiSelect
-                multiple
-                value={form.eligible_nationalities}
-                onChange={(v) => set('eligible_nationalities', v)}
-                options={NATIONALITY_SUGGESTIONS}
-                placeholder="Pick or type nationality groups…"
-                ariaLabel="Eligible nationalities"
-                id="edit-eligible-nationalities"
-              />
-            </div>
-            <div>
-              <FieldLabel>Eligible regions</FieldLabel>
-              <MultiSelect
-                multiple
-                value={form.eligible_regions}
-                onChange={(v) => set('eligible_regions', v)}
-                options={REGION_OPTIONS}
-                placeholder="Pick regions…"
-                ariaLabel="Eligible regions"
-                id="edit-eligible-regions"
+              <FieldLabel hint="Compose include/exclude rules — groups, countries, or both">
+                Eligible countries
+              </FieldLabel>
+              <EligibilityBuilder
+                includedGroups={form.included_groups}
+                includedCountries={form.included_countries}
+                excludedGroups={form.excluded_groups}
+                excludedCountries={form.excluded_countries}
+                basis={form.eligibility_basis}
+                onChange={(val) => {
+                  set('included_groups', val.included_groups);
+                  set('included_countries', val.included_countries);
+                  set('excluded_groups', val.excluded_groups);
+                  set('excluded_countries', val.excluded_countries);
+                  set('eligibility_basis', val.eligibility_basis);
+                }}
               />
             </div>
           </div>

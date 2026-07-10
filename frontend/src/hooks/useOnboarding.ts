@@ -151,7 +151,8 @@ export function useOnboarding(): OnboardingState {
       meId = me?.id ? String(me.id) : null;
       setAuthenticated(true);
       setUserId(meId);
-    } catch {
+    } catch (err) {
+      console.error('[Onboarding] Failed to fetch auth state:', err);
       setAuthenticated(false);
       setUserId(null);
     }
@@ -191,7 +192,8 @@ export function useOnboarding(): OnboardingState {
       } else {
         setMatchesCount(0);
       }
-    } catch {
+    } catch (err) {
+      console.error('[Onboarding] Failed to fetch onboarding data:', err);
       setProfile(null);
       setResume(null);
       setMatchesCount(0);
@@ -219,8 +221,8 @@ export function useOnboarding(): OnboardingState {
       const list = await fetchResumes();
       const primary = list.find((r) => r.is_primary) || list[0];
       setResume(primary || stub);
-    } catch {
-      /* offline / already-created — flag is enough to mark the step done */
+    } catch (err) {
+      console.error('[Onboarding] Failed to create manual resume:', err);
     }
   }, [userId]);
 

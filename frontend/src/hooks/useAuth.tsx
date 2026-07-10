@@ -66,7 +66,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setUser(null);
       }
-    } catch {
+    } catch (err) {
+      console.error('[Auth] Failed to refresh auth state:', err);
       setUser(null);
     } finally {
       setLoading(false);
@@ -92,7 +93,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const data = await res.json().catch(() => ({}));
       return { ok: false, error: data.detail || 'Login failed' };
-    } catch {
+    } catch (err) {
+      console.error('[Auth] Login network error:', err);
       return { ok: false, error: 'Network error' };
     }
   }, [refresh]);
@@ -103,7 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         method: 'POST',
         credentials: 'include',
       });
-    } catch { /* ignore */ }
+    } catch (err) { console.error('[Auth] Logout request failed:', err); }
     setUser(null);
   }, []);
 

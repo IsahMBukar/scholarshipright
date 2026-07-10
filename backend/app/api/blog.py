@@ -474,7 +474,8 @@ async def admin_list_all_posts(
         count_base = count_base.where(BlogPost.status == status_filter)
     if search:
         # Escape LIKE wildcards to prevent pattern-based exploration
-        safe = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        from app.utils.db import escape_like
+        safe = escape_like(search)
         ilike = f"%{safe}%"
         base = base.where(BlogPost.title.ilike(ilike))
         count_base = count_base.where(BlogPost.title.ilike(ilike))

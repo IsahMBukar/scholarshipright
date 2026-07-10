@@ -48,7 +48,8 @@ export default function AuthCallbackPage() {
         } else {
           router.push('/scholarships');
         }
-      } catch {
+      } catch (err) {
+        console.error('[AuthCallback] OAuth callback handling failed:', err);
         if (!cancelled) {
           setError('Something went wrong. Please try signing in again.');
         }

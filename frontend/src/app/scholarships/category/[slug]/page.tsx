@@ -40,7 +40,8 @@ async function getScholarships(params: Record<string, string>): Promise<Scholars
     if (!res.ok) return [];
     const data: ScholarshipListResponse = await res.json();
     return data.items || [];
-  } catch {
+  } catch (err) {
+    console.error('[CategoryPage] Failed to fetch scholarships:', err);
     return [];
   }
 }

@@ -34,7 +34,8 @@ async function getScholarship(slug: string): Promise<ScholarshipData | null> {
     });
     if (!res.ok) return null;
     return res.json();
-  } catch {
+  } catch (err) {
+    console.error('[ScholarshipDetail] Failed to fetch scholarship:', err);
     return null;
   }
 }

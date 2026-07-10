@@ -58,7 +58,7 @@ const nextConfig = {
               `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''}`,
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com",
-              "img-src 'self' data: https:",
+              "img-src 'self' data: https://res.cloudinary.com https://scholarshipright.com https://*.scholarshipright.com",
               `connect-src 'self' https:${process.env.NODE_ENV === 'development' ? ' http://localhost:8000 ws:' : ''}`,
               "frame-ancestors 'none'",
             ].join('; '),

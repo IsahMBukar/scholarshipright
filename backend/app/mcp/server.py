@@ -32,6 +32,7 @@ from app.models.scholarship_custom_document import ScholarshipCustomDocument
 from app.models.blog import BlogPost, BlogScholarshipTag, extract_scholarship_slugs
 from app.models.user import User
 from app.mcp.schemas import get_tool_schemas, SCHOLARSHIP_FIELDS
+from app.utils.db import escape_like
 
 logger = logging.getLogger("scholarshipright.mcp")
 
@@ -91,7 +92,7 @@ async def _handle_add(args: dict[str, Any]) -> list[TextContent]:
     async with AsyncSessionLocal() as db:
         search_name = args["name"].lower().strip()
         result = await db.execute(
-            select(Scholarship).where(func.lower(Scholarship.name).ilike(f"%{search_name}%")).limit(5)
+            select(Scholarship).where(func.lower(Scholarship.name).ilike(f"%{escape_like(search_name)}%")).limit(5)
         )
         dupes = result.scalars().all()
 
@@ -128,8 +129,8 @@ async def _handle_list(args: dict[str, Any]) -> list[TextContent]:
         query = select(Scholarship).where(Scholarship.is_active == True)  # noqa: E712
         if search:
             query = query.where(
-                Scholarship.name.ilike(f"%{search}%")
-                | Scholarship.host_country.ilike(f"%{search}%")
+                Scholarship.name.ilike(f"%{escape_like(search)}%")
+                | Scholarship.host_country.ilike(f"%{escape_like(search)}%")
             )
         query = query.order_by(Scholarship.created_at.desc()).limit(limit)
         result = await db.execute(query)
@@ -407,7 +408,7 @@ async def _handle_blog_list(args: dict[str, Any]) -> list[TextContent]:
         count_base = select(func.count(BlogPost.id)).where(BlogPost.status == "published")
 
         if search:
-            ilike = f"%{search}%"
+            ilike = f"%{escape_like(search)}%"
             base = base.where(BlogPost.title.ilike(ilike))
             count_base = count_base.where(BlogPost.title.ilike(ilike))
         if category:

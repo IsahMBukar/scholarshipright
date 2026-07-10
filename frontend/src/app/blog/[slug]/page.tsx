@@ -13,7 +13,8 @@ async function fetchPost(slug: string): Promise<BlogPostOut | null> {
     });
     if (!res.ok) return null;
     return res.json();
-  } catch {
+  } catch (err) {
+    console.error('[BlogDetail] Failed to fetch post:', err);
     return null;
   }
 }

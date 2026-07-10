@@ -30,8 +30,8 @@ export function useLogout() {
         await fetch(`${API_URL}/api/auth/logout`, {
           method: 'POST',
           credentials: 'include',
-        }).catch(() => {
-          /* network errors don't matter — we redirect anyway */
+        }).catch((err) => {
+          console.error('[Logout] Logout request failed:', err);
         });
 
         // Wipe per-user onboarding state (slide index, manual-source
@@ -41,8 +41,8 @@ export function useLogout() {
           const me = await fetchMe().catch(() => null);
           const userId = me?.id ? String(me.id) : null;
           clearOnboardingForUser(userId);
-        } catch {
-          /* if /me fails, we still wipe the legacy unscoped keys */
+        } catch (err) {
+          console.error('[Logout] Failed to fetch user for onboarding cleanup:', err);
           clearOnboardingForUser(null);
         }
       } finally {
@@ -70,14 +70,15 @@ export async function logoutAndRedirect(redirectTo: string = '/login') {
       method: 'POST',
       credentials: 'include',
     });
-  } catch {
-    /* ignore */
+  } catch (err) {
+    console.error('[Logout] Logout request failed:', err);
   }
   try {
     const me = await fetchMe().catch(() => null);
     const userId = me?.id ? String(me.id) : null;
     clearOnboardingForUser(userId);
-  } catch {
+  } catch (err) {
+    console.error('[Logout] Failed to fetch user for onboarding cleanup:', err);
     clearOnboardingForUser(null);
   }
   if (typeof window !== 'undefined') {

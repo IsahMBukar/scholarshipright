@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { SITE_URL } from '@/lib/env';
+import { API_URL } from '@/lib/env';
 import BlogListContent from './BlogListContent';
+import type { PaginatedBlogs } from '@/lib/blog/types';
 
 export const metadata: Metadata = {
   title: 'Blog — ScholarshipRight',
@@ -20,6 +22,21 @@ export const metadata: Metadata = {
   },
 };
 
-export default function BlogPage() {
-  return <BlogListContent />;
+async function fetchInitialPosts(): Promise<{ posts: PaginatedBlogs; categories: string[] }> {
+  try {
+    const [postsRes, catRes] = await Promise.all([
+      fetch(`${API_URL}/api/blog?page=1&limit=12`, { next: { revalidate: 60 } }),
+      fetch(`${API_URL}/api/blog/categories`, { next: { revalidate: 300 } }),
+    ]);
+    const posts = postsRes.ok ? await postsRes.json() : { items: [], page: 1, pages: 1, total: 0 };
+    const categories = catRes.ok ? await catRes.json() : [];
+    return { posts, categories };
+  } catch {
+    return { posts: { items: [], page: 1, pages: 1, total: 0 }, categories: [] };
+  }
+}
+
+export default async function BlogPage() {
+  const { posts, categories } = await fetchInitialPosts();
+  return <BlogListContent initialPosts={posts} initialCategories={categories} />;
 }

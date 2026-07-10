@@ -11,6 +11,7 @@ import json
 from typing import Any, Callable, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, func
+from app.utils.db import escape_like
 from uuid import UUID
 
 
@@ -171,7 +172,7 @@ async def search_scholarships(
     stmt = select(Scholarship).where(Scholarship.is_active == True, Scholarship.is_verified == True)
 
     if query:
-        search = f"%{query}%"
+        search = f"%{escape_like(query)}%"
         stmt = stmt.where(
             or_(
                 Scholarship.name.ilike(search),
@@ -180,7 +181,7 @@ async def search_scholarships(
             )
         )
     if country:
-        stmt = stmt.where(Scholarship.host_country.ilike(f"%{country}%"))
+        stmt = stmt.where(Scholarship.host_country.ilike(f"%{escape_like(country)}%"))
     if degree_level:
         stmt = stmt.where(Scholarship.degree_levels.any(degree_level))
     if field_of_study:

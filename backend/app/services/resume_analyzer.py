@@ -109,7 +109,8 @@ async def extract_text_from_file(file_content: bytes, mime_type: str, filename: 
             if printable_ratio < 0.7:
                 return ""
             return text
-        except:
+        except Exception:
+            logger.debug("Text extraction failed for file", exc_info=True)
             return ""
 
 

@@ -58,8 +58,8 @@ export async function adminFetch<T = unknown>(
   if (text) {
     try {
       json = JSON.parse(text);
-    } catch {
-      // not JSON, keep raw
+    } catch (err) {
+      console.warn('[AdminClient] Response is not valid JSON, using raw text:', err);
       json = text;
     }
   }

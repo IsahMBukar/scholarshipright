@@ -43,8 +43,6 @@ import {
   DEGREE_LEVEL_OPTIONS,
   FIELD_OF_STUDY_OPTIONS,
   COUNTRY_OPTIONS,
-  REGION_OPTIONS,
-  NATIONALITY_SUGGESTIONS,
   emptyForm,
   validateForm,
   buildCreateBody,
@@ -60,6 +58,7 @@ import {
 } from './FormPrimitives';
 import UnifiedDocumentsEditor from './UnifiedDocumentsEditor';
 import MultiSelect from './ui/MultiSelect';
+import EligibilityBuilder from './EligibilityBuilder';
 
 // ── Steps ─────────────────────────────────────────────────────────
 
@@ -230,6 +229,12 @@ export default function CreateScholarshipWizard({
         if (fields.fields_of_study) next.fields_of_study = fields.fields_of_study;
         if (fields.eligible_nationalities) next.eligible_nationalities = fields.eligible_nationalities;
         if (fields.eligible_regions) next.eligible_regions = fields.eligible_regions;
+        // Structured eligibility (if extractor provides them)
+        if (fields.included_groups) next.included_groups = fields.included_groups;
+        if (fields.included_countries) next.included_countries = fields.included_countries;
+        if (fields.excluded_groups) next.excluded_groups = fields.excluded_groups;
+        if (fields.excluded_countries) next.excluded_countries = fields.excluded_countries;
+        if (fields.eligibility_basis) next.eligibility_basis = fields.eligibility_basis;
         if (fields.covers_tuition !== undefined) next.covers_tuition = fields.covers_tuition;
         if (fields.covers_living !== undefined) next.covers_living = fields.covers_living;
         if (fields.covers_flight !== undefined) next.covers_flight = fields.covers_flight;
@@ -328,8 +333,8 @@ export default function CreateScholarshipWizard({
     setValidationError(null);
     try {
       await onCreate(buildCreateBody(form));
-    } catch {
-      // Parent sets saveError
+    } catch (err) {
+      console.error('[CreateScholarshipWizard] Scholarship creation failed:', err);
     }
   }, [form, onCreate]);
 
@@ -607,27 +612,25 @@ export default function CreateScholarshipWizard({
             />
           </div>
           <div>
-            <FieldLabel>Eligible nationalities</FieldLabel>
-            <MultiSelect
-              multiple
-              value={form.eligible_nationalities}
-              onChange={(v) => set('eligible_nationalities', v)}
-              options={NATIONALITY_SUGGESTIONS}
-              placeholder="Pick or type nationality groups…"
-              ariaLabel="Eligible nationalities"
-              id="wizard-eligible-nationalities"
-            />
-          </div>
-          <div>
-            <FieldLabel>Eligible regions</FieldLabel>
-            <MultiSelect
-              multiple
-              value={form.eligible_regions}
-              onChange={(v) => set('eligible_regions', v)}
-              options={REGION_OPTIONS}
-              placeholder="Pick regions…"
-              ariaLabel="Eligible regions"
-              id="wizard-eligible-regions"
+            <FieldLabel hint="Compose include/exclude rules — groups, countries, or both">
+              Eligible countries
+            </FieldLabel>
+            <EligibilityBuilder
+              includedGroups={form.included_groups}
+              includedCountries={form.included_countries}
+              excludedGroups={form.excluded_groups}
+              excludedCountries={form.excluded_countries}
+              basis={form.eligibility_basis}
+              onChange={(val) =>
+                setForm((f) => ({
+                  ...f,
+                  included_groups: val.included_groups,
+                  included_countries: val.included_countries,
+                  excluded_groups: val.excluded_groups,
+                  excluded_countries: val.excluded_countries,
+                  eligibility_basis: val.eligibility_basis,
+                }))
+              }
             />
           </div>
         </div>

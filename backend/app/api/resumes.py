@@ -177,7 +177,7 @@ async def create_resume(
     # Parse target_fields
     try:
         fields_list = json.loads(target_fields) if target_fields else []
-    except:
+    except (json.JSONDecodeError, TypeError):
         fields_list = [f.strip() for f in target_fields.split(",") if f.strip()]
     
     # Create resume record
@@ -381,12 +381,12 @@ async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename
                 resume = result.scalar_one_or_none()
                 if resume:
                     resume.status = "error"
-                    resume.issues = [{"field": "general", "severity": "urgent", "message": f"Analysis failed: {str(e)[:100]}", "suggestion": "Try again or paste your CV text."}]
+                    resume.issues = [{"field": "general", "severity": "urgent", "message": "Analysis failed. Please try again or paste your CV text.", "suggestion": "Try again or paste your CV text."}]
                     await emit_resume_failed(
                         db,
                         user_id=resume.user_id,
                         resume_id=resume.id,
-                        reason=f"Analysis failed: {str(e)[:100]}",
+                        reason="Analysis failed",
                     )
                     await db.commit()
         except:
@@ -514,7 +514,8 @@ async def rewrite_resume_field(resume_id: str, body: dict, user: User = Depends(
     except asyncio.TimeoutError:
         raise HTTPException(504, "AI rewrite timed out. Please try again.")
     except Exception as e:
-        raise HTTPException(502, f"AI rewrite failed: {str(e)[:120]}")
+        logger.exception("AI rewrite failed for field %s", field_name)
+        raise HTTPException(502, "AI rewrite failed. Please try again.")
     return {"field": field_name, "improved_value": improved}
 
 
@@ -591,7 +592,8 @@ async def reanalyze_resume(resume_id: str, user: User = Depends(get_current_user
         resume.issues = [{"field": "general", "severity": "urgent", "message": "AI analysis timed out before completion.", "suggestion": "Try again later or reduce the resume text size."}]
     except Exception as e:
         resume.status = "error"
-        resume.issues = [{"field": "general", "severity": "urgent", "message": f"AI analysis failed: {str(e)[:120]}", "suggestion": "Try again or edit the resume manually."}]
+        logger.exception("AI analysis failed for resume %s", resume.id)
+        resume.issues = [{"field": "general", "severity": "urgent", "message": "AI analysis failed. Please try again or edit the resume manually.", "suggestion": "Try again or edit the resume manually."}]
 
     await db.commit()
     await db.refresh(resume)

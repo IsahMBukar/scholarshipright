@@ -23,6 +23,7 @@ from app.models.scholarship import Scholarship
 from app.models.user import User
 from app.schemas.admin import PaginatedResponse
 from app.services.admin_audit import log_admin_action
+from app.utils.db import escape_like
 from app.services.document_defaults import apply_auto_defaults
 from app.services.match_auto import trigger_scholarship_recompute
 

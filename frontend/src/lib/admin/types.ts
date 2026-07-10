@@ -110,6 +110,16 @@ export interface AdminScholarship {
   fields_of_study: string[];
   eligible_nationalities: string[];
   eligible_regions: string[];
+  // Structured eligibility (composable, resolved-at-write-time)
+  eligibility_display: string | null;
+  eligibility_basis: 'citizenship' | 'residency' | 'either';
+  included_groups: string[];
+  included_countries: string[];
+  excluded_groups: string[];
+  excluded_countries: string[];
+  resolved_countries: string[];
+  eligibility_unresolved: boolean;
+  groups_resolved_at: string | null;
   funding_type: string;
   covers_tuition: boolean;
   covers_living: boolean;
@@ -207,6 +217,13 @@ export interface AdminScholarshipPatch {
   fields_of_study?: string[] | null;
   eligible_nationalities?: string[] | null;
   eligible_regions?: string[] | null;
+  // Structured eligibility
+  eligibility_display?: string | null;
+  eligibility_basis?: 'citizenship' | 'residency' | 'either' | null;
+  included_groups?: string[] | null;
+  included_countries?: string[] | null;
+  excluded_groups?: string[] | null;
+  excluded_countries?: string[] | null;
   // Funding
   funding_type?: string;
   covers_tuition?: boolean | null;
@@ -278,6 +295,13 @@ export interface AdminScholarshipCreate {
   fields_of_study?: string[] | null;
   eligible_nationalities?: string[] | null;
   eligible_regions?: string[] | null;
+  // Structured eligibility
+  eligibility_display?: string | null;
+  eligibility_basis?: 'citizenship' | 'residency' | 'either' | null;
+  included_groups?: string[] | null;
+  included_countries?: string[] | null;
+  excluded_groups?: string[] | null;
+  excluded_countries?: string[] | null;
   // Optional — funding
   covers_tuition?: boolean | null;
   covers_living?: boolean | null;

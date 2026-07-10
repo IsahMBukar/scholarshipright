@@ -25,6 +25,7 @@ from app.models.scholarship import Scholarship
 from app.models.pending_scholarship import PendingScholarship
 from app.services.url_extractor import extract_from_url
 from app.services.admin_audit import log_admin_action
+from app.utils.db import escape_like
 
 import logging
 
@@ -88,7 +89,7 @@ async def bulk_import_urls(
             # Check for duplicates
             existing = await db.execute(
                 select(Scholarship).where(
-                    func.lower(Scholarship.name).ilike(f"%{name.lower().strip()}%")
+                    func.lower(Scholarship.name).ilike(f"%{escape_like(name.lower().strip())}%")
                 ).limit(1)
             )
             if existing.scalar_one_or_none():
@@ -185,7 +186,7 @@ async def bulk_import_records(
         # Check for duplicates
         existing = await db.execute(
             select(Scholarship).where(
-                func.lower(Scholarship.name).ilike(f"%{name.lower().strip()}%")
+                func.lower(Scholarship.name).ilike(f"%{escape_like(name.lower().strip())}%")
             ).limit(1)
         )
         if existing.scalar_one_or_none():

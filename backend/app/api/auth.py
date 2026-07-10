@@ -63,7 +63,7 @@ class RegisterRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(..., min_length=1)
 
 
 # ── Helpers ──
@@ -1000,7 +1000,7 @@ def _mcp_login_form_html(
 
 def _get_server_url() -> str:
     """Get the public server URL for form actions and metadata."""
-    return os.environ.get("MCP_OAUTH_SERVER_URL", get_settings().server_url).rstrip("/")
+    return get_settings().resolved_mcp_oauth_server_url.rstrip("/")
 
 
 @router.api_route("/mcp-authorize", methods=["GET", "POST"])
@@ -1159,7 +1159,7 @@ async def mcp_token(request: Request):
         "client_id": code_data.get("client_id", "mcp-client"),
         "scope": scope,
         "iss": server_url,
-        "aud": os.environ.get("MCP_OAUTH_AUDIENCE", server_url),
+        "aud": get_settings().mcp_oauth_audience or server_url,
         "iat": int(now.timestamp()),
         "exp": int(now.timestamp()) + 3600,
     }

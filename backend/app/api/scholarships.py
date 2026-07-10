@@ -147,7 +147,8 @@ async def list_scholarships(
         query = query.where(Scholarship.deadline >= deadline_after)
 
     if search:
-        safe = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        from app.utils.db import escape_like
+        safe = escape_like(search)
         search_filter = or_(
             Scholarship.name.ilike(f"%{safe}%"),
             Scholarship.description.ilike(f"%{safe}%"),

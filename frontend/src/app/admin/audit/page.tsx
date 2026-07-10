@@ -227,7 +227,8 @@ function AuditDrawer({
     if (!entry?.payload) return null;
     try {
       return JSON.stringify(entry.payload, null, 2);
-    } catch {
+    } catch (err) {
+      console.warn('[AuditLog] Failed to stringify payload:', err);
       return String(entry.payload);
     }
   }, [entry]);

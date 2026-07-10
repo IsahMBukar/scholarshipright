@@ -13,10 +13,11 @@ Usage:
     data = await extract_scholarship_from_url("https://www.chevening.org/scholarships/")
 """
 import logging
-import os
 from typing import Any, Optional
 
 import httpx
+
+from app.core.config import get_settings
 
 logger = logging.getLogger("scholarshipright.url_extractor")
 
@@ -72,7 +73,7 @@ async def extract_from_url(url: str) -> dict[str, Any]:
     Returns a dict matching AdminScholarshipCreate schema.
     Raises ValueError if extraction fails.
     """
-    api_key = os.environ.get("CLAUDE_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
+    api_key = get_settings().resolved_claude_api_key
     if not api_key:
         raise ValueError("CLAUDE_API_KEY or ANTHROPIC_API_KEY environment variable not set")
 
@@ -152,7 +153,7 @@ async def extract_from_content(content: str, source_url: str = "") -> dict[str, 
 
     Same as extract_from_url but skips the HTTP fetch step.
     """
-    api_key = os.environ.get("CLAUDE_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
+    api_key = get_settings().resolved_claude_api_key
     if not api_key:
         raise ValueError("CLAUDE_API_KEY or ANTHROPIC_API_KEY environment variable not set")
 

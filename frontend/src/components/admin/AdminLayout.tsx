@@ -174,9 +174,8 @@ function AdminLayoutInner({ title, description, actions, children }: AdminLayout
             setState({ kind: 'forbidden', email: me.email });
           }
         }
-      } catch {
-        // Network error: don't kick the user out — show forbidden so they
-        // can retry from the "Back to app" button.
+      } catch (err) {
+        console.error('[AdminLayout] Auth check failed:', err);
         if (!cancelled) setState({ kind: 'forbidden' });
       }
     })();
