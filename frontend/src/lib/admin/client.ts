@@ -65,10 +65,25 @@ export async function adminFetch<T = unknown>(
   }
 
   if (!res.ok) {
-    const detail =
+    const raw =
       (json && typeof json === 'object' && 'detail' in (json as Record<string, unknown>))
-        ? String((json as Record<string, unknown>).detail)
-        : `Request failed (${res.status})`;
+        ? (json as Record<string, unknown>).detail
+        : null;
+    let detail: string;
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      // Structured error: { code, user_message, retryable, ... }
+      detail = (raw as Record<string, unknown>).user_message as string
+        ?? (raw as Record<string, unknown>).message as string
+        ?? (raw as Record<string, unknown>).code as string
+        ?? `Request failed (${res.status})`;
+    } else if (Array.isArray(raw)) {
+      // FastAPI validation errors: [{ loc, msg, type }, ...]
+      detail = raw.map((e: Record<string, unknown>) => e.msg ?? JSON.stringify(e)).join('; ');
+    } else if (typeof raw === 'string') {
+      detail = raw;
+    } else {
+      detail = `Request failed (${res.status})`;
+    }
     throw new AdminApiError(detail, res.status, json);
   }
 
