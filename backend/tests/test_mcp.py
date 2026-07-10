@@ -89,6 +89,7 @@ class TestMcpServer:
 
     @pytest.mark.asyncio
     async def test_list_tools_returns_all(self):
+        mcp = pytest.importorskip("mcp")
         from app.mcp.server import server
         # The server object has list_tools registered
         assert server is not None

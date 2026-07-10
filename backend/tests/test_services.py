@@ -90,11 +90,17 @@ class TestUrlExtractor:
     def test_extractor_requires_api_key(self):
         """Without CLAUDE_API_KEY, extraction should fail."""
         from app.services.url_extractor import extract_from_url
+        from app.core.config import get_settings
         import asyncio
 
+        # Clear the @lru_cache so patched env takes effect
+        get_settings.cache_clear()
         with patch.dict("os.environ", {"CLAUDE_API_KEY": "", "ANTHROPIC_API_KEY": ""}):
-            with pytest.raises(ValueError, match="API_KEY"):
-                asyncio.run(extract_from_url("https://example.com"))
+            try:
+                with pytest.raises(ValueError, match="API_KEY"):
+                    asyncio.run(extract_from_url("https://example.com"))
+            finally:
+                get_settings.cache_clear()  # restore for other tests
 
     @pytest.mark.asyncio
     async def test_extractor_handles_http_error(self):
