@@ -127,7 +127,8 @@ function LoginForm() {
           } else {
             router.push('/scholarships');
           }
-        } catch {
+        } catch (err) {
+          console.error('[Login] Profile check failed after login:', err);
           router.push('/scholarships');
         }
         return;
@@ -151,7 +152,8 @@ function LoginForm() {
       } else {
         setError('Invalid email or password');
       }
-    } catch {
+    } catch (err) {
+      console.error('[Login] Login request failed:', err);
       setError('Connection failed. Please try again.');
     } finally {
       setSubmitting(false);

@@ -31,7 +31,8 @@ async function fetchInitialPosts(): Promise<{ posts: PaginatedBlogs; categories:
     const posts = postsRes.ok ? await postsRes.json() : { items: [], page: 1, pages: 1, total: 0 };
     const categories = catRes.ok ? await catRes.json() : [];
     return { posts, categories };
-  } catch {
+  } catch (err) {
+    console.error('[BlogPage] Failed to fetch initial posts:', err);
     return { posts: { items: [], page: 1, pages: 1, total: 0 }, categories: [] };
   }
 }

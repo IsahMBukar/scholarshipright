@@ -77,7 +77,8 @@ export default function ForgotPasswordPage() {
           setError('Something went wrong. Please try again.');
         }
       }
-    } catch {
+    } catch (err) {
+      console.error('[ForgotPassword] Password reset request failed:', err);
       setError('Connection failed. Please try again.');
     } finally {
       setSubmitting(false);

@@ -72,7 +72,8 @@ export default function AuthModal() {
         const data = await res.json().catch(() => ({}));
         setError(data.detail || 'Registration failed');
       }
-    } catch {
+    } catch (err) {
+      console.error('[AuthModal] Signup request failed:', err);
       setError('Network error');
     } finally {
       setSubmitting(false);

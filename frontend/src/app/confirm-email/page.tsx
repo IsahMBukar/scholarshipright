@@ -69,7 +69,8 @@ function ConfirmEmailForm() {
             setError('This confirmation link is invalid or has expired.');
           }
         }
-      } catch {
+      } catch (err) {
+        console.error('[ConfirmEmail] Email confirmation request failed:', err);
         if (!cancelled) {
           setStatus('error');
           setError('Connection failed. Please try again.');

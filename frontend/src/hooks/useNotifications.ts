@@ -31,7 +31,7 @@ export function useNotifications() {
   useEffect(() => { load(); }, [load]);
 
   const markRead = useCallback(async (id: string) => {
-    await markNotificationRead(id).catch(() => {});
+    await markNotificationRead(id).catch((e) => console.error('[Notifications] action failed:', e));
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
     );
@@ -39,13 +39,13 @@ export function useNotifications() {
   }, []);
 
   const markAllRead = useCallback(async () => {
-    await markAllNotificationsRead().catch(() => {});
+    await markAllNotificationsRead().catch((e) => console.error('[Notifications] action failed:', e));
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
     setUnreadCount(0);
   }, []);
 
   const remove = useCallback(async (id: string) => {
-    await deleteNotification(id).catch(() => {});
+    await deleteNotification(id).catch((e) => console.error('[Notifications] action failed:', e));
     const wasUnread = notifications.find((n) => n.id === id && !n.is_read);
     setNotifications((prev) => prev.filter((n) => n.id !== id));
     if (wasUnread) setUnreadCount((prev) => Math.max(0, prev - 1));

@@ -212,7 +212,7 @@ export async function fetchScholarship(slug: string): Promise<Scholarship> {
 }
 
 export async function incrementScholarshipView(slug: string): Promise<void> {
-  await api.post(`/api/scholarships/${slug}/view`).catch(() => {});
+  await api.post(`/api/scholarships/${slug}/view`).catch((err) => console.error('[API] Failed to record scholarship view:', err));
 }
 
 export async function fetchFeaturedScholarships(): Promise<Scholarship[]> {

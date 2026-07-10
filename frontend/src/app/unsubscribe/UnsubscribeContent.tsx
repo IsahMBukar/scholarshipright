@@ -37,7 +37,7 @@ function UnsubscribeInner() {
           setCategoryLabel(data.category_label || category);
         }
       })
-      .catch(() => {})
+      .catch((err) => console.error('[Unsubscribe] Failed to verify unsubscribe token:', err))
       .finally(() => setVerifying(false));
   }, [token, category]);
 
@@ -57,7 +57,8 @@ function UnsubscribeInner() {
       } else {
         setError('Something went wrong. Please try again.');
       }
-    } catch {
+    } catch (err) {
+      console.error('[Unsubscribe] Unsubscribe request failed:', err);
       setError('Could not connect. Please try again later.');
     } finally {
       setSubmitting(false);

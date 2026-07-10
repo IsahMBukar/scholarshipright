@@ -197,7 +197,7 @@ export default function LandingClient() {
         if (r.ok) router.replace('/scholarships');
         else setChecking(false);
       })
-      .catch(() => setChecking(false));
+      .catch((err) => { console.error('[Landing] Auth check failed:', err); setChecking(false); });
   }, [router]);
 
   if (checking) {

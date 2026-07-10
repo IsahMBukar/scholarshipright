@@ -158,8 +158,8 @@ export default function CreateScholarshipWizard({
             setDuplicateWarning(null);
           }
         }
-      } catch {
-        // Ignore duplicate check failures
+      } catch (err) {
+        console.error('[CreateScholarshipWizard] Duplicate check failed:', err);
       } finally {
         setCheckingDuplicate(false);
       }

@@ -94,7 +94,8 @@ function ResetPasswordForm() {
       } else {
         setError('Could not reset password. Please try again.');
       }
-    } catch {
+    } catch (err) {
+      console.error('[ResetPassword] Password reset request failed:', err);
       setError('Connection failed. Please try again.');
     } finally {
       setSubmitting(false);

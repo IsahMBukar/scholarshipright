@@ -61,7 +61,8 @@ export default function SignupPage() {
       } else {
         setError('Registration failed. Please try again.');
       }
-    } catch {
+    } catch (err) {
+      console.error('[Signup] Registration request failed:', err);
       setError('Connection failed. Please try again.');
     } finally {
       setSubmitting(false);

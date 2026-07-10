@@ -54,8 +54,8 @@ function ScholarshipPicker({
           const data = await res.json();
           setResults(data.items || data.scholarships || []);
         }
-      } catch {
-        // ignore
+      } catch (err) {
+        console.error('[BlogWrite] Scholarship search failed:', err);
       } finally {
         setLoading(false);
       }

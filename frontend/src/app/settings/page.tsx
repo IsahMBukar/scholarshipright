@@ -34,11 +34,11 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchMe()
       .then(setUser)
-      .catch(() => setUser(null))
+      .catch((err) => { console.error('[Settings] Failed to fetch user:', err); setUser(null); })
       .finally(() => setLoading(false));
     fetchPreferences()
       .then(setPrefs)
-      .catch(() => {})
+      .catch((err) => console.error('[Settings] Failed to fetch preferences:', err))
       .finally(() => setPrefsLoading(false));
   }, []);
 
@@ -98,7 +98,8 @@ export default function SettingsPage() {
       await updatePreferences({ [key]: newValue });
       setPrefsSaved(true);
       setTimeout(() => setPrefsSaved(false), 2000);
-    } catch {
+    } catch (err) {
+      console.error('[Settings] Failed to save preference:', err);
       // Revert on error
       setPrefs({ ...prefs, [key]: !newValue });
       setPrefsError('Failed to save preference. Please try again.');

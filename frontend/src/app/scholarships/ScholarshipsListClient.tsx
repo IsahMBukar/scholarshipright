@@ -22,21 +22,26 @@ import { NAV_ITEMS } from '@/lib/nav-items';
 
 const TABS = ['Recommended', 'Saved', 'Applied', 'External'];
 
-export default function ScholarshipsListClient() {
+export default function ScholarshipsListClient({
+  initialScholarships,
+}: {
+  initialScholarships: ScholarshipListResponse;
+}) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const tabFromUrl = searchParams.get('tab');
   const initialTab = TABS.find(t => t.toLowerCase() === tabFromUrl?.toLowerCase()) || 'Recommended';
   const [activeTab, setActiveTab] = useState(initialTab);
-  const [scholarships, setScholarships] = useState<Scholarship[]>([]);
+  const [scholarships, setScholarships] = useState<Scholarship[]>(initialScholarships.items);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [savedStatuses, setSavedStatuses] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
+  // When SSR data is available, skip loading skeleton; otherwise show it while client fetches
+  const [loading, setLoading] = useState(initialScholarships.items.length === 0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
+  const [total, setTotal] = useState(initialScholarships.total);
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [meta, setMeta] = useState<FilterMetadata | null>(null);
@@ -114,7 +119,7 @@ export default function ScholarshipsListClient() {
   useEffect(() => {
     async function init() {
       try {
-        const saved = await fetchSavedScholarships().catch(() => []);
+        const saved = await fetchSavedScholarships().catch((e) => { console.error('[ScholarshipsList] fetchSaved:', e); return []; });
         const ids = new Set<string>();
         const statuses: Record<string, string> = {};
         for (const s of saved as Array<{ scholarship_id?: string; id: string; status?: string }>) {
@@ -127,18 +132,24 @@ export default function ScholarshipsListClient() {
       } catch (e) {
         console.error('[ScholarshipsList] Failed to load saved state:', e);
       }
+      // Skip fetch on mount when server-rendered data is available
+      if (initialScholarships.items.length > 0) return;
       await loadScholarships(EMPTY_FILTERS, '');
     }
     init();
-  }, [loadScholarships]);
+  }, [loadScholarships, initialScholarships]);
 
   // Debounced search + filter changes
+  // Skip on mount when server-rendered initial data is available and no filters/search active
+  const hasInitialData = initialScholarships.items.length > 0;
   useEffect(() => {
+    // If we have SSR data and nothing has changed from defaults, skip the redundant fetch
+    if (hasInitialData && searchQuery === '' && activeFilterCount(filters) === 0) return;
     const timer = setTimeout(() => {
       loadScholarships(filters, searchQuery);
     }, 400);
     return () => clearTimeout(timer);
-  }, [searchQuery, filters, loadScholarships]);
+  }, [searchQuery, filters, loadScholarships, hasInitialData]);
 
   // Infinite scroll — observe the sentinel at the bottom of the list
   const hasMore = scholarships.length < total;
@@ -184,7 +195,7 @@ export default function ScholarshipsListClient() {
         type: 'save',
         label: `Save "${sch?.name || 'this scholarship'}"`,
         onReplay: async () => {
-          await saveScholarship(id).catch(() => {});
+          await saveScholarship(id).catch((e) => console.error('[ScholarshipsList] save/remove:', e));
           setSavedIds((prev) => new Set(prev).add(id));
           setSavedStatuses((prev) => ({ ...prev, [id]: 'saved' }));
         },
@@ -192,11 +203,11 @@ export default function ScholarshipsListClient() {
       return;
     }
     if (savedIds.has(id)) {
-      await removeSavedScholarship(id).catch(() => {});
+      await removeSavedScholarship(id).catch((e) => console.error('[ScholarshipsList] save/remove:', e));
       setSavedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
       setSavedStatuses((prev) => { const n = { ...prev }; delete n[id]; return n; });
     } else {
-      await saveScholarship(id).catch(() => {});
+      await saveScholarship(id).catch((e) => console.error('[ScholarshipsList] save/remove:', e));
       setSavedIds((prev) => new Set(prev).add(id));
       setSavedStatuses((prev) => ({ ...prev, [id]: 'saved' }));
     }
@@ -211,10 +222,10 @@ export default function ScholarshipsListClient() {
         label: `Apply to "${sch?.name || 'this scholarship'}"`,
         onReplay: async () => {
           if (!savedIds.has(id)) {
-            await saveScholarship(id).catch(() => {});
+            await saveScholarship(id).catch((e) => console.error('[ScholarshipsList] save/remove:', e));
             setSavedIds((prev) => new Set(prev).add(id));
           }
-          await updateSavedScholarship(id, { status: 'applying' }).catch(() => {});
+          await updateSavedScholarship(id, { status: 'applying' }).catch((e) => console.error('[ScholarshipsList] save/remove:', e));
           setSavedStatuses((prev) => ({ ...prev, [id]: 'applying' }));
         },
       });
@@ -222,11 +233,11 @@ export default function ScholarshipsListClient() {
     }
     // Auto-save if not saved yet
     if (!savedIds.has(id)) {
-      await saveScholarship(id).catch(() => {});
+      await saveScholarship(id).catch((e) => console.error('[ScholarshipsList] save/remove:', e));
       setSavedIds((prev) => new Set(prev).add(id));
     }
     // Set status to applying
-    await updateSavedScholarship(id, { status: 'applying' }).catch(() => {});
+    await updateSavedScholarship(id, { status: 'applying' }).catch((e) => console.error('[ScholarshipsList] save/remove:', e));
     setSavedStatuses((prev) => ({ ...prev, [id]: 'applying' }));
   }
 
@@ -261,10 +272,10 @@ export default function ScholarshipsListClient() {
     const id = eligibilityModal.scholarshipId;
     // Auto-save and set status to applying (same as handleApplyNow)
     if (!savedIds.has(id)) {
-      saveScholarship(id).catch(() => {});
+      saveScholarship(id).catch((e) => console.error('[ScholarshipsList] save/remove:', e));
       setSavedIds((prev) => new Set(prev).add(id));
     }
-    updateSavedScholarship(id, { status: 'applying' }).catch(() => {});
+    updateSavedScholarship(id, { status: 'applying' }).catch((e) => console.error('[ScholarshipsList] save/remove:', e));
     setSavedStatuses((prev) => ({ ...prev, [id]: 'applying' }));
   }
 

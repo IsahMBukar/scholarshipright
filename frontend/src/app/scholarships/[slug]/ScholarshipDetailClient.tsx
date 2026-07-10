@@ -178,7 +178,7 @@ export default function ScholarshipDetailClient() {
     const url = typeof window !== 'undefined' ? window.location.href : '';
     const title = scholarship?.name || 'Scholarship';
     if (navigator.share) {
-      navigator.share({ title, url }).catch(() => {});
+      navigator.share({ title, url }).catch((e) => console.error('[ScholarshipDetail] share:', e));
     } else {
       navigator.clipboard.writeText(url).then(() => {
         setCopied(true);
@@ -192,8 +192,8 @@ export default function ScholarshipDetailClient() {
       const slug = params.slug as string;
       Promise.all([
         fetchScholarship(slug),
-        fetchSavedScholarships().catch(() => []),
-        isAuthenticated ? fetchProfile().catch(() => null) : Promise.resolve(null),
+        fetchSavedScholarships().catch((e) => { console.error('[ScholarshipDetail] fetchSaved:', e); return []; }),
+        isAuthenticated ? fetchProfile().catch((e) => { console.error('[ScholarshipDetail] fetchProfile:', e); return null; }) : Promise.resolve(null),
       ]).then(([sch, saved, profile]) => {
         setScholarship(sch);
         const found = saved.find((s: { scholarship_id?: string; id: string; status?: string }) => (s.scholarship_id || s.id) === sch.id);
@@ -226,7 +226,7 @@ export default function ScholarshipDetailClient() {
         type: 'save',
         label: `Save "${scholarship.name}"`,
         onReplay: async () => {
-          await saveScholarship(scholarship!.id).catch(() => {});
+          await saveScholarship(scholarship!.id).catch((e) => console.error('[ScholarshipDetail] save/remove:', e));
           setIsSaved(true);
           setSavedStatus('saved');
         },
@@ -234,11 +234,11 @@ export default function ScholarshipDetailClient() {
       return;
     }
     if (isSaved) {
-      await removeSavedScholarship(scholarship.id).catch(() => {});
+      await removeSavedScholarship(scholarship.id).catch((e) => console.error('[ScholarshipDetail] save/remove:', e));
       setIsSaved(false);
       setSavedStatus('');
     } else {
-      await saveScholarship(scholarship.id).catch(() => {});
+      await saveScholarship(scholarship.id).catch((e) => console.error('[ScholarshipDetail] save/remove:', e));
       setIsSaved(true);
       setSavedStatus('saved');
     }
@@ -253,10 +253,10 @@ export default function ScholarshipDetailClient() {
         label: `Apply to "${scholarship.name}"`,
         onReplay: async () => {
           if (!isSaved) {
-            await saveScholarship(scholarship!.id).catch(() => {});
+            await saveScholarship(scholarship!.id).catch((e) => console.error('[ScholarshipDetail] save/remove:', e));
             setIsSaved(true);
           }
-          await updateSavedScholarship(scholarship!.id, { status: 'applying' }).catch(() => {});
+          await updateSavedScholarship(scholarship!.id, { status: 'applying' }).catch((e) => console.error('[ScholarshipDetail] save/remove:', e));
           setSavedStatus('applying');
           // Navigate to the official application page (same as card behavior)
           if (scholarship!.official_url) {
@@ -268,11 +268,11 @@ export default function ScholarshipDetailClient() {
     }
     // Auto-save if not saved yet
     if (!isSaved) {
-      await saveScholarship(scholarship.id).catch(() => {});
+      await saveScholarship(scholarship.id).catch((e) => console.error('[ScholarshipDetail] save/remove:', e));
       setIsSaved(true);
     }
     // Set status to applying
-    await updateSavedScholarship(scholarship.id, { status: 'applying' }).catch(() => {});
+    await updateSavedScholarship(scholarship.id, { status: 'applying' }).catch((e) => console.error('[ScholarshipDetail] save/remove:', e));
     setSavedStatus('applying');
     // Navigate to the official application page (same as card behavior)
     if (scholarship.official_url) {

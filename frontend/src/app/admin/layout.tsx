@@ -7,9 +7,14 @@
 // Note: <ConfirmProvider> is mounted at the root layout, not here, so
 // the useConfirm() hook is available everywhere — not just admin pages.
 
+import type { Metadata } from 'next';
 import QueryProvider from '@/lib/admin/query-provider';
 import { ToastProvider } from '@/components/admin/ui/Toast';
 import { type ReactNode } from 'react';
+
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 export default function AdminSegmentLayout({ children }: { children: ReactNode }) {
   return (

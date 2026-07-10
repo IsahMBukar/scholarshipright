@@ -1,9 +1,8 @@
-import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { SITE_URL } from '@/lib/env';
+import { API_URL } from '@/lib/env';
 import ScholarshipsListClient from './ScholarshipsListClient';
-
-
+import type { ScholarshipListResponse } from '@/services/api';
 
 export const metadata: Metadata = {
   title: 'Browse Fully Funded Scholarships',
@@ -25,10 +24,19 @@ export const metadata: Metadata = {
   },
 };
 
-export default function ScholarshipsPage() {
-  return (
-    <Suspense fallback={null}>
-      <ScholarshipsListClient />
-    </Suspense>
-  );
+async function fetchInitialScholarships(): Promise<ScholarshipListResponse> {
+  try {
+    const res = await fetch(`${API_URL}/api/scholarships?limit=50&page=1`, {
+      next: { revalidate: 60 },
+    });
+    if (!res.ok) return { items: [], total: 0, page: 1, limit: 50, pages: 1 };
+    return res.json();
+  } catch {
+    return { items: [], total: 0, page: 1, limit: 50, pages: 1 };
+  }
+}
+
+export default async function ScholarshipsPage() {
+  const initialScholarships = await fetchInitialScholarships();
+  return <ScholarshipsListClient initialScholarships={initialScholarships} />;
 }
