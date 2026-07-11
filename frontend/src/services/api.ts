@@ -137,6 +137,7 @@ export interface ScholarshipListResponse {
   page: number;
   limit: number;
   pages: number;
+  profile_status: 'anonymous' | 'incomplete' | 'complete';
 }
 
 export interface Profile {

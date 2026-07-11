@@ -77,6 +77,23 @@ async def list_scholarships(
 ):
     user_id = await _optional_user_id(request)
 
+    # ── Profile completeness check ──────────────────────────────
+    # Determines whether match scores are meaningful. Only users with
+    # country_of_origin + target_degree + at least one target_field
+    # get personalised scores. Everyone else sees the public list.
+    profile_status = "anonymous"
+    profile_complete = False
+    if user_id:
+        from app.models.profile import Profile
+        prof = (await db.execute(
+            select(Profile).where(Profile.user_id == user_id)
+        )).scalar_one_or_none()
+        if prof and prof.country_of_origin and prof.target_degree and (prof.target_fields and len(prof.target_fields) > 0):
+            profile_complete = True
+            profile_status = "complete"
+        else:
+            profile_status = "incomplete"
+
     # ── Cache: anonymous users (no match scores) ──────────────────
     # Authenticated users get personalised results (match scores), so
     # we only cache the anonymous path. This covers SEO bots, landing
@@ -97,8 +114,8 @@ async def list_scholarships(
 
     query = select(Scholarship).where(Scholarship.is_active == True)
 
-    # Safety net: if logged-in user has 0 match_scores, recompute on the fly.
-    if user_id:
+    # Safety net: if logged-in user with complete profile has 0 match_scores, recompute.
+    if profile_complete:
         from sqlalchemy import func as _func
         ms_count = (await db.execute(
             select(_func.count()).select_from(MatchScore).where(MatchScore.user_id == user_id)
@@ -163,7 +180,7 @@ async def list_scholarships(
     total = total_result.scalar()
 
     match_subq = None
-    if user_id:
+    if profile_complete:
         match_subq = (
             select(MatchScore.scholarship_id, MatchScore.score, MatchScore.breakdown)
             .where(MatchScore.user_id == user_id)
@@ -182,7 +199,7 @@ async def list_scholarships(
     )
     if sort == "newest":
         query = query.order_by(status_flag, Scholarship.created_at.desc())
-    elif user_id:
+    elif profile_complete:
         query = query.order_by(status_flag, match_subq.c.score.desc().nullslast(), Scholarship.deadline.asc())
     else:
         query = query.order_by(status_flag, Scholarship.deadline.asc())
@@ -194,7 +211,7 @@ async def list_scholarships(
     result = await db.execute(query)
     rows = result.all()
 
-    if user_id:
+    if profile_complete:
         items = [_scholarship_response(s, score, breakdown) for s, score, breakdown in rows]
     else:
         items = []
@@ -209,6 +226,7 @@ async def list_scholarships(
         page=page,
         limit=limit,
         pages=(total + limit - 1) // limit,
+        profile_status=profile_status,
     )
 
     # ── Cache: store anonymous result ─────────────────────────────

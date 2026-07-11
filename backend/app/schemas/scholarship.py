@@ -87,3 +87,4 @@ class ScholarshipListResponse(BaseModel):
     page: int
     limit: int
     pages: int
+    profile_status: str = "anonymous"  # "anonymous" | "incomplete" | "complete"

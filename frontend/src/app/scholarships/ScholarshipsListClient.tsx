@@ -9,7 +9,6 @@ import FilterPanel, { EMPTY_FILTERS, activeFilterCount, type FilterState } from 
 import ActiveFilterChips from '@/components/ActiveFilterChips';
 import { ScholarshipListSkeleton } from '@/components/Skeletons';
 import NotificationBell from '@/components/NotificationBell';
-import { useOnboarding } from '@/hooks/useOnboarding';
 import { useAuth } from '@/hooks/useAuth';
 import { logoutAndRedirect } from '@/hooks/useLogout';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
@@ -63,15 +62,10 @@ export default function ScholarshipsListClient({
     scholarshipId: string;
   }>({ isOpen: false, reason: '', scholarshipUrl: '', scholarshipId: '' });
 
-  // Match scores are only meaningful once the user has a complete profile.
-  // Until then, hide them (and the deterministic placeholder) so we don't
-  // mislead the user with fake numbers.
-  const ob = useOnboarding();
-  // Only show match scores once onboarding has resolved AND the user has
-  // a complete profile. Showing them while ob.loading==true causes a
-  // flash: scores appear then vanish when onboarding resolves without a
-  // profile. Hiding them until we know is the cleanest UX.
-  const showMatchScores = !ob.loading && ob.hasProfile;
+  // Profile status comes from the backend — no client-side async check.
+  // "anonymous" | "incomplete" | "complete"
+  const [profileStatus, setProfileStatus] = useState(initialScholarships.profile_status || 'anonymous');
+  const showMatchScores = profileStatus === 'complete';
 
   // Filter metadata (countries, fields, etc.) is needed by the chip
   // labels in ActiveFilterChips even when the FilterPanel has been
@@ -89,6 +83,7 @@ export default function ScholarshipsListClient({
       const schData = await fetchScholarships(params);
       setScholarships(schData.items || []);
       setTotal(schData.total || 0);
+      setProfileStatus(schData.profile_status || 'anonymous');
       setPage(1);
       setError(null);
     } catch (err) {
@@ -117,6 +112,8 @@ export default function ScholarshipsListClient({
   }, [page, filters, searchQuery, loadingMore]);
 
   // Initial load: scholarships + saved IDs
+  // Always fetch client-side to get personalised profile_status and match
+  // scores (SSR fetch is anonymous — no auth cookie).
   useEffect(() => {
     async function init() {
       try {
@@ -133,8 +130,6 @@ export default function ScholarshipsListClient({
       } catch (e) {
         console.error('[ScholarshipsList] Failed to load saved state:', e);
       }
-      // Skip fetch on mount when server-rendered data is available
-      if (initialScholarships.items.length > 0) return;
       await loadScholarships(EMPTY_FILTERS, '');
     }
     init();
@@ -491,7 +486,7 @@ export default function ScholarshipsListClient({
         )}
 
         {/* Onboarding nudge — shown below scholarships so cards are always first */}
-        {!loading && !ob.loading && !ob.hasProfile && ob.authenticated && (
+        {!loading && profileStatus === 'incomplete' && (
           <div className="flex items-start gap-3 p-4 mt-4 bg-primary/8 border border-primary/20 rounded-2xl">
             <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
               <span className="material-symbols-outlined text-primary text-[18px]">school</span>
