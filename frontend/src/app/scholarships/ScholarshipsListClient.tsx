@@ -414,30 +414,6 @@ export default function ScholarshipsListClient({
       )}
 
       <div className="px-4 md:px-6 py-4">
-        {/* Onboarding nudge for users without a complete profile */}
-        {!loading && !ob.loading && !ob.hasProfile && ob.authenticated && (
-          <div className="flex items-start gap-3 p-4 mb-4 bg-primary/8 border border-primary/20 rounded-2xl">
-            <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
-              <span className="material-symbols-outlined text-primary text-[18px]">school</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[14px] font-bold text-text-primary">
-                Complete your profile to unlock match scores
-              </p>
-              <p className="text-[12px] text-text-secondary mt-0.5">
-                You can browse scholarships now — personalised match scores appear once you
-                add your degree, field, country and language scores.
-              </p>
-            </div>
-            <a
-              href="/profile"
-              className="self-center px-3.5 py-1.5 bg-primary text-text-inverse text-[12px] font-bold rounded-btn hover:brightness-110 transition-all flex-shrink-0"
-            >
-              Complete →
-            </a>
-          </div>
-        )}
-
         {/* Active filter chips + result count */}
         {!loading && (
           <div className="flex flex-col gap-2 mb-3">
@@ -511,6 +487,30 @@ export default function ScholarshipsListClient({
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Onboarding nudge — shown below scholarships so cards are always first */}
+        {!loading && !ob.loading && !ob.hasProfile && ob.authenticated && (
+          <div className="flex items-start gap-3 p-4 mt-4 bg-primary/8 border border-primary/20 rounded-2xl">
+            <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
+              <span className="material-symbols-outlined text-primary text-[18px]">school</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[14px] font-bold text-text-primary">
+                Complete your profile to unlock match scores
+              </p>
+              <p className="text-[12px] text-text-secondary mt-0.5">
+                You can browse scholarships now — personalised match scores appear once you
+                add your degree, field, country and language scores.
+              </p>
+            </div>
+            <a
+              href="/profile"
+              className="self-center px-3.5 py-1.5 bg-primary text-text-inverse text-[12px] font-bold rounded-btn hover:brightness-110 transition-all flex-shrink-0"
+            >
+              Complete →
+            </a>
           </div>
         )}
       </div>
