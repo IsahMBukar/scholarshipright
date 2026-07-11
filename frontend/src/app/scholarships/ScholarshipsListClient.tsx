@@ -414,7 +414,7 @@ export default function ScholarshipsListClient({
 
       <div className="px-4 md:px-6 py-4">
         {/* Onboarding nudge for users without a complete profile */}
-        {!ob.loading && !ob.hasProfile && ob.authenticated && (
+        {!loading && !ob.loading && !ob.hasProfile && ob.authenticated && (
           <div className="flex items-start gap-3 p-4 mb-4 bg-primary/8 border border-primary/20 rounded-2xl">
             <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0">
               <span className="material-symbols-outlined text-primary text-[18px]">school</span>

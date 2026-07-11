@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { SITE_URL } from '@/lib/env';
 import { API_URL } from '@/lib/env';
@@ -38,5 +39,9 @@ async function fetchInitialScholarships(): Promise<ScholarshipListResponse> {
 
 export default async function ScholarshipsPage() {
   const initialScholarships = await fetchInitialScholarships();
-  return <ScholarshipsListClient initialScholarships={initialScholarships} />;
+  return (
+    <Suspense fallback={null}>
+      <ScholarshipsListClient initialScholarships={initialScholarships} />
+    </Suspense>
+  );
 }
