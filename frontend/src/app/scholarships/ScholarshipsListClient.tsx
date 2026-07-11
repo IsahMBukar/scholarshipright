@@ -67,10 +67,11 @@ export default function ScholarshipsListClient({
   // Until then, hide them (and the deterministic placeholder) so we don't
   // mislead the user with fake numbers.
   const ob = useOnboarding();
-  // While onboarding state is loading, assume the user has a profile
-  // so we don't flash the "Complete profile" CTA. Once resolved, use
-  // the actual value. On slow networks the CTA flash was very visible.
-  const showMatchScores = ob.loading || ob.hasProfile;
+  // Only show match scores once onboarding has resolved AND the user has
+  // a complete profile. Showing them while ob.loading==true causes a
+  // flash: scores appear then vanish when onboarding resolves without a
+  // profile. Hiding them until we know is the cleanest UX.
+  const showMatchScores = !ob.loading && ob.hasProfile;
 
   // Filter metadata (countries, fields, etc.) is needed by the chip
   // labels in ActiveFilterChips even when the FilterPanel has been
