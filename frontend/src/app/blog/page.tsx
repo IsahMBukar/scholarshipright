@@ -8,6 +8,7 @@ export const metadata: Metadata = {
   title: 'Blog — ScholarshipRight',
   description:
     'Guides, tips, and stories to help you win fully funded scholarships. Expert advice on applications, essays, and finding the right match.',
+  keywords: ['scholarship blog', 'scholarship guide', 'scholarship tips', 'scholarship application guide', 'study abroad tips', 'scholarship essay tips', 'fully funded scholarship guide'],
   openGraph: {
     title: 'Blog — ScholarshipRight',
     description: 'Guides, tips, and stories to help you win fully funded scholarships.',

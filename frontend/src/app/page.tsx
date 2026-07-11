@@ -8,6 +8,12 @@ export const metadata: Metadata = {
   title: 'ScholarshipRight — Find Fully Funded Scholarships with AI',
   description:
     'Get matched to fully funded international scholarships in 30 seconds. AI-powered matching, 100+ awards across 18+ countries. Free to use — no credit card required.',
+  keywords: [
+    'scholarshipright', 'scholarship ai', 'ai scholarship finder',
+    'fully funded scholarships', 'international scholarships', 'study abroad',
+    'ai resume builder', 'ai coach', 'scholarship tracker',
+    'free scholarships', 'scholarship matching', 'graduate scholarships',
+  ],
   openGraph: {
     title: 'ScholarshipRight — Find Fully Funded Scholarships with AI',
     description:

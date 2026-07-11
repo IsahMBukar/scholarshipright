@@ -9,6 +9,12 @@ export const metadata: Metadata = {
   title: 'Browse Fully Funded Scholarships',
   description:
     'Discover fully funded international scholarships for bachelor, master, and PhD programs. Filter by country, field, degree level, and funding type. AI-matched to your profile.',
+  keywords: [
+    'fully funded scholarships', 'international scholarships', 'scholarship finder',
+    'browse scholarships', 'scholarship search', 'AI scholarship matching',
+    'bachelor scholarships', 'master scholarships', 'PhD scholarships',
+    'study abroad scholarships', 'free scholarships', 'scholarship list',
+  ],
   openGraph: {
     title: 'Browse Fully Funded Scholarships — ScholarshipRight',
     description: 'Discover fully funded international scholarships matched to your profile.',
@@ -39,9 +45,31 @@ async function fetchInitialScholarships(): Promise<ScholarshipListResponse> {
 
 export default async function ScholarshipsPage() {
   const initialScholarships = await fetchInitialScholarships();
+
+  // ItemList structured data for Google rich results
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: 'Fully Funded International Scholarships',
+    description: 'AI-curated list of fully funded scholarships for bachelor, master, and PhD programs worldwide.',
+    numberOfItems: initialScholarships.total,
+    itemListElement: initialScholarships.items.slice(0, 20).map((s, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      url: `${SITE_URL}/scholarships/${s.slug}`,
+      name: s.name,
+    })),
+  };
+
   return (
-    <Suspense fallback={null}>
-      <ScholarshipsListClient initialScholarships={initialScholarships} />
-    </Suspense>
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <Suspense fallback={null}>
+        <ScholarshipsListClient initialScholarships={initialScholarships} />
+      </Suspense>
+    </>
   );
 }
