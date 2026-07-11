@@ -32,14 +32,15 @@ export const metadata: Metadata = {
 };
 
 async function fetchInitialScholarships(): Promise<ScholarshipListResponse> {
+  const empty: ScholarshipListResponse = { items: [], total: 0, page: 1, limit: 50, pages: 1, profile_status: 'anonymous' };
   try {
     const res = await fetch(`${API_URL}/api/scholarships?limit=50&page=1`, {
       next: { revalidate: 60 },
     });
-    if (!res.ok) return { items: [], total: 0, page: 1, limit: 50, pages: 1 };
+    if (!res.ok) return empty;
     return res.json();
   } catch {
-    return { items: [], total: 0, page: 1, limit: 50, pages: 1 };
+    return empty;
   }
 }
 
