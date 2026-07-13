@@ -52,7 +52,7 @@ _issuer: str = ""
 _jwks_url: str = ""
 _audience: str = ""
 _server_url: str = ""
-_scopes_supported: list[str] = ["scholarships:read", "scholarships:write"]
+_scopes_supported: list[str] = ["scholarships:read", "scholarships:write", "blogs:read", "blogs:write"]
 
 # JWKS cache (in-memory, refreshed on demand)
 _jwks_cache: Optional[dict] = None
@@ -71,7 +71,7 @@ def load_oauth_config() -> None:
     _jwks_url = os.getenv("MCP_OAUTH_JWKS_URL", "")
     _audience = os.getenv("MCP_OAUTH_AUDIENCE", "")
     _server_url = os.getenv("MCP_OAUTH_SERVER_URL", "")
-    scopes_str = os.getenv("MCP_OAUTH_SCOPES_SUPPORTED", "scholarships:read,scholarships:write")
+    scopes_str = os.getenv("MCP_OAUTH_SCOPES_SUPPORTED", "scholarships:read,scholarships:write,blogs:read,blogs:write")
     _scopes_supported = [s.strip() for s in scopes_str.split(",") if s.strip()]
 
     if _oauth_enabled:
