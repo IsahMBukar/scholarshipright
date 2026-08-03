@@ -32,6 +32,7 @@ class ResumeUpdate(BaseModel):
     projects: Optional[List[Any]] = None
     awards: Optional[List[Any]] = None
     ref_list: Optional[List[Any]] = None
+    style: Optional[dict] = None
 
 
 class IssueOut(BaseModel):
@@ -68,6 +69,7 @@ class ResumeOut(BaseModel):
     projects: List[Any]
     awards: List[Any]
     ref_list: List[Any]
+    style: Optional[dict] = None
     analysis: dict
     issues: List[Any]
     ai_suggestions: Optional[str]

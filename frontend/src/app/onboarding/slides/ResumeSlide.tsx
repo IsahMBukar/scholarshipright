@@ -90,12 +90,11 @@ export default function ResumeSlide({
     // scoped localStorage slot. The slide must NOT touch the unscoped
     // legacy key directly — that would let the next user on the same
     // browser inherit the previous user's manual-source state.
-    // The parent then routes to /resume with a return URL that
-    // bounces the user back here when they save.
+    // Route to the resume page with builder mode enabled.
     if (onMarkManual) {
       void onMarkManual();
     }
-    router.push('/resume?onboarding=1&return=/onboarding');
+    router.push('/resume?onboarding=1&return=/onboarding&builder=1');
   };
 
   // ── Already has a resume (came back from /resume?return=)
@@ -241,8 +240,8 @@ export default function ResumeSlide({
         onClick={onManualEntry}
         className="mt-5 text-[13px] text-text-secondary hover:text-primary transition-colors inline-flex items-center gap-1.5 group"
       >
-        <span className="material-symbols-outlined text-[16px]">edit_note</span>
-        I don&apos;t have a resume — fill in manually
+        <span className="material-symbols-outlined text-[16px]">auto_awesome</span>
+        I don&apos;t have a resume — build one with AI
         <span className="material-symbols-outlined text-[14px] opacity-0 group-hover:opacity-100 transition-opacity">arrow_forward</span>
       </button>
 

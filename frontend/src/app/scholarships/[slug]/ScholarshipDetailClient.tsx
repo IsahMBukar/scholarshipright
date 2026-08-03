@@ -11,6 +11,7 @@ import { fetchScholarship, saveScholarship, removeSavedScholarship, fetchSavedSc
 import type { Scholarship, MatchBreakdown, DegreeDocument, CustomDocument, Profile } from '@/services/api';
 import { isProfileComplete } from '@/hooks/useOnboarding';
 import { getDeadlineInfo } from '@/components/scholarship/ScholarshipAtoms';
+import ScholarshipCustomizeModal from '@/components/resume-builder/ScholarshipCustomizeModal';
 
 // ── Helper: build doc list from a degree-level document row ────────
 type Doc = { name: string; note?: string; required: boolean };
@@ -167,6 +168,7 @@ export default function ScholarshipDetailClient() {
   const [loading, setLoading] = useState(true);
   const [isSaved, setIsSaved] = useState(false);
   const [savedStatus, setSavedStatus] = useState<string>('');
+  const [showCustomizeModal, setShowCustomizeModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'provider'>('overview');
   const [loadError, setLoadError] = useState<string | null>(null);
   const viewedRef = useRef<string | null>(null);
@@ -432,6 +434,13 @@ export default function ScholarshipDetailClient() {
                 className={`w-10 h-10 flex items-center justify-center rounded-full border transition ${isSaved ? 'bg-primary-light/30 border-primary text-primary' : 'border-gray-200 text-text-secondary hover:border-primary'}`}
               >
                 <span className="material-symbols-outlined text-[18px]">{isSaved ? 'bookmark' : 'bookmark_border'}</span>
+              </button>
+              <button
+                onClick={() => setShowCustomizeModal(true)}
+                className="px-3 py-2 border border-primary/30 text-primary text-[13px] font-semibold rounded-lg hover:bg-primary/5 transition-all flex items-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-[16px]">auto_awesome</span>
+                Customize Resume
               </button>
               {dl.isUpcoming ? (
                 <button
@@ -1239,6 +1248,14 @@ export default function ScholarshipDetailClient() {
           </div>
         )}
       </div>
+
+      {/* Customize Resume Modal */}
+      {showCustomizeModal && (
+        <ScholarshipCustomizeModal
+          scholarshipName={scholarship.name}
+          onClose={() => setShowCustomizeModal(false)}
+        />
+      )}
     </AppLayout>
   );
 }

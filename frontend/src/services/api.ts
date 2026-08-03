@@ -168,6 +168,7 @@ export interface Profile {
 
 // API client
 const api = axios.create({ baseURL: API_URL, withCredentials: true });
+export { api };
 
 // Filter metadata — the canonical list of every filter value the
 // backend supports, plus display labels. The FilterPanel renders
@@ -470,6 +471,7 @@ export interface Resume {
   projects: ResumeProject[];
   awards: ResumeAward[];
   ref_list: ResumeReference[];
+  style: Record<string, unknown> | null;
   analysis: Record<string, unknown>;
   issues: ResumeIssue[];
   ai_suggestions: string | null;
@@ -512,6 +514,15 @@ export async function createManualResume(): Promise<Resume> {
   return data;
 }
 
+// Create a brand-new resume for the manual builder. Always returns a fresh
+// record (unlike createManualResume, which is idempotent). Optionally copies
+// section data from the user's primary resume so they can tweak an existing
+// resume for a new target without retyping everything.
+export async function createNewResume(prefillFromPrimary: boolean = true): Promise<Resume> {
+  const { data } = await api.post('/api/resumes/manual', { force_new: true, prefill_from_primary: prefillFromPrimary });
+  return data;
+}
+
 export async function updateResume(id: string, update: Partial<Resume>): Promise<Resume> {
   const { data } = await api.put(`/api/resumes/${id}`, update);
   return data;
@@ -548,6 +559,56 @@ export async function exportResumePdf(id: string, mode: 'resume' | 'cv' = 'cv'):
   link.click();
   link.remove();
   window.URL.revokeObjectURL(url);
+}
+
+// Smart Resume Builder API
+export interface BuilderQuestions {
+  sections: string[];
+  questions: Record<string, Array<{
+    key: string;
+    label: string;
+    type: 'text' | 'textarea' | 'date' | 'select' | 'tags';
+    hint?: string;
+    options?: string[];
+    required?: boolean;
+  }>>;
+}
+
+export async function fetchBuilderQuestions(): Promise<BuilderQuestions> {
+  const { data } = await api.get('/api/resumes/builder/questions');
+  return data;
+}
+
+export async function fetchSectionQuestions(section: string): Promise<{ section: string; questions: BuilderQuestions['questions'][string] }> {
+  const { data } = await api.get(`/api/resumes/builder/questions/${section}`);
+  return data;
+}
+
+export async function aiGenerateSection(resumeId: string, section: string, answers: Record<string, any>): Promise<{ section: string; generated: any }> {
+  const { data } = await api.post(`/api/resumes/${resumeId}/ai-generate-section`, { section, answers });
+  return data;
+}
+
+export async function aiSaveSection(resumeId: string, section: string, entry?: any, data?: any): Promise<Resume> {
+  const { data: resp } = await api.post(`/api/resumes/${resumeId}/ai-save-section`, { section, entry, data });
+  return resp;
+}
+
+export async function aiGenerateSummary(resumeId: string, tone: string = 'professional'): Promise<{ summary: string }> {
+  const { data } = await api.post(`/api/resumes/${resumeId}/ai-generate-summary`, { tone });
+  return data;
+}
+
+export async function aiSuggest(resumeId: string, section: string, instruction: string = ''): Promise<{ section: string; suggestion: string }> {
+  const { data } = await api.post(`/api/resumes/${resumeId}/ai-suggest`, { section, instruction });
+  return data;
+}
+
+export type PolishLevel = 'simple' | 'medium' | 'high';
+
+export async function polishResume(resumeId: string, level: PolishLevel = 'simple'): Promise<Resume> {
+  const { data } = await api.post(`/api/resumes/${resumeId}/polish`, { level });
+  return data;
 }
 
 // Notifications API

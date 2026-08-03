@@ -42,6 +42,9 @@ class Resume(Base):
     awards = Column(JSONB, default=[])
     ref_list = Column(JSONB, default=[])
 
+    # Visual style preferences (theme, colors, fonts)
+    style = Column(JSONB, nullable=True)
+
     # AI analysis
     analysis = Column(JSONB, default={})
     issues = Column(JSONB, default=[])
@@ -52,3 +55,15 @@ class Resume(Base):
 
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+async def ensure_resume_style_column():
+    """Add style JSONB column to resumes table if missing (idempotent)."""
+    from sqlalchemy import text
+    from app.db.session import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as db:
+        await db.execute(text(
+            "ALTER TABLE resumes ADD COLUMN IF NOT EXISTS style JSONB"
+        ))
+        await db.commit()

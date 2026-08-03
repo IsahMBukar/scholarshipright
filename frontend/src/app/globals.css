@@ -96,3 +96,29 @@
   from { opacity: 0; transform: translateX(-40px); }
   to { opacity: 1; transform: translateX(0); }
 }
+
+/* ── Modal / dialog entrance ────────────────────────────────
+   Unified, working entrance used by the resume modals. Uses a
+   subtle rise + scale so dialogs feel "connected" to wherever
+   they were triggered instead of warping from the corner. */
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@layer utilities {
+  .animate-modal-in {
+    animation: modal-in 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .animate-sheet-up {
+    animation: sheet-up 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .animate-backdrop {
+    animation: fade-in 0.2s ease-out forwards;
+  }
+}

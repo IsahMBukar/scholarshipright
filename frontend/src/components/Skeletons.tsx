@@ -313,3 +313,86 @@ export function ChatSkeleton() {
     </div>
   );
 }
+
+/* ---------- Resume Form Skeleton (section-by-section manual entry) ---------- */
+export function ResumeFormSkeleton() {
+  return (
+    <div className="space-y-6">
+      {/* Step header */}
+      <div className="flex items-center gap-3">
+        <Pulse className="w-10 h-10 rounded-xl" />
+        <div className="space-y-2 flex-1">
+          <Pulse className="w-40 h-4 rounded" />
+          <Pulse className="w-64 h-3 rounded" />
+        </div>
+      </div>
+
+      {/* Form fields */}
+      <div className="grid gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="space-y-2">
+            <Pulse className="w-24 h-3 rounded" />
+            <Pulse className="w-full h-10 rounded-lg" />
+          </div>
+        ))}
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+        <Pulse className="w-20 h-4 rounded" />
+        <Pulse className="w-32 h-11 rounded-xl" />
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Builder Wizard Skeleton (loading inside the modal) ---------- */
+export function BuilderWizardSkeleton() {
+  return (
+    <div className="flex h-full">
+      {/* Left panel */}
+      <div className="w-[40%] border-r border-gray-200 p-4 space-y-4">
+        <div className="flex gap-2">
+          <Pulse className="w-24 h-9 rounded-lg" />
+          <Pulse className="w-24 h-9 rounded-lg" />
+          <Pulse className="w-20 h-9 rounded-lg" />
+        </div>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3">
+            <Pulse className="w-8 h-8 rounded-lg" />
+            <div className="flex-1 space-y-1.5">
+              <Pulse className="w-2/3 h-3 rounded" />
+              <Pulse className="w-1/2 h-2.5 rounded" />
+            </div>
+          </div>
+        ))}
+      </div>
+      {/* Right preview */}
+      <div className="w-[60%] bg-gray-50 p-6">
+        <Pulse className="w-full h-8 rounded-lg mb-4" />
+        <div className="space-y-3">
+          <Pulse className="w-full h-3 rounded" />
+          <Pulse className="w-11/12 h-3 rounded" />
+          <Pulse className="w-4/5 h-3 rounded" />
+        </div>
+        <Pulse className="w-3/4 h-40 rounded-xl mt-6" />
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Resume Analysis Skeleton (during upload processing) ---------- */
+export function ResumeAnalyzingSkeleton({ label }: { label?: string }) {
+  return (
+    <div className="flex flex-col items-center text-center px-4 py-8">
+      <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+        <Pulse className="w-9 h-9 rounded-full" />
+      </div>
+      <Pulse className="w-48 h-4 rounded mb-2" />
+      <Pulse className="w-64 h-3 rounded" />
+      <Pulse className="w-40 h-3 rounded mt-2" />
+      {label && <p className="text-[12px] text-text-secondary mt-3">{label}</p>}
+    </div>
+  );
+}
+

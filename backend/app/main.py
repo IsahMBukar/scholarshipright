@@ -45,6 +45,7 @@ from app.mcp.oauth import load_oauth_config
 from app.models.blog import ensure_blog_tables
 from app.models.scholarship_degree_document import ensure_degree_documents_table
 from app.models.scholarship_custom_document import ensure_custom_documents_table
+from app.models.resume import ensure_resume_style_column
 
 settings = get_settings()
 logger = logging.getLogger("scholarshipright.startup")
@@ -170,6 +171,12 @@ async def lifespan(app: FastAPI):
         await ensure_custom_documents_table()
     except Exception as e:  # noqa: BLE001
         logger.exception("ensure_custom_documents_table failed: %s", e)
+
+    # Startup: ensure resume.style column exists (idempotent).
+    try:
+        await ensure_resume_style_column()
+    except Exception as e:  # noqa: BLE001
+        logger.exception("ensure_resume_style_column failed: %s", e)
 
     # Startup: start deadline checker in background
     deadline_task = asyncio.create_task(deadline_checker_loop())

@@ -2,7 +2,7 @@ import os
 import uuid as uuid_lib
 from uuid import UUID
 from typing import Any
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks, Body
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
@@ -17,6 +17,7 @@ from app.models.user import User
 from app.models.profile import Profile
 from app.schemas.resume import ResumeOut, ResumeUpdate
 from app.services.resume_analyzer import extract_text_from_file, analyze_resume, rewrite_field
+from app.services.resume_builder import SECTION_QUESTIONS, SECTION_ORDER, generate_section, generate_summary, suggest_content, polish_resume
 from app.services.scoring import calculate_level_aware_completeness
 from app.services.notifications import emit_resume_failed
 from app.api.users import get_current_user
@@ -227,27 +228,34 @@ async def create_resume(
 # of creating a duplicate.
 @router.post("/manual", response_model=ResumeOut)
 async def create_manual_resume(
+    body: dict = Body(default={}),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Create an empty resume record for manual entry (no file upload).
 
-    Returns the existing manual resume if one already exists.
+    Returns the existing manual resume if one already exists,
+    unless body contains { "force_new": true } which always creates
+    a brand-new record (optionally prefilling from the primary resume).
     """
-    # Look for an existing manual resume
-    existing_q = await db.execute(
-        select(Resume).where(
-            Resume.user_id == user.id,
-            Resume.status == "manual",
+    force_new = body.get("force_new", False)
+    prefill = body.get("prefill_from_primary", True)
+
+    if not force_new:
+        # Look for an existing manual resume
+        existing_q = await db.execute(
+            select(Resume).where(
+                Resume.user_id == user.id,
+                Resume.status == "manual",
+            )
         )
-    )
-    existing = existing_q.scalars().first()
-    if existing:
-        return existing
+        existing = existing_q.scalars().first()
+        if existing:
+            return existing
 
     resume = Resume(
         user_id=user.id,
-        title="My Profile",
+        title="Untitled Resume" if force_new else "My Profile",
         target_fields=[],
         target_degree=None,
         original_filename=None,
@@ -255,6 +263,38 @@ async def create_manual_resume(
         original_mime_type=None,
         status="manual",
     )
+    if force_new:
+        resume.is_primary = False
+
+    # Prefill section data from the user's primary resume (force_new mode).
+    if force_new and prefill:
+        primary_q = await db.execute(
+            select(Resume).where(
+                Resume.user_id == user.id,
+                Resume.is_primary == True,
+            )
+        )
+        primary = primary_q.scalars().first()
+        if primary:
+            resume.full_name = primary.full_name
+            resume.email = primary.email
+            resume.phone = primary.phone
+            resume.location = primary.location
+            resume.linkedin_url = primary.linkedin_url
+            resume.portfolio_url = primary.portfolio_url
+            resume.summary = primary.summary
+            resume.education = primary.education
+            resume.experience = primary.experience
+            resume.projects = primary.projects
+            resume.research_projects = primary.research_projects
+            resume.skills = primary.skills
+            resume.certifications = primary.certifications
+            resume.publications = primary.publications
+            resume.awards = primary.awards
+            resume.languages = primary.languages
+            resume.ref_list = primary.ref_list
+            resume.style = primary.style
+            resume.title = f"{primary.title} (copy)" if primary.title else "Untitled Resume"
 
     # If first resume, make it primary so the profile page uses it.
     any_existing = (await db.execute(
@@ -272,6 +312,7 @@ async def create_manual_resume(
     trigger_recompute(user.id, REASON_RESUME_CREATED, BackgroundTasks())
 
     return await _serialize_resume(resume, user, db)
+
 
 
 async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename: str, fields_list: list, target_degree: str):
@@ -631,6 +672,7 @@ async def export_resume_pdf(resume_id: str, mode: str = "cv", user: User = Depen
         "research_projects": resume.research_projects or [],
         "awards": resume.awards or [],
         "ref_list": resume.ref_list or [],
+        "style": resume.style or {},
     }
 
     pdf_bytes = generate_resume_pdf(resume_data, mode=mode)
@@ -642,3 +684,364 @@ async def export_resume_pdf(resume_id: str, mode: str = "cv", user: User = Depen
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+
+
+# ── Smart Builder Endpoints ─────────────────────────────────────────────────
+
+@router.get("/builder/questions")
+async def get_builder_questions():
+    """Return all section questions for the guided builder wizard.
+
+    Frontend uses this to render the step-by-step question flow.
+    """
+    return {
+        "sections": SECTION_ORDER,
+        "questions": SECTION_QUESTIONS,
+    }
+
+
+@router.get("/builder/questions/{section}")
+async def get_section_questions(section: str):
+    """Return questions for a specific section."""
+    if section not in SECTION_QUESTIONS:
+        raise HTTPException(404, f"Unknown section: {section}. Valid: {', '.join(SECTION_ORDER)}")
+    return {
+        "section": section,
+        "questions": SECTION_QUESTIONS[section],
+    }
+
+
+@router.post("/{resume_id}/ai-generate-section", dependencies=[Depends(resume_rewrite_rate_limit)])
+async def ai_generate_section(
+    resume_id: str,
+    body: dict,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate polished resume content for a section from guided question answers.
+
+    Body: { "section": "education", "answers": { "institution": "...", ... } }
+
+    Returns AI-generated content ready to be saved to the resume.
+    """
+    section = body.get("section", "")
+    answers = body.get("answers", {})
+
+    if not section:
+        raise HTTPException(400, "section is required")
+    if section not in SECTION_QUESTIONS:
+        raise HTTPException(400, f"Unknown section: {section}")
+    if not answers:
+        raise HTTPException(400, "answers dict is required")
+
+    # Fetch resume for context
+    result = await db.execute(
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
+    )
+    resume = result.scalar_one_or_none()
+    if not resume:
+        raise HTTPException(404, "Resume not found")
+
+    resume_data = {
+        "summary": resume.summary,
+        "education": resume.education or [],
+        "experience": resume.experience or [],
+        "skills": resume.skills or [],
+        "research_projects": resume.research_projects or [],
+    }
+
+    try:
+        generated = await asyncio.wait_for(
+            generate_section(section, answers, resume_data),
+            timeout=60,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(504, "AI generation timed out. Please try again.")
+    except Exception as e:
+        logger.exception("AI generate-section failed for %s", section)
+        raise HTTPException(502, f"AI generation failed: {str(e)}")
+
+    return {"section": section, "generated": generated}
+
+
+@router.post("/{resume_id}/ai-save-section", response_model=ResumeOut)
+async def ai_save_section(
+    resume_id: str,
+    body: dict,
+    background_tasks: BackgroundTasks,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Save an AI-generated (or user-edited) section entry to the resume.
+
+    Body: { "section": "education", "entry": { ... } }  — for single-entry sections
+    Body: { "section": "skills", "data": ["Python", ...] }  — for array sections
+    Body: { "section": "summary", "data": "text..." }  — for text fields
+
+    For list sections (education, experience, etc.), `entry` is appended to the existing list.
+    For text fields (summary), `data` replaces the current value.
+    """
+    section = body.get("section", "")
+    entry = body.get("entry")
+    data = body.get("data")
+
+    if not section:
+        raise HTTPException(400, "section is required")
+
+    result = await db.execute(
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
+    )
+    resume = result.scalar_one_or_none()
+    if not resume:
+        raise HTTPException(404, "Resume not found")
+
+    # Text fields
+    if section == "summary":
+        resume.summary = data or entry or ""
+    # Array-of-strings fields
+    elif section == "skills":
+        resume.skills = data or []
+    # JSONB list fields — append or replace
+    # Note: section keys from the wizard ("projects", "research", "references")
+    # differ from DB column names ("research_projects", "ref_list").
+    elif section in ("education", "experience", "projects", "research",
+                     "certifications", "publications", "awards", "languages",
+                     "references", "research_projects", "ref_list"):
+        field_map = {
+            "education": "education",
+            "experience": "experience",
+            "projects": "research_projects",
+            "research": "research_projects",
+            "research_projects": "research_projects",
+            "certifications": "certifications",
+            "publications": "publications",
+            "awards": "awards",
+            "languages": "languages",
+            "references": "ref_list",
+            "ref_list": "ref_list",
+        }
+        db_field = field_map[section]
+        current = list(getattr(resume, db_field) or [])
+        if entry:
+            current.append(entry)
+        elif data:
+            current = data
+        setattr(resume, db_field, current)
+    else:
+        raise HTTPException(400, f"Cannot save section: {section}")
+
+    # Recalculate score
+    resume_dict = {
+        "email": resume.email, "phone": resume.phone, "location": resume.location,
+        "linkedin_url": resume.linkedin_url, "summary": resume.summary,
+        "education": resume.education or [], "experience": resume.experience or [],
+        "research_projects": resume.research_projects or [], "skills": resume.skills or [],
+        "certifications": resume.certifications or [], "publications": resume.publications or [],
+        "languages": resume.languages or [],
+    }
+    degree_level = await _user_degree_level(db, user)
+    score_result = _score_resume_level_aware(resume_dict, degree_level)
+    resume.overall_score = score_result["overall_score"]
+    resume.section_scores = score_result["section_scores"]
+    resume.issues = [
+        {"field": "general", "severity": "likely", "message": issue}
+        for issue in score_result["issues"]
+    ]
+
+    await db.commit()
+    await db.refresh(resume)
+
+    trigger_recompute(user.id, REASON_RESUME_UPDATED, background_tasks)
+    return await _serialize_resume(resume, user, db)
+
+
+@router.post("/{resume_id}/ai-generate-summary", dependencies=[Depends(resume_rewrite_rate_limit)])
+async def ai_generate_summary(
+    resume_id: str,
+    body: dict = {},
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate a professional summary from the resume's existing data.
+
+    Body (optional): { "tone": "professional" | "academic" | "concise" }
+    """
+    result = await db.execute(
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
+    )
+    resume = result.scalar_one_or_none()
+    if not resume:
+        raise HTTPException(404, "Resume not found")
+
+    resume_data = {
+        "full_name": resume.full_name,
+        "education": resume.education or [],
+        "experience": resume.experience or [],
+        "skills": resume.skills or [],
+        "research_projects": resume.research_projects or [],
+    }
+
+    tone = body.get("tone", "professional")
+
+    try:
+        summary = await asyncio.wait_for(
+            generate_summary(resume_data, tone),
+            timeout=60,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(504, "AI generation timed out.")
+    except Exception as e:
+        logger.exception("AI summary generation failed")
+        raise HTTPException(502, f"AI generation failed: {str(e)}")
+
+    return {"summary": summary}
+
+
+@router.post("/{resume_id}/ai-suggest", dependencies=[Depends(resume_rewrite_rate_limit)])
+async def ai_suggest(
+    resume_id: str,
+    body: dict,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get AI suggestions for any section of the resume.
+
+    Body: { "section": "summary", "instruction": "make it more impactful" }
+
+    Returns AI-generated suggestion for the requested section.
+    """
+    section = body.get("section", "")
+    instruction = body.get("instruction", "")
+
+    if not section:
+        raise HTTPException(400, "section is required")
+
+    result = await db.execute(
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
+    )
+    resume = result.scalar_one_or_none()
+    if not resume:
+        raise HTTPException(404, "Resume not found")
+
+    resume_data = {
+        "full_name": resume.full_name,
+        "summary": resume.summary,
+        "education": resume.education or [],
+        "experience": resume.experience or [],
+        "skills": resume.skills or [],
+        "research_projects": resume.research_projects or [],
+        "certifications": resume.certifications or [],
+        "publications": resume.publications or [],
+        "awards": resume.awards or [],
+    }
+
+    try:
+        suggestion = await asyncio.wait_for(
+            suggest_content(section, resume_data, instruction),
+            timeout=60,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(504, "AI suggestion timed out.")
+    except Exception as e:
+        logger.exception("AI suggest failed for %s", section)
+        raise HTTPException(502, f"AI suggestion failed: {str(e)}")
+
+    return {"section": section, "suggestion": suggestion}
+
+@router.post("/{resume_id}/polish", dependencies=[Depends(resume_rewrite_rate_limit)])
+async def polish_endpoint(
+    resume_id: str,
+    body: dict,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Polish a resume to the requested level.
+
+    Body: { "level": "simple" | "medium" | "high" } (default: "simple")
+
+    Applies the polish, recomputes the score, and returns the updated ResumeOut.
+    """
+    level = body.get("level", "simple")
+    if level not in ("simple", "medium", "high"):
+        raise HTTPException(400, "level must be one of: simple, medium, high")
+
+    result = await db.execute(
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
+    )
+    resume = result.scalar_one_or_none()
+    if not resume:
+        raise HTTPException(404, "Resume not found")
+
+    resume_data = {
+        "full_name": resume.full_name,
+        "email": resume.email,
+        "phone": resume.phone,
+        "location": resume.location,
+        "linkedin_url": resume.linkedin_url,
+        "portfolio_url": resume.portfolio_url,
+        "summary": resume.summary,
+        "education": resume.education or [],
+        "experience": resume.experience or [],
+        "projects": resume.projects or [],
+        "research_projects": resume.research_projects or [],
+        "skills": resume.skills or [],
+        "certifications": resume.certifications or [],
+        "publications": resume.publications or [],
+        "awards": resume.awards or [],
+        "languages": resume.languages or [],
+        "ref_list": resume.ref_list or [],
+    }
+
+    try:
+        polished = await asyncio.wait_for(polish_resume(resume_data, level), timeout=120)
+    except asyncio.TimeoutError:
+        raise HTTPException(504, "AI polish timed out.")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.exception("AI polish failed")
+        raise HTTPException(502, f"AI polish failed: {str(e)}")
+
+    # Apply the polished content.
+    resume.full_name = polished.get("full_name", resume.full_name)
+    resume.email = polished.get("email", resume.email)
+    resume.phone = polished.get("phone", resume.phone)
+    resume.location = polished.get("location", resume.location)
+    resume.linkedin_url = polished.get("linkedin_url", resume.linkedin_url)
+    resume.portfolio_url = polished.get("portfolio_url", resume.portfolio_url)
+    resume.summary = polished.get("summary", resume.summary)
+    resume.education = polished.get("education", resume.education)
+    resume.experience = polished.get("experience", resume.experience)
+    resume.projects = polished.get("projects", resume.projects)
+    resume.research_projects = polished.get("research_projects", resume.research_projects)
+    resume.skills = polished.get("skills", resume.skills)
+    resume.certifications = polished.get("certifications", resume.certifications)
+    resume.publications = polished.get("publications", resume.publications)
+    resume.awards = polished.get("awards", resume.awards)
+    resume.languages = polished.get("languages", resume.languages)
+    resume.ref_list = polished.get("ref_list", resume.ref_list)
+
+    # Recalculate score.
+    resume_dict = {
+        "email": resume.email, "phone": resume.phone, "location": resume.location,
+        "linkedin_url": resume.linkedin_url, "summary": resume.summary,
+        "education": resume.education or [], "experience": resume.experience or [],
+        "research_projects": resume.research_projects or [], "skills": resume.skills or [],
+        "certifications": resume.certifications or [], "publications": resume.publications or [],
+        "languages": resume.languages or [],
+    }
+    degree_level = await _user_degree_level(db, user)
+    score_result = _score_resume_level_aware(resume_dict, degree_level)
+    resume.overall_score = score_result["overall_score"]
+    resume.section_scores = score_result["section_scores"]
+    resume.issues = [
+        {"field": "general", "severity": "likely", "message": issue}
+        for issue in score_result["issues"]
+    ]
+
+    await db.commit()
+    await db.refresh(resume)
+
+    trigger_recompute(user.id, REASON_RESUME_UPDATED, BackgroundTasks())
+    return await _serialize_resume(resume, user, db)
+
