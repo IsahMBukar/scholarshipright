@@ -22,6 +22,7 @@ interface Props {
 export default function ResumeBuilderWizard({ resume, onResumeUpdate, onClose }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('editor');
   const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
   const [resumeStyle, setResumeStyle] = useState<ResumeStyle>(() => {
     // Load persisted style from resume, fallback to defaults
     if (resume.style && typeof resume.style === 'object') {
@@ -180,8 +181,8 @@ export default function ResumeBuilderWizard({ resume, onResumeUpdate, onClose }:
           </div>
         </div>
 
-        {/* Right: preview (60%) */}
-        <div className="w-full lg:w-[60%] bg-gray-50 flex-shrink-0 lg:flex-none flex-1 min-h-0">
+        {/* Right: preview (60%) — desktop only */}
+        <div className="hidden lg:flex lg:w-[60%] bg-gray-50 flex-shrink-0 flex-1 min-h-0">
           <LivePreview
             resume={resume}
             interactive
@@ -191,6 +192,52 @@ export default function ResumeBuilderWizard({ resume, onResumeUpdate, onClose }:
           />
         </div>
       </div>
+
+      {/* ── Mobile preview toggle button ──────────────────────── */}
+      <button
+        onClick={() => setMobilePreviewOpen(true)}
+        className="lg:hidden fixed bottom-20 right-4 z-30 flex items-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-full shadow-lg hover:bg-gray-800 transition-colors text-[13px] font-medium"
+      >
+        <span className="material-symbols-outlined text-[18px]">visibility</span>
+        Preview
+      </button>
+
+      {/* ── Mobile preview overlay (slides in from left) ──────── */}
+      {mobilePreviewOpen && (
+        <div className="lg:hidden fixed inset-0 z-40 flex">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/40 animate-fade-in"
+            onClick={() => setMobilePreviewOpen(false)}
+          />
+          {/* Slide-in panel */}
+          <div className="relative w-full bg-white shadow-2xl flex flex-col animate-slide-in-left">
+            {/* Overlay header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white flex-shrink-0">
+              <h3 className="text-[15px] font-bold text-gray-900">Preview</h3>
+              <button
+                onClick={() => setMobilePreviewOpen(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <span className="material-symbols-outlined text-[20px] text-gray-500">close</span>
+              </button>
+            </div>
+            {/* Preview content */}
+            <div className="flex-1 overflow-hidden">
+              <LivePreview
+                resume={resume}
+                interactive
+                onSectionClick={(section, label) => {
+                  handlePreviewSectionClick(section, label);
+                  setMobilePreviewOpen(false);
+                }}
+                activeSection={activeSection}
+                style={resumeStyle}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Footer ──────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-4 py-2.5 border-t border-gray-200 bg-white flex-shrink-0">
