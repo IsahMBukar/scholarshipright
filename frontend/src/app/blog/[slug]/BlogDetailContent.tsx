@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import DOMPurify from 'isomorphic-dompurify';
 import LandingShell from '@/components/LandingShell';
+import BlogViewTracker from '@/components/BlogViewTracker';
 import type { BlogPostOut, ScholarshipTagOut } from '@/lib/blog/types';
 
 // ── Inline scholarship card ───────────────────────────────────────
@@ -177,6 +178,7 @@ export default function BlogDetailContent({ post }: { post: BlogPostOut }) {
 
   return (
     <LandingShell>
+      <BlogViewTracker slug={post.slug} />
       {/* JSON-LD structured data */}
       <script
         type="application/ld+json"

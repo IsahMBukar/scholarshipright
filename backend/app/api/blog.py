@@ -18,7 +18,7 @@ from typing import Optional
 
 import markdown
 import bleach
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func, update, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -222,7 +222,7 @@ async def list_posts(
 
 @router.get("/{slug}", response_model=BlogPostOut)
 async def get_post(slug: str, db: AsyncSession = Depends(get_db)):
-    """Get a single published post by slug. Increments view count."""
+    """Get a single published post by slug. Read-only (no view increment)."""
     row = await db.execute(
         select(BlogPost).where(BlogPost.slug == slug, BlogPost.status == "published")
     )
@@ -230,12 +230,8 @@ async def get_post(slug: str, db: AsyncSession = Depends(get_db)):
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
-    # Increment view count (atomic SQL expression to avoid race condition)
-    await db.execute(
-        update(BlogPost).where(BlogPost.id == post.id).values(view_count=BlogPost.view_count + 1)
-    )
-    await db.flush()
-    post.view_count += 1
+    # NOTE: view counting moved to POST /api/blog/{slug}/view
+    # to prevent double-counting from SSR (generateMetadata + page component).
 
     # Fetch scholarship tags
     tag_rows = await db.execute(
@@ -262,7 +258,6 @@ async def get_post(slug: str, db: AsyncSession = Depends(get_db)):
     # Author name
     author = (await db.execute(select(User.full_name).where(User.id == post.author_id))).scalar()
 
-    await db.commit()
     return BlogPostOut(
         id=str(post.id),
         author_id=str(post.author_id),
@@ -283,6 +278,45 @@ async def get_post(slug: str, db: AsyncSession = Depends(get_db)):
         updated_at=post.updated_at.isoformat(),
         scholarship_tags=scholarship_tags,
     )
+
+
+@router.post("/{slug}/view", status_code=status.HTTP_204_NO_CONTENT)
+async def track_view(
+    slug: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Track a blog post view. Deduplicates by IP+slug (1 count per IP per hour).
+
+    Called from the client after page load — not from SSR.
+    """
+    row = await db.execute(
+        select(BlogPost).where(BlogPost.slug == slug, BlogPost.status == "published")
+    )
+    post = row.scalar_one_or_none()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    # Dedup via Redis: one view per IP per post per hour
+    client_ip = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
+    dedup_key = f"blog:view:{post.id}:{client_ip}"
+
+    try:
+        from app.core.cache import get_redis
+        r = await get_redis()
+        if r:
+            already_viewed = await r.get(dedup_key)
+            if already_viewed:
+                return  # already counted this hour
+            await r.set(dedup_key, "1", ex=3600)  # 1 hour TTL
+    except Exception:
+        pass  # if Redis fails, still count the view
+
+    # Increment view count (atomic SQL)
+    await db.execute(
+        update(BlogPost).where(BlogPost.id == post.id).values(view_count=BlogPost.view_count + 1)
+    )
+    await db.commit()
 
 
 @router.post("", response_model=BlogPostOut, status_code=status.HTTP_201_CREATED)

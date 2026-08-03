@@ -1,23 +1,24 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { cache } from 'react';
 import { API_URL, SITE_URL } from '@/lib/env';
 import BlogDetailContent from './BlogDetailContent';
 import type { BlogPostOut } from '@/lib/blog/types';
 
 type Props = { params: Promise<{ slug: string }> };
 
-async function fetchPost(slug: string): Promise<BlogPostOut | null> {
+// React.cache() deduplicates within a single SSR pass —
+// generateMetadata() and BlogPostPage() share the same fetch call.
+const fetchPost = cache(async (slug: string): Promise<BlogPostOut | null> => {
   try {
-    const res = await fetch(`${API_URL}/api/blog/${slug}`, {
-      next: { revalidate: 60 }, // revalidate every 60s
-    });
+    const res = await fetch(`${API_URL}/api/blog/${slug}`);
     if (!res.ok) return null;
     return res.json();
   } catch (err) {
     console.error('[BlogDetail] Failed to fetch post:', err);
     return null;
   }
-}
+});
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
