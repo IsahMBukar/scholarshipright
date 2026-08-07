@@ -15,10 +15,9 @@
 // Flow wiring:
 //   - "Sign in" → /login
 //   - "Start free" / "See your matches" → /signup
-//   - If already authed → redirect to /scholarships
+//   - If already authed → show Dashboard link (no redirect)
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
@@ -175,8 +174,7 @@ function CountUp({
 
 // ── Main component ─────────────────────────────────────────────────
 export default function LandingClient() {
-  const router = useRouter();
-  const [checking, setChecking] = useState(true);
+  const [isAuthed, setIsAuthed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const toggleDrawer = () => {
@@ -190,24 +188,12 @@ export default function LandingClient() {
     document.body.style.overflow = '';
   };
 
-  // Auth check — if already logged in, skip the pitch.
+  // Auth check — track state, no redirect.
   useEffect(() => {
     fetch(`${API_URL}/api/auth/me`, { credentials: 'include' })
-      .then((r) => {
-        if (r.ok) router.replace('/scholarships');
-        else setChecking(false);
-      })
-      .catch((err) => { console.error('[Landing] Auth check failed:', err); setChecking(false); });
-  }, [router]);
-
-  if (checking) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#fdfbf7]">
-        <Image src="/images/logo-light.jpg" alt="ScholarshipRight" width={48} height={48} priority className="w-12 h-12 rounded-xl mb-4 animate-pulse" />
-        <div className="w-5 h-5 border-2 border-[#f5b942]/30 border-t-[#f5b942] rounded-full animate-spin" />
-      </div>
-    );
-  }
+      .then((r) => { if (r.ok) setIsAuthed(true); })
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#fdfbf7] text-[#1a1a1a] overflow-x-hidden">
@@ -276,29 +262,41 @@ export default function LandingClient() {
           </nav>
           <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400 pb-1.5 pt-4">Account</p>
           <nav className="flex flex-col">
-            {ACCOUNT_LINKS.map((link) => (
+            {isAuthed ? (
               <Link
-                key={link.href}
-                href={link.href}
+                href="/dashboard"
                 onClick={closeDrawer}
                 className="flex items-center gap-3 px-3 py-3.5 rounded-xl text-[15px] font-semibold text-[#1a1a1a] hover:bg-[#fdfbf7] active:bg-[#fdfbf7] transition"
               >
-                <span className="w-9 h-9 rounded-[10px] bg-[#f5f3ee] flex items-center justify-center text-base flex-shrink-0">{link.icon}</span>
-                <span>{link.label}</span>
+                <span className="w-9 h-9 rounded-[10px] bg-[#f5f3ee] flex items-center justify-center text-base flex-shrink-0">📊</span>
+                <span>Continue to Dashboard</span>
                 <span className="ml-auto text-gray-300 text-sm">›</span>
               </Link>
-            ))}
+            ) : (
+              ACCOUNT_LINKS.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={closeDrawer}
+                  className="flex items-center gap-3 px-3 py-3.5 rounded-xl text-[15px] font-semibold text-[#1a1a1a] hover:bg-[#fdfbf7] active:bg-[#fdfbf7] transition"
+                >
+                  <span className="w-9 h-9 rounded-[10px] bg-[#f5f3ee] flex items-center justify-center text-base flex-shrink-0">{link.icon}</span>
+                  <span>{link.label}</span>
+                  <span className="ml-auto text-gray-300 text-sm">›</span>
+                </Link>
+              ))
+            )}
           </nav>
         </div>
 
         {/* Drawer footer */}
         <div className="px-5 py-4 border-t border-[#f0ebe0]">
           <Link
-            href="/signup"
+            href={isAuthed ? '/dashboard' : '/signup'}
             onClick={closeDrawer}
             className="flex items-center justify-center w-full py-3.5 bg-[#f5b942] text-[#1a1a1a] text-sm font-bold rounded-xl hover:bg-[#d4972e] transition"
           >
-            Start free →
+            {isAuthed ? 'Continue to Dashboard →' : 'Start free →'}
           </Link>
           <div className="flex justify-center gap-4 mt-3">
             <Link href="/privacy" className="text-xs text-gray-400">Privacy</Link>
@@ -329,10 +327,10 @@ export default function LandingClient() {
           ))}
         </div>
         <Link
-          href="/signup"
+          href={isAuthed ? '/dashboard' : '/signup'}
           className="ml-[clamp(0.125rem,0.05rem+0.3vw,0.5rem)] flex-shrink-0 inline-flex items-center justify-center w-[4.5rem] h-[1.75rem] sm:w-[6.5rem] sm:h-[2.25rem] md:w-[8rem] md:h-[2.5rem] text-[0.625rem] sm:text-sm md:text-base font-semibold text-[#1a1a1a] bg-[#f5b942] rounded-full hover:bg-[#d4972e] hover:text-white transition whitespace-nowrap"
         >
-          Start free
+          {isAuthed ? 'Dashboard' : 'Start free'}
         </Link>
       </nav>
 
@@ -677,10 +675,16 @@ export default function LandingClient() {
             See your matches →
           </Link>
           <p className="text-xs text-gray-400 mt-5">
-            Already matched?{' '}
-            <Link href="/login" className="text-[#d4972e] font-semibold hover:underline">
-              Sign in
-            </Link>
+            {isAuthed ? (
+              <Link href="/dashboard" className="text-[#d4972e] font-semibold hover:underline">
+                Continue to Dashboard →
+              </Link>
+            ) : (
+              <>Already matched?{' '}
+              <Link href="/login" className="text-[#d4972e] font-semibold hover:underline">
+                Sign in
+              </Link></>
+            )}
           </p>
         </motion.div>
       </section>
