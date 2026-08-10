@@ -38,6 +38,17 @@ export default function AddResumeModal({ onClose, onUploadComplete, onManualStar
   }, []);
 
   const handleFile = async (file: File) => {
+    // Validate file size (max 10MB)
+    const MAX_FILE_SIZE = 10 * 1024 * 1024;
+    if (file.size > MAX_FILE_SIZE) {
+      setMode('upload');
+      setUploadState({
+        kind: 'error',
+        message: `File is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum size is 10MB.`,
+      });
+      return;
+    }
+
     setMode('upload');
     setUploadState({ kind: 'uploading', fileName: file.name });
 
@@ -128,7 +139,7 @@ export default function AddResumeModal({ onClose, onUploadComplete, onManualStar
               <p className="text-[12px] text-text-secondary">Upload your CV or build one from scratch</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+          <button onClick={onClose} aria-label="Close" className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
             <span className="material-symbols-outlined text-[20px] text-text-secondary">close</span>
           </button>
         </div>

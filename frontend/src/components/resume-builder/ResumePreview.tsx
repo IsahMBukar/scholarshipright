@@ -481,9 +481,10 @@ function ExperienceEntry({ exp, concise }: { exp: ResumeExperience; concise: boo
         </p>
       )}
       {!concise && exp.description && <BodyText>{exp.description}</BodyText>}
-      {(exp as any).achievements?.map?.((ach: string, i: number) => (
-        <Bullet key={i} text={ach} />
-      ))}
+      {Array.isArray((exp as Record<string, unknown>).achievements) &&
+        ((exp as Record<string, unknown>).achievements as string[]).map((ach: string, i: number) => (
+          <Bullet key={i} text={ach} />
+        ))}
     </div>
   );
 }

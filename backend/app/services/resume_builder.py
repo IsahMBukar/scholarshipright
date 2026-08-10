@@ -924,32 +924,62 @@ async def _llm_complete(
 
 async def _polish_medium(data: dict[str, Any]) -> dict[str, Any]:
     """Rewrite summary + narrative descriptions with AI (medium level)."""
+    # Collect all LLM calls, then run them in parallel.
+    calls: list[tuple[str, str]] = []  # (field_path, text_to_rewrite)
+
     if data.get("summary"):
-        data["summary"] = await _llm_complete(
-            "You are a professional resume writer for international scholarship applications. "
-            "Return only the rewritten text, no explanations.",
-            "Rewrite the following resume summary to be more impactful and professional for a "
-            "scholarship application. Keep it concise (2-3 sentences). Keep every factual detail "
-            "exactly as given; do not fabricate anything.\n\n"
-            f"Summary:\n{data['summary']}",
-            max_tokens=400,
-        )
+        calls.append(("summary", data["summary"]))
 
     for field in ("education", "experience", "projects", "research_projects"):
         entries = data.get(field) or []
-        for entry in entries:
+        for idx, entry in enumerate(entries):
             if not isinstance(entry, dict):
                 continue
             if entry.get("description"):
-                entry["description"] = await _llm_complete(
-                    "You are a professional resume writer for international scholarship "
-                    "applications. Return only the rewritten text, no explanations.",
-                    "Rewrite the following resume description to be professional, specific, and "
-                    "impactful. Use strong action verbs. Keep every factual detail exactly as "
-                    "given; do not fabricate anything.\n\n"
-                    f"{entry['description']}",
-                    max_tokens=300,
-                )
+                calls.append((f"{field}.{idx}.description", entry["description"]))
+
+    if not calls:
+        return data
+
+    # Rewrite prompt shared by all description fields
+    system = (
+        "You are a professional resume writer for international scholarship "
+        "applications. Return only the rewritten text, no explanations."
+    )
+
+    async def _rewrite(field_path: str, text: str) -> tuple[str, str]:
+        if field_path == "summary":
+            user_prompt = (
+                "Rewrite the following resume summary to be more impactful and professional for a "
+                "scholarship application. Keep it concise (2-3 sentences). Keep every factual detail "
+                "exactly as given; do not fabricate anything.\n\n"
+                f"Summary:\n{text}"
+            )
+            result = await _llm_complete(system, user_prompt, max_tokens=400)
+        else:
+            user_prompt = (
+                "Rewrite the following resume description to be professional, specific, and "
+                "impactful. Use strong action verbs. Keep every factual detail exactly as "
+                "given; do not fabricate anything.\n\n"
+                f"{text}"
+            )
+            result = await _llm_complete(system, user_prompt, max_tokens=300)
+        return field_path, result
+
+    # Run all rewrites in parallel (bounded by _LLM_TIMEOUT per call)
+    results = await asyncio.gather(*[_rewrite(fp, txt) for fp, txt in calls])
+
+    # Apply results back to data
+    for field_path, result in results:
+        if field_path == "summary":
+            data["summary"] = result
+        else:
+            parts = field_path.split(".")
+            field_name, idx_str, sub_key = parts[0], parts[1], parts[2]
+            entries = data.get(field_name) or []
+            if int(idx_str) < len(entries) and isinstance(entries[int(idx_str)], dict):
+                entries[int(idx_str)][sub_key] = result
+
     return data
 
 

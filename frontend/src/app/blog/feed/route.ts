@@ -15,7 +15,7 @@ export async function GET() {
   let posts: BlogItem[] = [];
 
   try {
-    const res = await fetch(`${API_URL}/api/blog?limit=50`, { next: { revalidate: 3600 } });
+    const res = await fetch(`${API_URL}/api/blog?limit=50`, { next: { revalidate: 900 } });
     if (res.ok) {
       const data = await res.json();
       posts = data.items || [];
@@ -60,7 +60,7 @@ export async function GET() {
   return new NextResponse(xml, {
     headers: {
       'Content-Type': 'application/rss+xml; charset=utf-8',
-      'Cache-Control': 'public, max-age=3600, s-maxage=3600',
+      'Cache-Control': 'public, max-age=900, s-maxage=900',
     },
   });
 }

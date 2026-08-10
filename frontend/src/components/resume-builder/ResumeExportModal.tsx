@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { exportResumePdf, type Resume } from '@/services/api';
 import LivePreview from './LivePreview';
 
@@ -19,6 +19,13 @@ export default function ResumeExportModal({ resume, onClose }: Props) {
   const [mode, setMode] = useState<'resume' | 'cv'>('resume');
   const [template, setTemplate] = useState('compact');
   const [exporting, setExporting] = useState(false);
+
+  // Close on Escape key
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
 
   const handleExport = async () => {
     setExporting(true);

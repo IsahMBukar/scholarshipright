@@ -9,7 +9,7 @@ type Props = { params: Promise<{ slug: string }> };
 
 export async function generateStaticParams() {
   try {
-    const res = await fetch(`${API_URL}/api/blog?limit=500`);
+    const res = await fetch(`${API_URL}/api/blog?limit=100`);
     if (!res.ok) return [];
     const data = await res.json();
     return (data.items || []).map((p: { slug: string }) => ({ slug: p.slug }));

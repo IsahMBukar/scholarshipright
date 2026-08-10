@@ -46,6 +46,13 @@ export default function ScholarshipCustomizeModal({ scholarshipName, onClose }: 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [resumeStyle, setResumeStyle] = useState<ResumeStyle>(DEFAULT_STYLE);
 
+  // Close on Escape key
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
   useEffect(() => {
     fetchResumes().then(resumes => {
       const primary = resumes.find(r => r.is_primary) || resumes[0];
@@ -117,7 +124,7 @@ export default function ScholarshipCustomizeModal({ scholarshipName, onClose }: 
     const newStyle = { ...resumeStyle, ...updates };
     setResumeStyle(newStyle);
     try {
-      const updated = await updateResume(resume.id, { style: newStyle } as any);
+      const updated = await updateResume(resume.id, { style: newStyle as unknown as Record<string, unknown> });
       setResume(updated);
     } catch (err) {
       console.error('Failed to save style:', err);

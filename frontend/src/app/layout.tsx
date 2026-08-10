@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
     default: 'ScholarshipRight — Find Fully Funded Scholarships',
-    template: '%s | Scholarships & Study Abroad',
+    template: '%s | ScholarshipRight',
   },
   description: DEFAULT_DESC,
   keywords: [

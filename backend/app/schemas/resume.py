@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, List, Any
 from datetime import datetime
 from uuid import UUID
@@ -33,6 +33,14 @@ class ResumeUpdate(BaseModel):
     awards: Optional[List[Any]] = None
     ref_list: Optional[List[Any]] = None
     style: Optional[dict] = None
+
+    @field_validator("style", mode="before")
+    @classmethod
+    def validate_style(cls, v: Any) -> Any:
+        """Reject obviously wrong style values (must be dict or None)."""
+        if v is not None and not isinstance(v, dict):
+            raise ValueError("style must be a JSON object or null")
+        return v
 
 
 class IssueOut(BaseModel):

@@ -702,6 +702,7 @@ async def export_resume_pdf(resume_id: str, mode: str = "cv", user: User = Depen
 async def get_builder_questions():
     """Return all section questions for the guided builder wizard.
 
+    Intentionally public (no auth) — these are the question schema, not user data.
     Frontend uses this to render the step-by-step question flow.
     """
     return {

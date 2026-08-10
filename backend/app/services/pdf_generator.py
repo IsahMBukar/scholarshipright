@@ -42,7 +42,10 @@ def _hex_to_rgb(hex_color: str) -> tuple:
     """Convert '#f5b942' to (245, 185, 66)."""
     h = hex_color.lstrip("#")
     if len(h) == 6:
-        return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+        try:
+            return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+        except ValueError:
+            pass  # non-hex chars — fall through to fallback
     return (245, 185, 66)  # fallback gold
 
 

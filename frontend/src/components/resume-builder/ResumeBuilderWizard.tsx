@@ -41,7 +41,7 @@ export default function ResumeBuilderWizard({ resume, onResumeUpdate, onClose }:
     if (styleTimerRef.current) clearTimeout(styleTimerRef.current);
     styleTimerRef.current = setTimeout(async () => {
       try {
-        const updated = await updateResume(resume.id, { style: newStyle } as any);
+        const updated = await updateResume(resume.id, { style: newStyle as unknown as Record<string, unknown> });
         onResumeUpdate(updated);
       } catch (err) {
         console.error('Failed to save style:', err);
