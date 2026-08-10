@@ -3,12 +3,14 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   fetchResumes,
+  updateResume,
   aiSuggest,
   aiSaveSection,
   exportResumePdf,
   type Resume,
 } from '@/services/api';
 import LivePreview from './LivePreview';
+import { DEFAULT_STYLE, type ResumeStyle } from './StyleTab';
 
 interface Props {
   scholarshipName?: string;
@@ -42,11 +44,15 @@ export default function ScholarshipCustomizeModal({ scholarshipName, onClose }: 
   const [aiLoading, setAiLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const [resumeStyle, setResumeStyle] = useState<ResumeStyle>(DEFAULT_STYLE);
 
   useEffect(() => {
     fetchResumes().then(resumes => {
       const primary = resumes.find(r => r.is_primary) || resumes[0];
       setResume(primary || null);
+      if (primary?.style && typeof primary.style === 'object') {
+        setResumeStyle({ ...DEFAULT_STYLE, ...primary.style } as ResumeStyle);
+      }
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -103,6 +109,18 @@ export default function ScholarshipCustomizeModal({ scholarshipName, onClose }: 
       console.error('Export failed:', err);
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleStyleChange = async (updates: Partial<ResumeStyle>) => {
+    if (!resume) return;
+    const newStyle = { ...resumeStyle, ...updates };
+    setResumeStyle(newStyle);
+    try {
+      const updated = await updateResume(resume.id, { style: newStyle } as any);
+      setResume(updated);
+    } catch (err) {
+      console.error('Failed to save style:', err);
     }
   };
 
@@ -298,13 +316,20 @@ export default function ScholarshipCustomizeModal({ scholarshipName, onClose }: 
           {activeTab === 'editor' && (
             <div className="flex-1 overflow-y-auto p-4">
               {activeSection ? (
-                <div>
-                  <h3 className="text-[15px] font-bold text-text-primary mb-3">
+                <div className="text-center py-8">
+                  <span className="material-symbols-outlined text-[40px] text-primary/30 block mb-3">auto_awesome</span>
+                  <h3 className="text-[15px] font-bold text-text-primary mb-2">
                     Edit: {SECTION_LABELS[activeSection] || activeSection}
                   </h3>
-                  <p className="text-[13px] text-text-secondary">
-                    Direct editing coming soon. Use the AI Rewrite tab for now.
+                  <p className="text-[13px] text-text-secondary mb-4">
+                    Use AI Rewrite to improve this section — it understands scholarship applications.
                   </p>
+                  <button
+                    onClick={() => setActiveTab('ai-rewrite')}
+                    className="px-4 py-2.5 bg-primary text-white text-[13px] font-semibold rounded-btn hover:brightness-110 transition-all"
+                  >
+                    Switch to AI Rewrite
+                  </button>
                 </div>
               ) : (
                 <div className="text-center py-12">
@@ -323,13 +348,22 @@ export default function ScholarshipCustomizeModal({ scholarshipName, onClose }: 
               <div>
                 <label className="text-[13px] font-semibold text-text-primary block mb-2">Template</label>
                 <div className="grid grid-cols-3 gap-2">
-                  {['Compact', 'Centered', 'Structured'].map(t => (
-                    <div
-                      key={t}
-                      className="p-3 rounded-xl border-2 border-gray-200 hover:border-primary/40 transition-colors cursor-pointer text-center"
+                  {[
+                    { id: 'classic', label: 'Classic' },
+                    { id: 'modern', label: 'Modern' },
+                    { id: 'academic', label: 'Academic' },
+                  ].map(t => (
+                    <button
+                      key={t.id}
+                      onClick={() => handleStyleChange({ theme: t.id })}
+                      className={`p-3 rounded-xl border-2 transition-colors cursor-pointer text-center ${
+                        resumeStyle.theme === t.id
+                          ? 'border-primary bg-primary/5'
+                          : 'border-gray-200 hover:border-primary/40'
+                      }`}
                     >
-                      <p className="text-[12px] font-semibold text-text-primary">{t}</p>
-                    </div>
+                      <p className="text-[12px] font-semibold text-text-primary">{t.label}</p>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -338,25 +372,14 @@ export default function ScholarshipCustomizeModal({ scholarshipName, onClose }: 
                 <label className="text-[13px] font-semibold text-text-primary block mb-2">Accent Color</label>
                 <div className="flex gap-2">
                   {['#f5b942', '#1a1a1a', '#2563eb', '#059669', '#dc2626'].map(c => (
-                    <div
+                    <button
                       key={c}
-                      className="w-8 h-8 rounded-full border-2 border-gray-200 cursor-pointer hover:scale-110 transition-transform"
+                      onClick={() => handleStyleChange({ primaryColor: c })}
+                      className={`w-8 h-8 rounded-full border-2 cursor-pointer hover:scale-110 transition-transform ${
+                        resumeStyle.primaryColor === c ? 'border-primary ring-2 ring-primary/30' : 'border-gray-200'
+                      }`}
                       style={{ backgroundColor: c }}
                     />
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[13px] font-semibold text-text-primary block mb-2">Page Size</label>
-                <div className="flex gap-2">
-                  {['Letter (8.5" x 11")', 'A4'].map(s => (
-                    <button
-                      key={s}
-                      className="flex-1 py-2 rounded-xl text-[12px] font-medium bg-gray-100 text-text-primary hover:bg-gray-200 transition-colors"
-                    >
-                      {s}
-                    </button>
                   ))}
                 </div>
               </div>

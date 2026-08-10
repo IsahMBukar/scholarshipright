@@ -991,8 +991,15 @@ async def _polish_high(data: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError("AI returned invalid JSON during high-level polish") from e
 
     if isinstance(parsed, dict):
+        # Only allow known resume-content keys to be overwritten.
+        # Prevents the LLM from injecting unexpected fields (e.g. is_primary, user_id).
+        _ALLOWED_KEYS = {
+            "full_name", "email", "phone", "location", "linkedin_url", "portfolio_url",
+            "summary", "education", "experience", "projects", "research_projects",
+            "skills", "certifications", "publications", "awards", "languages", "ref_list",
+        }
         for k, v in parsed.items():
-            if k in data:
+            if k in data and k in _ALLOWED_KEYS:
                 data[k] = v
     return data
 

@@ -58,10 +58,8 @@ export default function ResumeBuilderWizard({ resume, onResumeUpdate, onClose }:
     }
   };
 
-  const handlePreviewSectionClick = (section: string, label: string) => {
+  const handlePreviewSectionClick = (section: string, _label: string) => {
     setActiveSection(section);
-    // If on AI tab, tag the section in chat
-    // If on Editor tab, could expand that section
   };
 
   const handleExport = async (mode: 'resume' | 'cv') => {

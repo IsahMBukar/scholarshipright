@@ -17,6 +17,7 @@ const TEMPLATES = [
 
 export default function ResumeExportModal({ resume, onClose }: Props) {
   const [mode, setMode] = useState<'resume' | 'cv'>('resume');
+  const [template, setTemplate] = useState('compact');
   const [exporting, setExporting] = useState(false);
 
   const handleExport = async () => {
@@ -84,13 +85,18 @@ export default function ResumeExportModal({ resume, onClose }: Props) {
               <label className="text-[13px] font-semibold text-text-primary block mb-2">Template</label>
               <div className="space-y-2">
                 {TEMPLATES.map(t => (
-                  <div
+                  <button
                     key={t.id}
-                    className="p-3 rounded-xl border-2 border-gray-200 hover:border-primary/40 transition-colors cursor-pointer"
+                    onClick={() => setTemplate(t.id)}
+                    className={`w-full p-3 rounded-xl border-2 text-left transition-colors ${
+                      template === t.id
+                        ? 'border-primary bg-primary/5'
+                        : 'border-gray-200 hover:border-primary/40'
+                    }`}
                   >
                     <p className="text-[13px] font-semibold text-text-primary">{t.label}</p>
                     <p className="text-[11px] text-text-secondary">{t.desc}</p>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>

@@ -187,7 +187,7 @@ export default function AIRewriteChat({ resume, onResumeUpdate, activeSection, o
                   {msg.section}
                 </span>
               )}
-              <p className="whitespace-pre-wrap">{msg.content}</p>
+              <p className="whitespace-pre-wrap">{formatAIContent(msg.content)}</p>
             </div>
           </div>
         ))}
@@ -277,4 +277,44 @@ function getSectionValue(resume: Resume, section: string): string {
     case 'references': return JSON.stringify(resume.ref_list || []);
     default: return '';
   }
+}
+
+/** Format AI response content — render JSON as readable key/value, plain text as-is. */
+function formatAIContent(content: string): React.ReactNode {
+  // Try parsing as JSON for structured sections
+  const trimmed = content.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return (
+          <>
+            {parsed.map((item, i) => (
+              <span key={i} className="block mb-1">
+                {typeof item === 'string' ? `• ${item}` : JSON.stringify(item)}
+              </span>
+            ))}
+          </>
+        );
+      }
+      if (typeof parsed === 'object' && parsed !== null) {
+        return (
+          <>
+            {Object.entries(parsed).map(([k, v]) => {
+              const val = Array.isArray(v) ? v.join(', ') : typeof v === 'object' ? JSON.stringify(v) : String(v ?? '');
+              if (!val) return null;
+              return (
+                <span key={k} className="block">
+                  <span className="font-semibold">{k.replace(/_/g, ' ')}:</span> {val}
+                </span>
+              );
+            })}
+          </>
+        );
+      }
+    } catch {
+      // Not valid JSON — fall through to plain text
+    }
+  }
+  return content;
 }

@@ -759,7 +759,7 @@ async def ai_generate_section(
         raise HTTPException(504, "AI generation timed out. Please try again.")
     except Exception as e:
         logger.exception("AI generate-section failed for %s", section)
-        raise HTTPException(502, f"AI generation failed: {str(e)}")
+        raise HTTPException(502, "AI generation failed. Please try again.")
 
     return {"section": section, "generated": generated}
 
@@ -810,7 +810,7 @@ async def ai_save_section(
         field_map = {
             "education": "education",
             "experience": "experience",
-            "projects": "research_projects",
+            "projects": "projects",
             "research": "research_projects",
             "research_projects": "research_projects",
             "certifications": "certifications",
@@ -892,7 +892,7 @@ async def ai_generate_summary(
         raise HTTPException(504, "AI generation timed out.")
     except Exception as e:
         logger.exception("AI summary generation failed")
-        raise HTTPException(502, f"AI generation failed: {str(e)}")
+        raise HTTPException(502, "AI summary generation failed. Please try again.")
 
     return {"summary": summary}
 
@@ -944,7 +944,7 @@ async def ai_suggest(
         raise HTTPException(504, "AI suggestion timed out.")
     except Exception as e:
         logger.exception("AI suggest failed for %s", section)
-        raise HTTPException(502, f"AI suggestion failed: {str(e)}")
+        raise HTTPException(502, "AI suggestion failed. Please try again.")
 
     return {"section": section, "suggestion": suggestion}
 
@@ -1000,7 +1000,7 @@ async def polish_endpoint(
         raise HTTPException(400, str(e))
     except Exception as e:
         logger.exception("AI polish failed")
-        raise HTTPException(502, f"AI polish failed: {str(e)}")
+        raise HTTPException(502, "AI polish failed. Please try again.")
 
     # Apply the polished content.
     resume.full_name = polished.get("full_name", resume.full_name)
