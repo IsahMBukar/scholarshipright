@@ -858,7 +858,7 @@ async def ai_save_section(
 @router.post("/{resume_id}/ai-generate-summary", dependencies=[Depends(resume_rewrite_rate_limit)])
 async def ai_generate_summary(
     resume_id: str,
-    body: dict = {},
+    body: dict = Body(default={}),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):

@@ -282,7 +282,7 @@ export default function ResumePreview({
           <Section region="references" activeSection={activeSection} onSectionClick={onSectionClick}>
             <SectionTitle>References</SectionTitle>
             {resume.ref_list.map((r, i) => (
-              <RefEntry key={i} ref={r} />
+              <RefEntry key={i} reference={r} />
             ))}
           </Section>
         )}
@@ -554,12 +554,12 @@ function AwardEntry({ award }: { award: ResumeAward }) {
   );
 }
 
-function RefEntry({ ref }: { ref: ResumeReference }) {
+function RefEntry({ reference }: { reference: ResumeReference }) {
   return (
     <div style={{ marginBottom: 6 }}>
-      <p style={{ fontSize: 10, fontWeight: 700, color: '#1e1e1e', margin: 0 }}>{ref.name}</p>
-      {ref.position && <p style={{ fontSize: 9, color: '#646464', margin: '1px 0 0' }}>{ref.position}</p>}
-      {ref.contact && <p style={{ fontSize: 9, color: '#646464', margin: '1px 0 0' }}>{ref.contact}</p>}
+      <p style={{ fontSize: 10, fontWeight: 700, color: '#1e1e1e', margin: 0 }}>{reference.name}</p>
+      {reference.position && <p style={{ fontSize: 9, color: '#646464', margin: '1px 0 0' }}>{reference.position}</p>}
+      {reference.contact && <p style={{ fontSize: 9, color: '#646464', margin: '1px 0 0' }}>{reference.contact}</p>}
     </div>
   );
 }

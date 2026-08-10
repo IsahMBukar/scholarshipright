@@ -69,13 +69,13 @@ export default function AIRewriteChat({ resume, onResumeUpdate, activeSection, o
         }]);
       }
     }
-  }, [activeSection]);
+  }, [activeSection, messages]);
 
   const handleInput = (value: string) => {
     setInput(value);
-    // Detect @mention
+    // Detect @mention — show dropdown when text after last @ has no spaces
     const lastAt = value.lastIndexOf('@');
-    if (lastAt >= 0 && lastAt === value.length - 1 - (value.length - 1 - lastAt)) {
+    if (lastAt >= 0) {
       const afterAt = value.slice(lastAt + 1);
       if (!afterAt.includes(' ') && afterAt.length < 20) {
         setMentionFilter(afterAt.toLowerCase());

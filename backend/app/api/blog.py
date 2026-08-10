@@ -29,7 +29,7 @@ from app.models.blog import BlogPost, BlogScholarshipTag, extract_scholarship_sl
 from app.models.scholarship import Scholarship
 from app.api.users import get_current_user
 from app.core.admin import require_admin
-from app.core.rate_limit import blog_write_rate_limit
+from app.core.rate_limit import blog_write_rate_limit, blog_view_rate_limit
 from app.utils.blog import slugify as _slugify, reading_time as _reading_time
 
 logger = logging.getLogger(__name__)
@@ -280,7 +280,7 @@ async def get_post(slug: str, db: AsyncSession = Depends(get_db)):
     )
 
 
-@router.post("/{slug}/view", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{slug}/view", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(blog_view_rate_limit)])
 async def track_view(
     slug: str,
     request: Request,
@@ -297,9 +297,22 @@ async def track_view(
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
-    # Dedup via Redis: one view per IP per post per hour
-    client_ip = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
-    dedup_key = f"blog:view:{post.id}:{client_ip}"
+    # Dedup via Redis: one view per IP per post per hour.
+    # Use cookie-based identifier first (auth), fall back to IP.
+    token = request.cookies.get("sr_token")
+    if token:
+        import hashlib
+        identifier = hashlib.sha256(token.encode("utf-8", errors="ignore")).hexdigest()[:24]
+    else:
+        # Trust the closest proxy; prefer x-real-ip (set by a single trusted
+        # reverse proxy) over x-forwarded-for (easily spoofable chain).
+        client_ip = (
+            request.headers.get("x-real-ip")
+            or request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+            or (request.client.host if request.client else "unknown")
+        )
+        identifier = client_ip
+    dedup_key = f"blog:view:{post.id}:{identifier}"
 
     try:
         from app.core.cache import get_redis
@@ -310,7 +323,7 @@ async def track_view(
                 return  # already counted this hour
             await r.set(dedup_key, "1", ex=3600)  # 1 hour TTL
     except Exception:
-        pass  # if Redis fails, still count the view
+        logger.warning("Redis dedup check failed for blog view %s", slug, exc_info=True)
 
     # Increment view count (atomic SQL)
     await db.execute(

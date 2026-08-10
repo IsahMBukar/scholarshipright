@@ -289,6 +289,11 @@ blog_write_rate_limit = rate_limit(
     "blog_write", max_requests=20, window_seconds=60 * 60
 )
 
+# Blog view — protect against view count inflation.
+blog_view_rate_limit = rate_limit(
+    "blog_view", max_requests=30, window_seconds=60 * 60
+)
+
 # Scholarship view — protect against view count inflation.
 scholarship_view_rate_limit = rate_limit(
     "scholarship_view", max_requests=60, window_seconds=60 * 60

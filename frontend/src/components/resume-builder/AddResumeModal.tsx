@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { uploadResume, fetchResume, type Resume } from '@/services/api';
 
 interface Props {
@@ -30,6 +30,12 @@ export default function AddResumeModal({ onClose, onUploadComplete, onManualStar
   const [uploadState, setUploadState] = useState<UploadState>({ kind: 'idle' });
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const mountedRef = useRef(true);
+
+  // Cleanup: mark unmounted so polling loop stops
+  useEffect(() => {
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const handleFile = async (file: File) => {
     setMode('upload');
@@ -39,6 +45,7 @@ export default function AddResumeModal({ onClose, onUploadComplete, onManualStar
     try {
       resume = await uploadResume(file, file.name.replace(/\.[^.]+$/, ''), [], '');
     } catch (err) {
+      if (!mountedRef.current) return;
       const e = err as { response?: { data?: { detail?: string } }; message?: string };
       setUploadState({
         kind: 'error',
@@ -47,15 +54,19 @@ export default function AddResumeModal({ onClose, onUploadComplete, onManualStar
       return;
     }
 
+    if (!mountedRef.current) return;
     setUploadState({ kind: 'analyzing', fileName: file.name, progress: 0 });
 
     // Poll until the background AI analysis completes and pre-fills the resume.
     const maxAttempts = 150; // ~5 min
     for (let i = 0; i < maxAttempts; i++) {
+      if (!mountedRef.current) return; // component unmounted — stop polling
       setUploadState((s) => (s.kind === 'analyzing' ? { ...s, progress: Math.round(((i + 1) / maxAttempts) * 100) } : s));
       await new Promise((r) => setTimeout(r, 2000));
+      if (!mountedRef.current) return;
       try {
         const updated = await fetchResume(resume.id);
+        if (!mountedRef.current) return;
         if (updated.status !== 'analyzing') {
           onUploadComplete(updated);
           return;
@@ -66,7 +77,9 @@ export default function AddResumeModal({ onClose, onUploadComplete, onManualStar
     }
 
     // Timed out — still proceed to the builder with whatever we have.
-    onUploadComplete(resume);
+    if (mountedRef.current) {
+      onUploadComplete(resume);
+    }
   };
 
   const onDrop = (e: React.DragEvent) => {
