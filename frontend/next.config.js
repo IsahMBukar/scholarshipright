@@ -25,6 +25,18 @@ const nextConfig = {
     ],
   },
 
+  async redirects() {
+    return [
+      // Redirect www to non-www (canonical)
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: 'www.scholarshipright.com' }],
+        destination: 'https://scholarshipright.com/:path*',
+        permanent: true,
+      },
+    ];
+  },
+
   async headers() {
     return [
       {

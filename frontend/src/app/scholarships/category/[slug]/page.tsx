@@ -4,7 +4,7 @@ import { CATEGORY_BY_SLUG, ALL_CATEGORY_SLUGS } from '@/lib/scholarship-categori
 import type { Scholarship, ScholarshipListResponse } from '@/services/api';
 import CategoryContent from './CategoryContent';
 
-import { API_URL } from '@/lib/env';
+import { API_URL, SITE_URL } from '@/lib/env';
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -27,6 +27,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       description: cat.description,
       type: 'website',
       siteName: 'ScholarshipRight',
+    },
+    alternates: {
+      canonical: `${SITE_URL}/scholarships/category/${slug}`,
     },
   };
 }
@@ -53,5 +56,24 @@ export default async function CategoryPage({ params }: PageProps) {
 
   const scholarships = await getScholarships(cat.params);
 
-  return <CategoryContent category={cat} scholarships={scholarships} />;
+  return (
+    <>
+      {/* Breadcrumb structured data */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'BreadcrumbList',
+            itemListElement: [
+              { '@type': 'ListItem', position: 1, name: 'Home', item: SITE_URL },
+              { '@type': 'ListItem', position: 2, name: 'Scholarships', item: `${SITE_URL}/scholarships` },
+              { '@type': 'ListItem', position: 3, name: cat.title, item: `${SITE_URL}/scholarships/category/${slug}` },
+            ],
+          }),
+        }}
+      />
+      <CategoryContent category={cat} scholarships={scholarships} />
+    </>
+  );
 }

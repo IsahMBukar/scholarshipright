@@ -25,6 +25,8 @@ interface ScholarshipData {
   covers_tuition?: boolean;
   covers_living?: boolean;
   covers_flight?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 async function getScholarship(slug: string): Promise<ScholarshipData | null> {
@@ -37,6 +39,17 @@ async function getScholarship(slug: string): Promise<ScholarshipData | null> {
   } catch (err) {
     console.error('[ScholarshipDetail] Failed to fetch scholarship:', err);
     return null;
+  }
+}
+
+export async function generateStaticParams() {
+  try {
+    const res = await fetch(`${API_URL}/api/scholarships?limit=500`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.items || []).map((s: { slug: string }) => ({ slug: s.slug }));
+  } catch {
+    return [];
   }
 }
 
@@ -58,7 +71,14 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     ? new Date(scholarship.deadline).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
     : 'Open';
 
-  const description = `${scholarship.name} — ${degreeLabel} scholarship in ${scholarship.host_country}. ${fieldLabel ? `Fields: ${fieldLabel}. ` : ''}Deadline: ${deadlineStr}. ${scholarship.funding_type === 'fully_funded' ? 'Fully funded.' : ''} Apply now on ScholarshipRight.`;
+  const parts = [
+    `Apply for ${scholarship.name}`,
+    degreeLabel ? `(${degreeLabel})` : '',
+    `in ${scholarship.host_country}.`,
+    scholarship.funding_type === 'fully_funded' ? 'Fully funded —' : '',
+    deadlineStr !== 'Open' ? `Deadline: ${deadlineStr}.` : 'Rolling deadline.',
+  ].filter(Boolean);
+  const description = parts.join(' ').slice(0, 155);
 
   const url = `${SITE_URL}/scholarships/${scholarship.slug}`;
 
@@ -105,7 +125,7 @@ export default async function ScholarshipDetailPage({ params }: { params: Promis
         programType: scholarship.degree_levels?.join(', ') || 'Scholarship',
         educationalLevel: scholarship.degree_levels?.[0] || 'graduate',
         occupationalCategory: scholarship.fields_of_study?.join(', ') || '',
-        datePublished: new Date().toISOString(),
+        datePublished: scholarship.created_at || scholarship.updated_at || new Date().toISOString(),
         validFrom: scholarship.deadline || undefined,
         applicationDeadline: scholarship.deadline || undefined,
         funding: {

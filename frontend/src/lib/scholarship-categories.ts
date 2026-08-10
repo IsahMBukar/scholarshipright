@@ -16,7 +16,7 @@ const DEGREE_CATEGORIES: CategoryDefinition[] = [
   {
     slug: 'undergraduate',
     label: 'Undergraduate',
-    title: 'Undergraduate Scholarships — ScholarshipRight',
+    title: 'Undergraduate Scholarships',
     description: 'Fully funded undergraduate and bachelor\'s degree scholarships for international students. Browse and filter by country, field, and funding type.',
     h1: 'Undergraduate Scholarships',
     intro: 'Bachelor\'s degree scholarships for international students. While most fully funded awards target graduate students, these undergraduate scholarships cover tuition, living expenses, and more.',
@@ -25,7 +25,7 @@ const DEGREE_CATEGORIES: CategoryDefinition[] = [
   {
     slug: 'masters',
     label: "Master's",
-    title: "Master's Scholarships — ScholarshipRight",
+    title: "Master's Scholarships",
     description: 'Fully funded master\'s degree scholarships worldwide. DAAD, Chevening, Erasmus Mundus, and 100+ more. AI-matched to your profile.',
     h1: "Master's Scholarships",
     intro: 'The largest category of fully funded international scholarships. Master\'s awards cover tuition, stipend, flights, and health insurance across 18+ countries.',
@@ -34,7 +34,7 @@ const DEGREE_CATEGORIES: CategoryDefinition[] = [
   {
     slug: 'phd',
     label: 'PhD',
-    title: 'PhD Scholarships — ScholarshipRight',
+    title: 'PhD Scholarships',
     description: 'Fully funded PhD and doctoral scholarships internationally. Research positions, stipends, and full tuition coverage.',
     h1: 'PhD Scholarships',
     intro: 'Doctoral and research scholarships with full funding. PhD awards typically include a monthly stipend, tuition waiver, and research support.',
@@ -47,7 +47,7 @@ const FUNDING_CATEGORIES: CategoryDefinition[] = [
   {
     slug: 'fully-funded',
     label: 'Fully Funded',
-    title: 'Fully Funded Scholarships — ScholarshipRight',
+    title: 'Fully Funded Scholarships',
     description: '100+ fully funded scholarships covering tuition, living, flights, and insurance. Browse by country and degree level.',
     h1: 'Fully Funded Scholarships',
     intro: 'Scholarships that cover everything: tuition, monthly stipend, round-trip flights, and health insurance. No out-of-pocket costs.',
@@ -56,7 +56,7 @@ const FUNDING_CATEGORIES: CategoryDefinition[] = [
   {
     slug: 'no-ielts',
     label: 'No IELTS',
-    title: 'Scholarships Without IELTS — ScholarshipRight',
+    title: 'Scholarships Without IELTS',
     description: 'Fully funded scholarships that don\'t require IELTS. Many accept Duolingo, TOEFL, or waive English tests entirely.',
     h1: 'Scholarships Without IELTS',
     intro: 'Don\'t have IELTS? These scholarships accept alternative English tests (Duolingo, TOEFL, PTE, Cambridge) or waive the requirement entirely.',
@@ -65,7 +65,7 @@ const FUNDING_CATEGORIES: CategoryDefinition[] = [
   {
     slug: 'no-application-fee',
     label: 'No Application Fee',
-    title: 'Scholarships With No Application Fee — ScholarshipRight',
+    title: 'Scholarships With No Application Fee',
     description: 'Fully funded scholarships with zero application fees. Apply without spending a cent.',
     h1: 'Scholarships With No Application Fee',
     intro: 'These scholarships have no application fee — apply for free. Focus your time on the application, not the cost.',
@@ -78,7 +78,7 @@ const COUNTRY_CATEGORIES: CategoryDefinition[] = [
   {
     slug: 'germany',
     label: 'Germany',
-    title: 'Scholarships in Germany — ScholarshipRight',
+    title: 'Scholarships in Germany',
     description: 'Fully funded scholarships in Germany. DAAD, Heinrich Böll, Konrad Adenauer, and more. Tuition-free + stipend.',
     h1: 'Scholarships in Germany',
     intro: 'Germany is one of the top destinations for fully funded study — most public universities charge zero tuition, and scholarships like DAAD cover living expenses.',
@@ -87,7 +87,7 @@ const COUNTRY_CATEGORIES: CategoryDefinition[] = [
   {
     slug: 'united-kingdom',
     label: 'United Kingdom',
-    title: 'Scholarships in the UK — ScholarshipRight',
+    title: 'Scholarships in the UK',
     description: 'Fully funded scholarships in the United Kingdom. Chevening, Commonwealth, Rhodes, Gates Cambridge, and more.',
     h1: 'Scholarships in the UK',
     intro: 'The UK offers some of the world\'s most prestigious scholarships: Chevening, Commonwealth, Rhodes, and Gates Cambridge — all fully funded.',
@@ -96,7 +96,7 @@ const COUNTRY_CATEGORIES: CategoryDefinition[] = [
   {
     slug: 'united-states',
     label: 'United States',
-    title: 'Scholarships in the USA — ScholarshipRight',
+    title: 'Scholarships in the USA',
     description: 'Fully funded scholarships in the United States. Fulbright, Hubert Humphrey, and university-funded awards.',
     h1: 'Scholarships in the USA',
     intro: 'US scholarships range from government-funded (Fulbright) to university-specific awards. Most cover tuition, stipend, and health insurance.',
@@ -105,7 +105,7 @@ const COUNTRY_CATEGORIES: CategoryDefinition[] = [
   {
     slug: 'japan',
     label: 'Japan',
-    title: 'Scholarships in Japan — ScholarshipRight',
+    title: 'Scholarships in Japan',
     description: 'Fully funded scholarships in Japan. MEXT (Japanese Government Scholarship) covers tuition, stipend, and flights.',
     h1: 'Scholarships in Japan',
     intro: 'Japan\'s MEXT scholarship is one of the most generous in the world — full tuition, monthly stipend, and round-trip flights. No Japanese language required for most programs.',
@@ -114,7 +114,7 @@ const COUNTRY_CATEGORIES: CategoryDefinition[] = [
   {
     slug: 'canada',
     label: 'Canada',
-    title: 'Scholarships in Canada — ScholarshipRight',
+    title: 'Scholarships in Canada',
     description: 'Fully funded scholarships in Canada. Vanier, Trudeau, university-funded awards, and more.',
     h1: 'Scholarships in Canada',
     intro: 'Canada offers strong scholarship programs for international students, with pathways to post-study work permits and permanent residency.',
@@ -123,7 +123,7 @@ const COUNTRY_CATEGORIES: CategoryDefinition[] = [
   {
     slug: 'south-korea',
     label: 'South Korea',
-    title: 'Scholarships in South Korea — ScholarshipRight',
+    title: 'Scholarships in South Korea',
     description: 'Fully funded scholarships in South Korea. GKS (Korean Government Scholarship) covers tuition, stipend, flights, and language training.',
     h1: 'Scholarships in South Korea',
     intro: 'South Korea\'s GKS (Global Korea Scholarship) is fully funded with tuition, ₩1.6M/month stipend, round-trip flights, and a free Korean language course.',
@@ -132,7 +132,7 @@ const COUNTRY_CATEGORIES: CategoryDefinition[] = [
   {
     slug: 'turkey',
     label: 'Turkey',
-    title: 'Scholarships in Turkey — ScholarshipRight',
+    title: 'Scholarships in Turkey',
     description: 'Fully funded scholarships in Turkey. Türkiye Scholarships cover tuition, stipend, housing, and flights.',
     h1: 'Scholarships in Turkey',
     intro: 'Türkiye Scholarships is a government-funded program covering tuition, monthly stipend, accommodation, health insurance, and a one-year Turkish language course.',
@@ -141,7 +141,7 @@ const COUNTRY_CATEGORIES: CategoryDefinition[] = [
   {
     slug: 'australia',
     label: 'Australia',
-    title: 'Scholarships in Australia — ScholarshipRight',
+    title: 'Scholarships in Australia',
     description: 'Fully funded scholarships in Australia. RTP, Australia Awards, and university-funded positions.',
     h1: 'Scholarships in Australia',
     intro: 'Australia\'s scholarships (RTP, Australia Awards) cover tuition and living costs, with strong post-study work rights.',

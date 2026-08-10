@@ -5,10 +5,10 @@ import FaqContent from './FaqContent';
 
 
 export const metadata: Metadata = {
-  title: 'FAQ — ScholarshipRight',
+  title: 'FAQ',
   description: 'Frequently asked questions about ScholarshipRight — AI matching, Scholara advisor, pricing, and more.',
   openGraph: {
-    title: 'FAQ — ScholarshipRight',
+    title: 'FAQ',
     description: 'Frequently asked questions about ScholarshipRight — AI matching, Scholara advisor, pricing, and more.',
     url: `${SITE_URL}/faq`,
   },

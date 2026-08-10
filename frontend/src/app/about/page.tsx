@@ -3,10 +3,10 @@ import { SITE_URL } from '@/lib/env';
 import AboutContent from './AboutContent';
 
 export const metadata: Metadata = {
-  title: 'About — ScholarshipRight',
+  title: 'About',
   description: 'Our mission: make fully funded scholarships accessible to every student, everywhere.',
   openGraph: {
-    title: 'About — ScholarshipRight',
+    title: 'About',
     description: 'Our mission: make fully funded scholarships accessible to every student, everywhere.',
     url: `${SITE_URL}/about`,
   },

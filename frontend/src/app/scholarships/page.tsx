@@ -16,14 +16,14 @@ export const metadata: Metadata = {
     'study abroad scholarships', 'free scholarships', 'scholarship list',
   ],
   openGraph: {
-    title: 'Browse Fully Funded Scholarships — ScholarshipRight',
+    title: 'Browse Fully Funded Scholarships',
     description: 'Discover fully funded international scholarships matched to your profile.',
     url: `${SITE_URL}/scholarships`,
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Browse Fully Funded Scholarships — ScholarshipRight',
+    title: 'Browse Fully Funded Scholarships',
     description: 'Discover fully funded international scholarships matched to your profile.',
   },
   alternates: {
@@ -67,6 +67,20 @@ export default async function ScholarshipsPage() {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      {/* Breadcrumb structured data */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'BreadcrumbList',
+            itemListElement: [
+              { '@type': 'ListItem', position: 1, name: 'Home', item: SITE_URL },
+              { '@type': 'ListItem', position: 2, name: 'Scholarships', item: `${SITE_URL}/scholarships` },
+            ],
+          }),
+        }}
       />
       <Suspense fallback={null}>
         <ScholarshipsListClient initialScholarships={initialScholarships} />

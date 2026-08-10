@@ -7,11 +7,24 @@ import type { BlogPostOut } from '@/lib/blog/types';
 
 type Props = { params: Promise<{ slug: string }> };
 
+export async function generateStaticParams() {
+  try {
+    const res = await fetch(`${API_URL}/api/blog?limit=500`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.items || []).map((p: { slug: string }) => ({ slug: p.slug }));
+  } catch {
+    return [];
+  }
+}
+
 // React.cache() deduplicates within a single SSR pass —
 // generateMetadata() and BlogPostPage() share the same fetch call.
 const fetchPost = cache(async (slug: string): Promise<BlogPostOut | null> => {
   try {
-    const res = await fetch(`${API_URL}/api/blog/${slug}`);
+    const res = await fetch(`${API_URL}/api/blog/${slug}`, {
+      next: { revalidate: 3600 },
+    });
     if (!res.ok) return null;
     return res.json();
   } catch (err) {
@@ -26,7 +39,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   if (!post) {
     return {
-      title: 'Post Not Found — ScholarshipRight',
+      title: 'Post Not Found',
       description: 'The blog post you are looking for could not be found.',
       robots: { index: false, follow: true },
     };
@@ -35,12 +48,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const title = post.title;
   const description =
     post.excerpt ||
-    `Read "${post.title}" on ScholarshipRight — expert scholarship guides and tips.`;
+    `${post.title} — scholarship tips, guides, and application advice for international students.`;
   const url = `${SITE_URL}/blog/${slug}`;
   const ogImage = post.cover_image_url || '/og-default.png';
 
   return {
-    title: `${title} — ScholarshipRight`,
+    title: title,
     description,
     keywords: post.tags.length > 0 ? post.tags : undefined,
     authors: [{ name: post.author_name || 'ScholarshipRight' }],
@@ -85,5 +98,24 @@ export default async function BlogPostPage({ params }: Props) {
     notFound();
   }
 
-  return <BlogDetailContent post={post} />;
+  return (
+    <>
+      {/* Breadcrumb structured data */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'BreadcrumbList',
+            itemListElement: [
+              { '@type': 'ListItem', position: 1, name: 'Home', item: SITE_URL },
+              { '@type': 'ListItem', position: 2, name: 'Blog', item: `${SITE_URL}/blog` },
+              { '@type': 'ListItem', position: 3, name: post.title, item: `${SITE_URL}/blog/${slug}` },
+            ],
+          }),
+        }}
+      />
+      <BlogDetailContent post={post} />
+    </>
+  );
 }

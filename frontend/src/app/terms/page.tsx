@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import TermsContent from './TermsContent';
 
 export const metadata: Metadata = {
-  title: 'Terms of Service — ScholarshipRight',
+  title: 'Terms of Service',
   description: 'The rules governing your use of ScholarshipRight.',
 };
 

@@ -35,18 +35,13 @@ export const metadata: Metadata = {
 };
 
 export default function LandingPage() {
-  // WebSite structured data for sitelinks search box
+  // WebSite structured data
   const websiteJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     name: 'ScholarshipRight',
     url: SITE_URL,
     description: 'AI-powered scholarship discovery platform. Find fully funded international scholarships matched to your profile.',
-    potentialAction: {
-      '@type': 'SearchAction',
-      target: `${SITE_URL}/scholarships?q={search_term_string}`,
-      'query-input': 'required name=search_term_string',
-    },
   };
 
   return (

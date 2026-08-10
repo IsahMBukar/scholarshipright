@@ -5,12 +5,12 @@ import BlogListContent from './BlogListContent';
 import type { PaginatedBlogs } from '@/lib/blog/types';
 
 export const metadata: Metadata = {
-  title: 'Blog — ScholarshipRight',
+  title: 'Blog',
   description:
     'Guides, tips, and stories to help you win fully funded scholarships. Expert advice on applications, essays, and finding the right match.',
   keywords: ['scholarship blog', 'scholarship guide', 'scholarship tips', 'scholarship application guide', 'study abroad tips', 'scholarship essay tips', 'fully funded scholarship guide'],
   openGraph: {
-    title: 'Blog — ScholarshipRight',
+    title: 'Blog',
     description: 'Guides, tips, and stories to help you win fully funded scholarships.',
     url: `${SITE_URL}/blog`,
     type: 'website',
@@ -40,5 +40,23 @@ async function fetchInitialPosts(): Promise<{ posts: PaginatedBlogs; categories:
 
 export default async function BlogPage() {
   const { posts, categories } = await fetchInitialPosts();
-  return <BlogListContent initialPosts={posts} initialCategories={categories} />;
+  return (
+    <>
+      {/* Breadcrumb structured data */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'BreadcrumbList',
+            itemListElement: [
+              { '@type': 'ListItem', position: 1, name: 'Home', item: SITE_URL },
+              { '@type': 'ListItem', position: 2, name: 'Blog', item: `${SITE_URL}/blog` },
+            ],
+          }),
+        }}
+      />
+      <BlogListContent initialPosts={posts} initialCategories={categories} />
+    </>
+  );
 }

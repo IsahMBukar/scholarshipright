@@ -15,7 +15,7 @@ export async function GET() {
   let posts: BlogItem[] = [];
 
   try {
-    const res = await fetch(`${API_URL}/api/blog?limit=50`, { cache: 'no-store' });
+    const res = await fetch(`${API_URL}/api/blog?limit=50`, { next: { revalidate: 3600 } });
     if (res.ok) {
       const data = await res.json();
       posts = data.items || [];

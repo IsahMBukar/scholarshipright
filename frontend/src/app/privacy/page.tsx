@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import PrivacyContent from './PrivacyContent';
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy — ScholarshipRight',
+  title: 'Privacy Policy',
   description: 'How ScholarshipRight collects, uses, and protects your personal data.',
 };
 
