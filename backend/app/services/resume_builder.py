@@ -75,6 +75,24 @@ _SYSTEM_GUARD = (
     "matching the requested schema."
 )
 
+# httpx timeout must stay under the asyncio.wait_for timeout (60s) used by
+# callers, otherwise the wait_for fires first and the httpx request dangles,
+# wasting LLM tokens.
+_LLM_TIMEOUT = 50
+
+
+def _strip_fences(content: str) -> str:
+    """Strip markdown code fences and <think> blocks from LLM output."""
+    # Strip <think>...</think> blocks (some models emit these)
+    content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL)
+    # Strip leading/trailing code fences (may appear twice if model wraps in ```json ... ```)
+    for _ in range(2):
+        if content.startswith("```"):
+            content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+        if content.endswith("```"):
+            content = content[:-3]
+    return content.strip()
+
 
 def _llm_chat_url() -> str:
     base = settings.resolved_llm_base_url.rstrip("/")
@@ -712,7 +730,7 @@ async def generate_section(
     system_msg = _SYSTEM_GUARD + " Always return valid JSON only. No markdown, no code blocks."
 
     try:
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(timeout=_LLM_TIMEOUT) as client:
             resp = await client.post(
                 _llm_chat_url(),
                 headers={"Authorization": f"Bearer {settings.resolved_llm_api_key}"},
@@ -728,24 +746,7 @@ async def generate_section(
                 },
             )
             data = resp.json()
-            content = _extract_message_content(data).strip()
-
-            # Strip markdown code blocks if present
-            if content.startswith("```"):
-                content = content.split("\n", 1)[1] if "\n" in content else content[3:]
-            if content.endswith("```"):
-                content = content[:-3]
-            content = content.strip()
-
-            # Strip thinking blocks
-            content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL)
-            content = content.strip()
-
-            if content.startswith("```"):
-                content = content.split("\n", 1)[1] if "\n" in content else content[3:]
-            if content.endswith("```"):
-                content = content[:-3]
-            content = content.strip()
+            content = _strip_fences(_extract_message_content(data))
 
             return json.loads(content)
 
@@ -802,7 +803,7 @@ RULES:
 - Return ONLY the summary text, no quotes, no labels"""
 
     try:
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(timeout=_LLM_TIMEOUT) as client:
             resp = await client.post(
                 _llm_chat_url(),
                 headers={"Authorization": f"Bearer {settings.resolved_llm_api_key}"},
@@ -867,7 +868,7 @@ RULES:
 - Return the improved content only, no explanations"""
 
     try:
-        async with httpx.AsyncClient(timeout=120) as client:
+        async with httpx.AsyncClient(timeout=_LLM_TIMEOUT) as client:
             resp = await client.post(
                 _llm_chat_url(),
                 headers={"Authorization": f"Bearer {settings.resolved_llm_api_key}"},
@@ -883,14 +884,7 @@ RULES:
                 },
             )
             data = resp.json()
-            content = _extract_message_content(data).strip()
-
-            # Strip markdown if present
-            if content.startswith("```"):
-                content = content.split("\n", 1)[1] if "\n" in content else content[3:]
-            if content.endswith("```"):
-                content = content[:-3]
-            return content.strip()
+            return _strip_fences(_extract_message_content(data))
 
     except Exception as e:
         logger.exception("AI suggest_content failed for %s", section)
@@ -909,7 +903,7 @@ async def _llm_complete(
     temperature: float = 0.4,
 ) -> str:
     """Run a single chat-completions call and return clean assistant text."""
-    async with httpx.AsyncClient(timeout=120) as client:
+    async with httpx.AsyncClient(timeout=_LLM_TIMEOUT) as client:
         resp = await client.post(
             _llm_chat_url(),
             headers={"Authorization": f"Bearer {settings.resolved_llm_api_key}"},
@@ -925,14 +919,7 @@ async def _llm_complete(
             },
         )
         data = resp.json()
-        content = _extract_message_content(data).strip()
-
-        # Strip markdown code fences if present
-        if content.startswith("```"):
-            content = content.split("\n", 1)[1] if "\n" in content else content[3:]
-        if content.endswith("```"):
-            content = content[:-3]
-        return content.strip()
+        return _strip_fences(_extract_message_content(data))
 
 
 async def _polish_medium(data: dict[str, Any]) -> dict[str, Any]:

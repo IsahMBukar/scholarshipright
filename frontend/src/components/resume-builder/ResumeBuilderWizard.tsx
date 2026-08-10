@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   updateResume,
   exportResumePdf,
@@ -33,16 +33,20 @@ export default function ResumeBuilderWizard({ resume, onResumeUpdate, onClose }:
   const [exporting, setExporting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const styleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Auto-save style changes to backend
+  // Auto-save style changes to backend (debounced)
   const handleStyleChange = async (newStyle: ResumeStyle) => {
     setResumeStyle(newStyle);
-    try {
-      const updated = await updateResume(resume.id, { style: newStyle } as any);
-      onResumeUpdate(updated);
-    } catch (err) {
-      console.error('Failed to save style:', err);
-    }
+    if (styleTimerRef.current) clearTimeout(styleTimerRef.current);
+    styleTimerRef.current = setTimeout(async () => {
+      try {
+        const updated = await updateResume(resume.id, { style: newStyle } as any);
+        onResumeUpdate(updated);
+      } catch (err) {
+        console.error('Failed to save style:', err);
+      }
+    }, 500);
   };
 
   // Persist edits from the CollapsibleEditor to the backend
@@ -260,7 +264,7 @@ export default function ResumeBuilderWizard({ resume, onResumeUpdate, onClose }:
             </button>
             {exportMenuOpen && (
               <>
-                <div className="fixed inset-0 z-10" onClick={() => setExportMenuOpen(false)} />
+                <div className="fixed inset-0 z-[5]" onClick={() => setExportMenuOpen(false)} />
                 <div className="absolute bottom-full left-0 mb-1 z-20">
                   <div className="bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
                     <button

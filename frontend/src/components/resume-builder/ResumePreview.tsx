@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useMemo } from 'react';
 import type {
   Resume,
   ResumeEducation,
@@ -144,7 +144,7 @@ export default function ResumePreview({
   const primary = style.primaryColor;
   const headingFont = style.fontHeading;
   const bodyFont = style.fontBody;
-  const theme = getTheme(style.theme);
+  const theme = useMemo(() => getTheme(style.theme), [style.theme]);
 
   return (
     <StyleCtx.Provider value={style}>
@@ -210,7 +210,7 @@ export default function ResumePreview({
           <Section region="education" activeSection={activeSection} onSectionClick={onSectionClick}>
             <SectionTitle>Education</SectionTitle>
             {resume.education.map((edu, i) => (
-              <EducationEntry key={i} edu={edu} concise={concise} />
+              <EducationEntry key={`${edu.institution}-${edu.degree}-${i}`} edu={edu} concise={concise} />
             ))}
           </Section>
         )}
@@ -219,7 +219,7 @@ export default function ResumePreview({
           <Section region="experience" activeSection={activeSection} onSectionClick={onSectionClick}>
             <SectionTitle>Work Experience</SectionTitle>
             {resume.experience.map((exp, i) => (
-              <ExperienceEntry key={i} exp={exp} concise={concise} />
+              <ExperienceEntry key={`${exp.company}-${exp.position}-${i}`} exp={exp} concise={concise} />
             ))}
           </Section>
         )}
@@ -228,7 +228,7 @@ export default function ResumePreview({
           <Section region="projects" activeSection={activeSection} onSectionClick={onSectionClick}>
             <SectionTitle>Projects</SectionTitle>
             {resume.projects.map((p, i) => (
-              <ResearchEntry key={i} project={p} />
+              <ResearchEntry key={`${p.title}-proj-${i}`} project={p} />
             ))}
           </Section>
         )}
@@ -237,7 +237,7 @@ export default function ResumePreview({
           <Section region="research" activeSection={activeSection} onSectionClick={onSectionClick}>
             <SectionTitle>Research</SectionTitle>
             {resume.research_projects.map((p, i) => (
-              <ResearchEntry key={i} project={p} />
+              <ResearchEntry key={`${p.title}-res-${i}`} project={p} />
             ))}
           </Section>
         )}
@@ -255,7 +255,7 @@ export default function ResumePreview({
           <Section region="languages" activeSection={activeSection} onSectionClick={onSectionClick}>
             <SectionTitle>Languages</SectionTitle>
             {resume.languages.map((lang, i) => (
-              <LanguageEntry key={i} lang={lang} />
+              <LanguageEntry key={`${typeof lang === "string" ? lang : lang.language}-${i}`} lang={lang} />
             ))}
           </Section>
         )}
@@ -264,7 +264,7 @@ export default function ResumePreview({
           <Section region="certifications" activeSection={activeSection} onSectionClick={onSectionClick}>
             <SectionTitle>Certifications</SectionTitle>
             {resume.certifications.map((c, i) => (
-              <CertEntry key={i} cert={c} />
+              <CertEntry key={`${c.name}-${c.issuer}-${i}`} cert={c} />
             ))}
           </Section>
         )}
@@ -273,7 +273,7 @@ export default function ResumePreview({
           <Section region="publications" activeSection={activeSection} onSectionClick={onSectionClick}>
             <SectionTitle>Publications</SectionTitle>
             {resume.publications.map((p, i) => (
-              <PublicationEntry key={i} pub={p} />
+              <PublicationEntry key={`${p.title}-${i}`} pub={p} />
             ))}
           </Section>
         )}
@@ -282,7 +282,7 @@ export default function ResumePreview({
           <Section region="awards" activeSection={activeSection} onSectionClick={onSectionClick}>
             <SectionTitle>Awards</SectionTitle>
             {resume.awards.map((a, i) => (
-              <AwardEntry key={i} award={a} />
+              <AwardEntry key={`${a.name}-${i}`} award={a} />
             ))}
           </Section>
         )}
@@ -291,7 +291,7 @@ export default function ResumePreview({
           <Section region="references" activeSection={activeSection} onSectionClick={onSectionClick}>
             <SectionTitle>References</SectionTitle>
             {resume.ref_list.map((r, i) => (
-              <RefEntry key={i} reference={r} />
+              <RefEntry key={`${r.name}-${i}`} reference={r} />
             ))}
           </Section>
         )}

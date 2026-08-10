@@ -58,7 +58,11 @@ class Resume(Base):
 
 
 async def ensure_resume_style_column():
-    """Add style JSONB column to resumes table if missing (idempotent)."""
+    """Add style JSONB column to resumes table if missing (idempotent).
+
+    NOTE: This is a stopgap — production DDL should live in Alembic migrations.
+    Kept here for dev convenience until the migration pipeline is set up.
+    """
     from sqlalchemy import text
     from app.db.session import AsyncSessionLocal
 

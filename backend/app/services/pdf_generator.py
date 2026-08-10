@@ -2,16 +2,23 @@
 
 Supports 4 layout themes: classic, modern, academic, compact.
 Reads style preferences from resume['style'] dict.
+
+NOTE: fpdf (v1) only supports Latin-1. Non-Latin-1 characters (CJK, Arabic,
+Cyrillic, emoji) are replaced with '?' by _safe(). To support full Unicode,
+migrate to fpdf2 with a Unicode TTF font.
 """
+import logging
 from fpdf import FPDF
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 def _safe(text: str) -> str:
     """Sanitize text for fpdf — replace non-Latin1 chars."""
     if not text:
         return ""
-    return (text
+    result = (text
         .replace("\u2013", "-")   # en dash
         .replace("\u2014", "-")   # em dash
         .replace("\u2018", "'")   # left single quote
@@ -26,6 +33,9 @@ def _safe(text: str) -> str:
         .encode("latin-1", errors="replace")
         .decode("latin-1")
     )
+    if "?" in result and "?" not in text:
+        logger.warning("PDF: non-Latin1 chars replaced in text: %s...", text[:80])
+    return result
 
 
 def _hex_to_rgb(hex_color: str) -> tuple:

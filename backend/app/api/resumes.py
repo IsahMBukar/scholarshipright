@@ -41,8 +41,18 @@ router = APIRouter(prefix="/api/resumes", tags=["resumes"])
 # observability backends).
 logger = logging.getLogger(__name__)
 
-UPLOAD_DIR = "/home/alaiisah/Desktop/Scholarshipright/backend/uploads/resumes"
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads", "resumes")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# Max body size for AI endpoint requests (prevents abuse via huge payloads)
+_MAX_AI_BODY_BYTES = 50_000  # ~50 KB
+
+
+def _validate_ai_body(body: dict) -> None:
+    """Reject oversized AI request bodies before they hit the LLM."""
+    size = len(json.dumps(body, ensure_ascii=False).encode("utf-8"))
+    if size > _MAX_AI_BODY_BYTES:
+        raise HTTPException(413, f"Request body too large ({size} bytes). Max: {_MAX_AI_BODY_BYTES}.")
 
 
 # ─── Level-aware completeness helpers ──────────────────────────────────────
@@ -724,6 +734,7 @@ async def ai_generate_section(
 
     Returns AI-generated content ready to be saved to the resume.
     """
+    _validate_ai_body(body)
     section = body.get("section", "")
     answers = body.get("answers", {})
 
@@ -797,9 +808,11 @@ async def ai_save_section(
 
     # Text fields
     if section == "summary":
-        resume.summary = data or entry or ""
+        resume.summary = str(data or entry or "")
     # Array-of-strings fields
     elif section == "skills":
+        if data is not None and not isinstance(data, list):
+            raise HTTPException(400, "data must be a list of strings for skills")
         resume.skills = data or []
     # JSONB list fields — append or replace
     # Note: section keys from the wizard ("projects", "research", "references")
@@ -823,8 +836,12 @@ async def ai_save_section(
         db_field = field_map[section]
         current = list(getattr(resume, db_field) or [])
         if entry:
+            if not isinstance(entry, dict):
+                raise HTTPException(400, "entry must be a JSON object")
             current.append(entry)
         elif data:
+            if not isinstance(data, list):
+                raise HTTPException(400, "data must be a JSON array for list sections")
             current = data
         setattr(resume, db_field, current)
     else:
@@ -866,6 +883,7 @@ async def ai_generate_summary(
 
     Body (optional): { "tone": "professional" | "academic" | "concise" }
     """
+    _validate_ai_body(body)
     result = await db.execute(
         select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
     )
@@ -910,6 +928,7 @@ async def ai_suggest(
 
     Returns AI-generated suggestion for the requested section.
     """
+    _validate_ai_body(body)
     section = body.get("section", "")
     instruction = body.get("instruction", "")
 
@@ -961,6 +980,7 @@ async def polish_endpoint(
 
     Applies the polish, recomputes the score, and returns the updated ResumeOut.
     """
+    _validate_ai_body(body)
     level = body.get("level", "simple")
     if level not in ("simple", "medium", "high"):
         raise HTTPException(400, "level must be one of: simple, medium, high")

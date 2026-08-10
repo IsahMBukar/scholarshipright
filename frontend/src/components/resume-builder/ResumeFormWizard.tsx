@@ -284,11 +284,7 @@ export default function ResumeFormWizard({ resume, onResumeUpdate, onFinish, onC
           )}
           {step.key === 'summary' && <SummaryStep data={data} setField={setField} resumeId={resume.id} />}
           {step.key === 'polish' && (
-            <PolishStep level={polishLevel} setLevel={setPolishLevel} onGenerateSummary={async () => {
-              const r = await aiGenerateSummary(resume.id);
-              setField('summary', r.summary);
-              await persist({ summary: r.summary });
-            }} />
+            <PolishStep level={polishLevel} setLevel={setPolishLevel} />
           )}
           {LIST_KEYS.has(step.key) && (
             <ListEditorStep
@@ -549,7 +545,7 @@ function SummaryStep({ data, setField, resumeId }: { data: Partial<Resume>; setF
 }
 
 
-function PolishStep({ level, setLevel }: { level: PolishLevel; setLevel: (l: PolishLevel) => void; onGenerateSummary: () => void }) {
+function PolishStep({ level, setLevel }: { level: PolishLevel; setLevel: (l: PolishLevel) => void }) {
   const OPTIONS: { id: PolishLevel; icon: string; title: string; desc: string }[] = [
     { id: 'simple', icon: 'edit', title: 'Simple', desc: 'Keep exactly what you typed. We only clean up minor formatting.' },
     { id: 'medium', icon: 'auto_fix_high', title: 'Medium', desc: 'AI rewrites key fields — your summary and the descriptions in education, work, projects & research.' },

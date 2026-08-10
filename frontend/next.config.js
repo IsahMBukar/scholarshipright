@@ -70,9 +70,9 @@ const nextConfig = {
               `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''}`,
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com",
-              "img-src 'self' blob: data: https://res.cloudinary.com https://scholarshipright.com https://*.scholarshipright.com",
+              "img-src 'self' blob: data: https://res.cloudinary.com https://scholarshipright.com https://*.scholarshipright.com",  // blob: needed for LivePreview URL.createObjectURL()
               `connect-src 'self' https:${process.env.NODE_ENV === 'development' ? ' http://localhost:8000 ws:' : ''}`,
-              "frame-src 'self' blob:",
+              "frame-src 'self' blob:",  // blob: needed for PDF preview iframes
               "frame-ancestors 'none'",
             ].join('; '),
           },

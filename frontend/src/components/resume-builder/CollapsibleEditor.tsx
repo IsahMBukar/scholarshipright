@@ -316,7 +316,7 @@ function PersonalEditor({ resume, onChange }: { resume: Partial<Resume>; onChang
           <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">{f.label}</label>
           <input
             type="text"
-            value={(resume as any)[f.key] || ''}
+            value={(resume as Record<string, string | undefined>)[f.key] ?? ''}
             onChange={(e) => onChange({ [f.key]: e.target.value })}
             placeholder={f.placeholder}
             className="w-full mt-1 px-2.5 py-1.5 text-[13px] bg-gray-50 border border-gray-200 rounded-lg focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all"
@@ -489,13 +489,13 @@ function ListEditor({
               <span className="flex-1 text-[12px] text-gray-700 truncate">{displayItem(item)}</span>
               <button
                 onClick={() => startEdit(idx)}
-                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded transition-all"
+                className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 p-1 hover:bg-gray-200 rounded transition-all"
               >
                 <span className="material-symbols-outlined text-[14px] text-gray-400">edit</span>
               </button>
               <button
                 onClick={() => remove(idx)}
-                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 rounded transition-all"
+                className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 p-1 hover:bg-red-50 rounded transition-all"
               >
                 <span className="material-symbols-outlined text-[14px] text-red-400">delete</span>
               </button>
