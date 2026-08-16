@@ -9,6 +9,7 @@ import {
 } from '@/services/api';
 import LivePreview from './LivePreview';
 import CollapsibleEditor from './CollapsibleEditor';
+import ResumeIssueList from './ResumeIssueList';
 import AIRewriteChat from './AIRewriteChat';
 import StyleTab, { DEFAULT_STYLE, type ResumeStyle } from './StyleTab';
 import { useToast } from '@/components/admin/ui/Toast';
@@ -229,6 +230,9 @@ export default function ResumeBuilderWizard({ resume, onResumeUpdate, onClose, o
               </div>
             ) : (
               <>
+                <div className="mb-3">
+                  <ResumeIssueList issues={resume.issues ?? []} defaultOpen />
+                </div>
                 {activeTab === 'ai-rewrite' && (
                   <AIRewriteChat
                     resume={resume}
