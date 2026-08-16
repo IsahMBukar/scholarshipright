@@ -248,7 +248,19 @@ export default function ResumeBuilderWizard({ resume, onResumeUpdate, onClose, o
                   />
                 )}
                 {activeTab === 'issues' && (
-                  <ResumeIssueList issues={resume.issues ?? []} flat />
+                  resume.issues && resume.issues.length > 0 ? (
+                    <ResumeIssueList issues={resume.issues} flat />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-center py-12 px-4">
+                      <div className="w-14 h-14 rounded-full bg-green-50 flex items-center justify-center mb-3">
+                        <span className="material-symbols-outlined text-green-500 text-[28px]">task_alt</span>
+                      </div>
+                      <h3 className="text-[15px] font-bold text-text-primary">No issues found</h3>
+                      <p className="text-[12px] text-text-secondary mt-1 max-w-xs">
+                        Your resume looks solid. Keep every section filled to stay this way.
+                      </p>
+                    </div>
+                  )
                 )}
                 {activeTab === 'style' && (
                   <StyleTab
