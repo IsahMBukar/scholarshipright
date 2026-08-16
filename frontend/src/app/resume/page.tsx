@@ -53,6 +53,20 @@ function ResumePageInner() {
   const confirm = useConfirm();
   const fromOnboarding = searchParams.get('onboarding') === '1';
   const editId = searchParams.get('edit');
+  // Sent by the onboarding resume slide ("I don't have a resume") to open
+  // the manual form wizard automatically instead of dropping the user on
+  // the bare list with a stub card.
+  const builderMode = searchParams.get('builder') === '1';
+  // Where "Return to hub" should take the user. Falls back to /onboarding.
+  const returnPath = searchParams.get('return') || '/onboarding';
+
+  // Remove the consumed `builder` param so a page refresh doesn't
+  // re-open the wizard (keeps `onboarding` so the return banner stays).
+  function clearBuilderParam() {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('builder');
+    router.replace(`/resume?${params.toString()}`, { scroll: false });
+  }
 
   // Open the resume builder as a modal for the given resume.
   function openBuilder(resume: Resume) {
@@ -116,7 +130,19 @@ function ResumePageInner() {
     try {
       const data = await fetchResumes();
       setResumes(data);
-      if (data.length === 0) {
+      if (builderMode) {
+        // Arrived from onboarding's "I don't have a resume". The stub
+        // created by markManualSource (status "manual") may still be in
+        // flight — use it if present, otherwise create a fresh one.
+        const stub = data.find((r: Resume) => r.status === 'manual');
+        if (stub) {
+          setSelectedResume(stub);
+          setShowFormWizard(true);
+        } else {
+          void startManualFlow();
+        }
+        clearBuilderParam();
+      } else if (data.length === 0) {
         setShowAddModal(true);
       } else if (editId) {
         const match = data.find((r: Resume) => r.id === editId);
@@ -189,10 +215,10 @@ function ResumePageInner() {
               You&apos;re in onboarding. Upload your resume here, then return to the hub to finish setup.
             </p>
             <Link
-              href="/onboarding"
+              href={returnPath}
               className="text-[12px] font-bold text-primary hover:underline whitespace-nowrap"
             >
-              Return to hub â†’
+              Return to hub →
             </Link>
           </div>
         )}
