@@ -2,7 +2,8 @@
 
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { uploadResume, type Resume } from '@/services/api';
+import { uploadResume, resumeFileError, type Resume } from '@/services/api';
+import { useToast } from '@/components/admin/ui/Toast';
 
 /**
  * ResumeSlide — slide 1 of the onboarding carousel.
@@ -42,11 +43,21 @@ export default function ResumeSlide({
   onMarkManual?: () => void | Promise<void>;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [state, setState] = useState<UploadState>({ kind: 'idle' });
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File) => {
+    // Validate file type and size before starting anything, so bad
+    // files fail fast instead of after a slow upload round-trip.
+    const validationError = resumeFileError(file);
+    if (validationError) {
+      setState({ kind: 'error', message: validationError });
+      toast.error('Could not upload that file', validationError);
+      return;
+    }
+
     setState({ kind: 'uploading', fileName: file.name });
 
     try {
@@ -57,6 +68,7 @@ export default function ResumeSlide({
         ''    // target_degree — collected later
       );
       setState({ kind: 'analyzing', fileName: file.name });
+      toast.success('Resume uploaded', 'Our AI is reading it in the background.');
       // Background analysis is happening on the server. Brief pause so
       // the user sees the "AI analyzing" state before we move on.
       // The slide moves forward immediately so they can keep going.
@@ -70,6 +82,7 @@ export default function ResumeSlide({
         error?.message ||
         "We couldn't process that file. It might be too large or in an unsupported format.";
       setState({ kind: 'error', message: String(msg) });
+      toast.error('Upload didn\u2019t work', String(msg));
     }
   };
 

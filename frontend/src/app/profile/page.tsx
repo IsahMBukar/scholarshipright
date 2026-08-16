@@ -6,6 +6,7 @@ import AppLayout from '@/components/AppLayout';
 import PageHeader from '@/components/PageHeader';
 import { ProfileSkeleton } from '@/components/Skeletons';
 import OnboardingProgress from '@/components/OnboardingProgress';
+import { useToast } from '@/components/admin/ui/Toast';
 import { fetchResumes, fetchProfile, createOrUpdateProfile, updateResume, createManualResume } from '@/services/api';
 import type {
   Profile,
@@ -488,6 +489,7 @@ function ProfilePageInner() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const toast = useToast();
 
   // `?focus=matching` makes the page highlight the 3 fields the match
   // engine needs (country of origin, target degree, target countries).
@@ -524,11 +526,14 @@ function ProfilePageInner() {
         const primary = resumes.find((r) => r.is_primary) || resumes[0];
         setResume(primary || null);
         setProfile(profileData || {});
-      } catch (err) { console.error('[Profile] Failed to load profile data:', err); }
+      } catch (err) {
+        console.error('[Profile] Failed to load profile data:', err);
+        toast.error('Could not load your profile', 'Check your connection and try again.');
+      }
       finally { setLoading(false); }
     };
     load();
-  }, []);
+  }, [toast]);
 
   const openEdit = (section: string, data?: EditFormState) => {
     const formData: EditFormState = data || {};
@@ -543,7 +548,11 @@ function ProfilePageInner() {
       await createOrUpdateProfile({ ...profile, ...data });
       setProfile(prev => ({ ...prev, ...data }));
       setEditing(null);
-    } catch (e) { console.error(e); }
+      toast.success('Profile saved');
+    } catch (e) {
+      console.error(e);
+      toast.error('Could not save profile', 'Please try again.');
+    }
     finally { setSaving(false); }
   };
 
@@ -554,7 +563,11 @@ function ProfilePageInner() {
       await updateResume(resume.id, { [field]: value });
       setResume((prev) => prev ? ({ ...prev, [field]: value }) : prev);
       setEditing(null);
-    } catch (e) { console.error(e); }
+      toast.success('Resume updated');
+    } catch (e) {
+      console.error(e);
+      toast.error('Could not save changes', 'Please try again.');
+    }
     finally { setSaving(false); }
   };
 
@@ -610,8 +623,10 @@ function ProfilePageInner() {
               try {
                 const stub = await createManualResume();
                 setResume(stub);
+                toast.success('Profile created', 'You can now add your details below.');
               } catch (err) {
                 console.error('[Profile] Failed to create manual resume:', err);
+                toast.error('Could not set up your profile', 'Please try again.');
               }
             }}
           />

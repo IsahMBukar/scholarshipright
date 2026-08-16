@@ -11,6 +11,7 @@ import {
   createOrUpdateProfile,
 } from '@/services/api';
 import { createManualResume } from '@/services/api';
+import { useToast } from '@/components/admin/ui/Toast';
 
 export type OnboardingStepId =
   | 'account'
@@ -132,6 +133,7 @@ function isResumeUsable(r?: Resume | null): boolean {
 }
 
 export function useOnboarding(): OnboardingState {
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
@@ -223,8 +225,9 @@ export function useOnboarding(): OnboardingState {
       setResume(primary || stub);
     } catch (err) {
       console.error('[Onboarding] Failed to create manual resume:', err);
+      toast.error('Could not set up manual entry', 'Please try again from the resume page.');
     }
-  }, [userId]);
+  }, [toast, userId]);
 
   // ── Slide carousel state ─────────────────────────────────────────
   // We persist the current slide in localStorage so users can resume
