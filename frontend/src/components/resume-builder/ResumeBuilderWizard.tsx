@@ -15,7 +15,7 @@ import StyleTab, { DEFAULT_STYLE, type ResumeStyle } from './StyleTab';
 import { useToast } from '@/components/admin/ui/Toast';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 
-type Tab = 'ai-rewrite' | 'editor' | 'style';
+type Tab = 'ai-rewrite' | 'editor' | 'style' | 'issues';
 
 interface Props {
   resume: Resume;
@@ -171,6 +171,7 @@ export default function ResumeBuilderWizard({ resume, onResumeUpdate, onClose, o
           { key: 'ai-rewrite' as Tab, label: 'AI Rewrite', icon: 'auto_awesome' },
           { key: 'editor' as Tab, label: 'Editor', icon: 'edit' },
           { key: 'style' as Tab, label: 'Style', icon: 'palette' },
+          { key: 'issues' as Tab, label: 'Issues', icon: 'flag' },
         ]).map((tab) => (
           <button
             key={tab.key}
@@ -230,9 +231,6 @@ export default function ResumeBuilderWizard({ resume, onResumeUpdate, onClose, o
               </div>
             ) : (
               <>
-                <div className="mb-3">
-                  <ResumeIssueList issues={resume.issues ?? []} defaultOpen />
-                </div>
                 {activeTab === 'ai-rewrite' && (
                   <AIRewriteChat
                     resume={resume}
@@ -248,6 +246,9 @@ export default function ResumeBuilderWizard({ resume, onResumeUpdate, onClose, o
                     activeSection={activeSection}
                     onSectionFocus={(s) => setActiveSection(s)}
                   />
+                )}
+                {activeTab === 'issues' && (
+                  <ResumeIssueList issues={resume.issues ?? []} flat />
                 )}
                 {activeTab === 'style' && (
                   <StyleTab

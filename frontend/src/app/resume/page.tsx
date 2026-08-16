@@ -10,11 +10,16 @@ import OnboardingProgress from '@/components/OnboardingProgress';
 import AddResumeModal from '@/components/resume-builder/AddResumeModal';
 import ResumeFormWizard from '@/components/resume-builder/ResumeFormWizard';
 import ResumeBuilderModal from '@/components/resume-builder/ResumeBuilderModal';
-import ResumeIssueList from '@/components/resume-builder/ResumeIssueList';
 import { useToast } from '@/components/admin/ui/Toast';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { fetchResumes, deleteResume, setPrimaryResume, createNewResume } from '@/services/api';
-import type { Resume } from '@/services/api';
+import type { Resume, ResumeIssue } from '@/services/api';
+
+const SEVERITY_CONFIG: Record<string, { color: string; bg: string; icon: string; label: string }> = {
+  urgent: { color: 'text-red-600', bg: 'bg-red-50', icon: 'error', label: 'Urgent' },
+  severe: { color: 'text-amber-700', bg: 'bg-amber-50', icon: 'warning', label: 'Severe' },
+  likely: { color: 'text-blue-600', bg: 'bg-blue-50', icon: 'info', label: 'Likely' },
+};
 
 export default function ResumePage() {
   // useSearchParams() in App Router requires a Suspense boundary.
@@ -263,8 +268,17 @@ function ResumePageInner() {
                         </div>
                       )}
                       {(resume.issues || []).length > 0 && (
-                        <div className="mt-2">
-                          <ResumeIssueList issues={resume.issues} />
+                        <div className="flex gap-2 mt-2">
+                          {['urgent', 'severe', 'likely'].map(sev => {
+                            const count = (resume.issues || []).filter((i: ResumeIssue) => i.severity === sev).length;
+                            if (!count) return null;
+                            const cfg = SEVERITY_CONFIG[sev];
+                            return (
+                              <span key={sev} className={`px-2 py-0.5 rounded-[6px] ${cfg.bg} text-[11px] font-medium ${cfg.color}`}>
+                                {count} {cfg.label}
+                              </span>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
