@@ -58,15 +58,15 @@ export default function ResumeExportModal({ resume, onClose }: Props) {
           </button>
         </div>
 
-        {/* Body: preview + options */}
-        <div className="flex flex-1 min-h-0">
+        {/* Body: preview + options — stacks on mobile, side-by-side on md+ */}
+        <div className="flex flex-1 min-h-0 flex-col md:flex-row">
           {/* Left: preview */}
-          <div className="flex-1 border-r border-gray-200">
+          <div className="md:flex-1 md:border-r md:border-gray-200 h-[45vh] md:h-auto flex-shrink-0">
             <LivePreview resume={resume} mode={mode} />
           </div>
 
           {/* Right: export options */}
-          <div className="w-72 p-5 flex flex-col gap-5 overflow-y-auto">
+          <div className="md:w-72 p-5 flex flex-col gap-5 overflow-y-auto md:flex-shrink-0 flex-shrink-0">
             {/* Mode toggle */}
             <div>
               <label className="text-[13px] font-semibold text-text-primary block mb-2">Format</label>

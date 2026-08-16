@@ -489,13 +489,15 @@ function ListEditor({
               <span className="flex-1 text-[12px] text-gray-700 truncate">{displayItem(item)}</span>
               <button
                 onClick={() => startEdit(idx)}
-                className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 p-1 hover:bg-gray-200 rounded transition-all"
+                aria-label={`Edit ${displayItem(item)}`}
+                className="p-1 hover:bg-gray-200 rounded transition-all sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
               >
                 <span className="material-symbols-outlined text-[14px] text-gray-400">edit</span>
               </button>
               <button
                 onClick={() => remove(idx)}
-                className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 p-1 hover:bg-red-50 rounded transition-all"
+                aria-label={`Delete ${displayItem(item)}`}
+                className="p-1 hover:bg-red-50 rounded transition-all sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
               >
                 <span className="material-symbols-outlined text-[14px] text-red-400">delete</span>
               </button>

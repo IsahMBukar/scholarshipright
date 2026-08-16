@@ -271,7 +271,8 @@ export default function ResumeBuilderWizard({ resume, onResumeUpdate, onClose, o
       {/* ── Mobile preview toggle button ──────────────────────── */}
       <button
         onClick={() => setMobilePreviewOpen(true)}
-        className="lg:hidden fixed bottom-20 right-4 z-30 flex items-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-full shadow-lg hover:bg-gray-800 transition-colors text-[13px] font-medium"
+        aria-label="Open preview"
+        className="lg:hidden fixed bottom-24 right-4 z-30 flex items-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-full shadow-lg hover:bg-gray-800 transition-colors text-[13px] font-medium"
       >
         <span className="material-symbols-outlined text-[18px]">visibility</span>
         Preview

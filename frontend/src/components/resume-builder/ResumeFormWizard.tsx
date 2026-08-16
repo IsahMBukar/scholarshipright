@@ -191,6 +191,11 @@ export default function ResumeFormWizard({ resume, onResumeUpdate, onFinish, onC
     }
     if (draftTimer.current) clearTimeout(draftTimer.current);
     draftTimer.current = setTimeout(() => {
+      // If everything is already persisted, drop the draft instead of rewriting it.
+      if (!isDirty()) {
+        clearDraft();
+        return;
+      }
       try {
         localStorage.setItem(DRAFT_KEY, JSON.stringify({ data, stepIndex, savedAt: Date.now() }));
       } catch {
@@ -279,6 +284,23 @@ export default function ResumeFormWizard({ resume, onResumeUpdate, onFinish, onC
     }
 
     const current = STEPS[stepIndex];
+
+    // Client-side required-field validation before touching the server.
+    if (current.key === 'meta' && !String(data.title || '').trim()) {
+      setError('Give this resume a title so you can tell it apart in your list.');
+      return;
+    }
+    if (current.key === 'personal') {
+      if (!String(data.full_name || '').trim()) {
+        setError('Your full name is required — it appears at the top of the resume.');
+        return;
+      }
+      if (!String(data.email || '').trim()) {
+        setError('An email is required so reviewers can reach you.');
+        return;
+      }
+    }
+
     let ok = false;
     if (current.key === 'meta') {
       ok = !!(await persist({
@@ -370,6 +392,16 @@ export default function ResumeFormWizard({ resume, onResumeUpdate, onFinish, onC
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          {/* Error banner at the TOP of the body so it's visible without scrolling */}
+          {error && (
+            <div
+              role="alert"
+              className="mb-4 p-3 bg-red-50 rounded-xl border border-red-200 text-[13px] text-red-700"
+            >
+              {error}
+            </div>
+          )}
+
           {step.key === 'meta' && <MetaStep data={data} setField={setField} />}
           {step.key === 'personal' && <PersonalStep data={data} setField={setField} />}
           {step.key === 'skills' && (
@@ -392,10 +424,6 @@ export default function ResumeFormWizard({ resume, onResumeUpdate, onFinish, onC
               onAdd={(entry) => addListEntry(LIST_FIELD_MAP[step.key], entry)}
               onRemove={(i) => removeListEntry(LIST_FIELD_MAP[step.key], i)}
             />
-          )}
-
-          {error && (
-            <div className="mt-4 p-3 bg-red-50 rounded-xl border border-red-200 text-[13px] text-red-700">{error}</div>
           )}
         </div>
 
@@ -432,15 +460,18 @@ export default function ResumeFormWizard({ resume, onResumeUpdate, onFinish, onC
 
 /* ── Form input primitive (shared by the clean typed steps) ── */
 function Field({
-  label, value, onChange, placeholder, type = 'text', textarea = false,
+  label, value, onChange, placeholder, type = 'text', textarea = false, required = false,
 }: {
   label: string; value: any; onChange: (v: string) => void;
-  placeholder?: string; type?: string; textarea?: boolean;
+  placeholder?: string; type?: string; textarea?: boolean; required?: boolean;
 }) {
   const cls = "w-full p-3 bg-white border border-gray-200 rounded-xl text-[16px] text-text-primary focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all";
   return (
     <div>
-      <label className="text-[13px] font-semibold text-text-primary block mb-1.5">{label}</label>
+      <label className="text-[13px] font-semibold text-text-primary block mb-1.5">
+        {label}
+        {required && <span className="text-red-500 ml-0.5" aria-hidden="true">*</span>}
+      </label>
       {textarea ? (
         <textarea value={value || ''} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={3} className={`${cls} resize-y`} />
       ) : (
@@ -475,7 +506,9 @@ function MetaStep({ data, setField }: { data: Partial<Resume>; setField: (k: key
     <div className="space-y-5">
       {/* Resume title */}
       <div>
-        <label className="text-[13px] font-semibold text-text-primary block mb-1.5">Resume Title</label>
+        <label className="text-[13px] font-semibold text-text-primary block mb-1.5">
+          Resume Title <span className="text-red-500" aria-hidden="true">*</span>
+        </label>
         <input
           type="text"
           value={(data.title as string) || ''}
@@ -572,9 +605,9 @@ function MetaStep({ data, setField }: { data: Partial<Resume>; setField: (k: key
 }
 
 function PersonalStep({ data, setField }: { data: Partial<Resume>; setField: (k: keyof Resume, v: any) => void }) {
-  const fields: { key: keyof Resume; label: string; placeholder?: string }[] = [
-    { key: 'full_name', label: 'Full name', placeholder: 'e.g. Aisha Bello' },
-    { key: 'email', label: 'Email', placeholder: 'you@example.com' },
+  const fields: { key: keyof Resume; label: string; placeholder?: string; required?: boolean }[] = [
+    { key: 'full_name', label: 'Full name', placeholder: 'e.g. Aisha Bello', required: true },
+    { key: 'email', label: 'Email', placeholder: 'you@example.com', required: true },
     { key: 'phone', label: 'Phone', placeholder: '+234 800 000 0000' },
     { key: 'location', label: 'Location', placeholder: 'City, Country' },
     { key: 'linkedin_url', label: 'LinkedIn URL (optional)' },
@@ -584,7 +617,13 @@ function PersonalStep({ data, setField }: { data: Partial<Resume>; setField: (k:
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       {fields.map((f) => (
         <div key={f.key} className={f.key === 'full_name' ? 'sm:col-span-2' : ''}>
-          <Field label={f.label} value={data[f.key]} onChange={(v) => setField(f.key, v)} placeholder={f.placeholder} />
+          <Field
+            label={f.label}
+            value={data[f.key]}
+            onChange={(v) => setField(f.key, v)}
+            placeholder={f.placeholder}
+            required={f.required}
+          />
         </div>
       ))}
     </div>
