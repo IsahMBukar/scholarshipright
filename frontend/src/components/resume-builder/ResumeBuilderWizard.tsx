@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   updateResume,
+  deleteResume,
   exportResumePdf,
   type Resume,
 } from '@/services/api';
@@ -17,12 +18,15 @@ interface Props {
   resume: Resume;
   onResumeUpdate: (resume: Resume) => void;
   onClose: () => void;
+  onDelete?: () => void;
 }
 
-export default function ResumeBuilderWizard({ resume, onResumeUpdate, onClose }: Props) {
+export default function ResumeBuilderWizard({ resume, onResumeUpdate, onClose, onDelete }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('editor');
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const isError = resume.status === 'error';
   const [resumeStyle, setResumeStyle] = useState<ResumeStyle>(() => {
     // Load persisted style from resume, fallback to defaults
     if (resume.style && typeof resume.style === 'object') {
@@ -74,6 +78,18 @@ export default function ResumeBuilderWizard({ resume, onResumeUpdate, onClose }:
       console.error('Export failed:', err);
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteResume(resume.id);
+      onDelete?.();
+    } catch (err) {
+      console.error('Delete failed:', err);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -140,45 +156,85 @@ export default function ResumeBuilderWizard({ resume, onResumeUpdate, onClose }:
         ]).map((tab) => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => !isError && setActiveTab(tab.key)}
+            disabled={isError}
             className={`flex items-center gap-1.5 px-4 py-2.5 text-[13px] font-medium transition-colors border-b-2 ${
-              activeTab === tab.key
-                ? 'border-gray-900 text-gray-900'
-                : 'border-transparent text-gray-400 hover:text-gray-600'
+              isError
+                ? 'border-transparent text-gray-300 cursor-not-allowed'
+                : activeTab === tab.key
+                  ? 'border-gray-900 text-gray-900'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
             }`}
           >
             <span className="material-symbols-outlined text-[16px]">{tab.icon}</span>
             {tab.label}
+            {isError && <span className="material-symbols-outlined text-[12px] ml-0.5">lock</span>}
           </button>
         ))}
       </div>
 
       {/* ── Content: left panel + preview ───────────────────────── */}
       <div className="flex flex-col lg:flex-row flex-1 min-h-0">
-        {/* Left panel (editor / AI / style) */}
+        {/* Left panel (editor / AI / style / error) */}
         <div className="w-full lg:w-[40%] flex flex-col lg:border-r border-b lg:border-b-0 border-gray-200 overflow-hidden lg:flex-none flex-1 min-h-0">
           <div className="flex-1 overflow-y-auto p-3">
-            {activeTab === 'ai-rewrite' && (
-              <AIRewriteChat
-                resume={resume}
-                onResumeUpdate={onResumeUpdate}
-                activeSection={activeSection}
-                onSectionTag={(s) => setActiveSection(s)}
-              />
-            )}
-            {activeTab === 'editor' && (
-              <CollapsibleEditor
-                resume={resume}
-                onResumeChange={handleEditorChange}
-                activeSection={activeSection}
-                onSectionFocus={(s) => setActiveSection(s)}
-              />
-            )}
-            {activeTab === 'style' && (
-              <StyleTab
-                style={resumeStyle}
-                onStyleChange={handleStyleChange}
-              />
+            {isError ? (
+              /* ── Error state: locked panel ── */
+              <div className="flex flex-col items-center justify-center text-center py-12 px-4">
+                <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mb-4">
+                  <span className="material-symbols-outlined text-red-400 text-[32px]">error</span>
+                </div>
+                <h3 className="text-[16px] font-bold text-text-primary">Analysis failed</h3>
+                <p className="text-[13px] text-text-secondary mt-1.5 max-w-xs">
+                  {resume.issues?.[0]?.message || 'This resume could not be analyzed. The file may be corrupted or unsupported.'}
+                </p>
+                {resume.issues?.[0]?.suggestion && (
+                  <p className="text-[12px] text-text-secondary mt-1 italic max-w-xs">
+                    {resume.issues[0].suggestion}
+                  </p>
+                )}
+                <div className="flex flex-col gap-2 mt-6 w-full max-w-xs">
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="w-full px-4 py-2.5 bg-red-500 text-white text-[13px] font-bold rounded-xl hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">delete</span>
+                    {deleting ? 'Deleting…' : 'Delete this resume'}
+                  </button>
+                  <button
+                    onClick={onClose}
+                    className="w-full px-4 py-2.5 border border-gray-200 text-[13px] font-medium rounded-xl hover:bg-gray-50 transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {activeTab === 'ai-rewrite' && (
+                  <AIRewriteChat
+                    resume={resume}
+                    onResumeUpdate={onResumeUpdate}
+                    activeSection={activeSection}
+                    onSectionTag={(s) => setActiveSection(s)}
+                  />
+                )}
+                {activeTab === 'editor' && (
+                  <CollapsibleEditor
+                    resume={resume}
+                    onResumeChange={handleEditorChange}
+                    activeSection={activeSection}
+                    onSectionFocus={(s) => setActiveSection(s)}
+                  />
+                )}
+                {activeTab === 'style' && (
+                  <StyleTab
+                    style={resumeStyle}
+                    onStyleChange={handleStyleChange}
+                  />
+                )}
+              </>
             )}
           </div>
         </div>

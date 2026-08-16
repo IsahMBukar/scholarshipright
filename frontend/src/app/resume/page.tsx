@@ -73,16 +73,39 @@ function ResumePageInner() {
     }
   }
 
-  // Upload path: AI finished parsing; put it in the list and open the builder.
+  // Upload path: modal waited for AI analysis to complete.
+  // The resume is fully analyzed — open the smart editor immediately.
   function handleUploadComplete(resume: Resume) {
     setShowAddModal(false);
     setResumes((prev) => (prev.some((r) => r.id === resume.id) ? prev.map((r) => (r.id === resume.id ? resume : r)) : [resume, ...prev]));
     openBuilder(resume);
   }
 
+  // Resume was created in the DB (upload POST succeeded).
+  // Add it to the list immediately so it's visible even if analysis
+  // fails or the user closes the modal.
+  function handleResumeCreated(resume: Resume) {
+    setResumes((prev) => (prev.some((r) => r.id === resume.id) ? prev.map((r) => (r.id === resume.id ? resume : r)) : [resume, ...prev]));
+  }
+
   useEffect(() => {
     loadResumes();
   }, []);
+
+  // Poll for resumes stuck in 'analyzing' state — refresh every 3s until none are analyzing.
+  useEffect(() => {
+    const hasAnalyzing = resumes.some((r) => r.status === 'analyzing');
+    if (!hasAnalyzing) return;
+    const timer = setInterval(async () => {
+      try {
+        const data = await fetchResumes();
+        setResumes(data);
+      } catch {
+        // transient — keep polling
+      }
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [resumes]);
 
   async function loadResumes() {
     try {
@@ -249,6 +272,15 @@ function ResumePageInner() {
               params.delete('builder');
               router.replace(`/resume?${params.toString()}`, { scroll: false });
             }}
+            onDelete={() => {
+              setResumes(prev => prev.filter(r => r.id !== selectedResume.id));
+              setView('list');
+              setSelectedResume(null);
+              const params = new URLSearchParams(searchParams.toString());
+              params.delete('edit');
+              params.delete('builder');
+              router.replace(`/resume?${params.toString()}`, { scroll: false });
+            }}
           />
         )}
 
@@ -257,6 +289,7 @@ function ResumePageInner() {
           <AddResumeModal
             onClose={() => setShowAddModal(false)}
             onUploadComplete={handleUploadComplete}
+            onResumeCreated={handleResumeCreated}
             onManualStart={startManualFlow}
           />
         )}

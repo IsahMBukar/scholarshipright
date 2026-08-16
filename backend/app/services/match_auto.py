@@ -20,6 +20,7 @@ from uuid import UUID
 
 from fastapi import BackgroundTasks
 from sqlalchemy import select, update, delete
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal, engine
@@ -113,6 +114,9 @@ async def recompute_matches_for_user(user_id: UUID, reason: str = REASON_MANUAL)
             if not profile:
                 logger.info("recompute skipped user=%s reason=%s (no profile)", user_id, reason)
                 return {"status": "skipped", "reason": "no_profile", "matches": 0}
+
+            # Lock the user row to prevent concurrent recomputes from racing.
+            await db.execute(select(User).where(User.id == user_id).with_for_update(skip_locked=True))
 
             resume_result = await db.execute(
                 select(Resume).where(Resume.user_id == user_id, Resume.is_primary == True)

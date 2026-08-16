@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 
 from fastapi import HTTPException, UploadFile, status
@@ -70,8 +71,25 @@ def _magic_matches_mime(content: bytes, mime_type: str) -> bool:
     return False
 
 
+def _sanitize_filename(name: str) -> str:
+    """Strip dangerous characters from a user-supplied filename.
+
+    Keeps alphanumeric, spaces, hyphens, underscores, dots, and
+    parentheses. Everything else is replaced with an underscore.
+    Collapses repeated underscores/spaces. Max 200 chars.
+    """
+    # Remove path separators and null bytes (defense in depth)
+    name = name.replace("/", "").replace("\\", "").replace("\x00", "")
+    # Replace any character that isn't in the safe set
+    name = re.sub(r"[^a-zA-Z0-9 _\-.\(\)]", "_", name)
+    # Collapse repeated underscores/spaces
+    name = re.sub(r"[_\s]{2,}", " ", name).strip()
+    # Truncate
+    return name[:200] if name else "resume"
+
+
 def validate_resume_upload(file: UploadFile, content: bytes) -> ValidatedUpload:
-    filename = os.path.basename(file.filename or "resume")
+    filename = _sanitize_filename(os.path.basename(file.filename or "resume"))
     mime_type = (file.content_type or "application/octet-stream").split(";", 1)[0].strip().lower()
     extension = os.path.splitext(filename)[1].lower()
     size_bytes = len(content)

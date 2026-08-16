@@ -17,7 +17,7 @@ from app.models.user import User
 from app.models.profile import Profile
 from app.schemas.resume import ResumeOut, ResumeUpdate
 from app.services.resume_analyzer import extract_text_from_file, analyze_resume, rewrite_field
-from app.services.resume_builder import SECTION_QUESTIONS, SECTION_ORDER, generate_section, generate_summary, suggest_content, polish_resume
+from app.services.resume_builder import SECTION_QUESTIONS, SECTION_ORDER, generate_section, generate_summary, suggest_content, polish_resume, smart_edit
 from app.services.scoring import calculate_level_aware_completeness
 from app.services.notifications import emit_resume_failed
 from app.api.users import get_current_user
@@ -214,10 +214,14 @@ async def create_resume(
     
     resume_id = str(resume.id)
 
-    # Schedule AI analysis in background — returns immediately
+    # Schedule AI analysis in background — pass file path, NOT bytes.
+    # Re-reading from disk frees the RAM held by `content` immediately.
     background_tasks.add_task(
-        _run_analysis, resume_id, content, mime_type, filename, fields_list, target_degree
+        _run_analysis, resume_id, saved_path, mime_type, filename, fields_list, target_degree
     )
+
+    # Let GC reclaim the file bytes now that they're on disk
+    del content
 
     # Resume creation adds a primary-source-of-truth for the match engine.
     # Recompute in the background; the next /api/matches call will wait if needed.
@@ -325,9 +329,20 @@ async def create_manual_resume(
 
 
 
-async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename: str, fields_list: list, target_degree: str):
-    """Background task: extract text, run AI analysis, update resume."""
+def _read_file_bytes(path: str) -> bytes:
+    """Read file from disk (sync helper for asyncio.to_thread)."""
+    with open(path, "rb") as f:
+        return f.read()
+
+
+async def _run_analysis(resume_id: str, saved_path: str, mime_type: str, filename: str, fields_list: list, target_degree: str):
+    """Background task: read file from disk, extract text, run AI analysis, update resume."""
     try:
+        # Read file from disk instead of holding bytes in RAM from the request
+        content = await asyncio.wait_for(
+            asyncio.to_thread(_read_file_bytes, saved_path),
+            timeout=30,
+        )
         raw_text = await asyncio.wait_for(
             extract_text_from_file(content, mime_type, filename),
             timeout=180,
@@ -335,6 +350,9 @@ async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename
         # Sanitize
         if raw_text:
             raw_text = raw_text.replace('\x00', '').encode('utf-8', errors='ignore').decode('utf-8')
+
+        # Free file bytes from RAM — we only need raw_text from here
+        del content
         
         async with AsyncSessionLocal() as db:
             result = await db.execute(select(Resume).where(Resume.id == resume_id))
@@ -350,7 +368,32 @@ async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename
                     analyze_resume(raw_text, fields_list, target_degree),
                     timeout=120,
                 )
-                
+
+                # ── Check if LLM detected a non-resume file ──
+                if analysis.get("is_resume") is False:
+                    logger.warning(
+                        "Non-resume file detected for resume %s — marking as error", resume_id
+                    )
+                    resume.status = "error"
+                    resume.issues = [{
+                        "field": "file",
+                        "severity": "urgent",
+                        "message": "This doesn't look like a resume or CV. We can only analyze resume/CV files.",
+                        "suggestion": "Try uploading your actual resume, or build one manually.",
+                    }]
+                    await emit_resume_failed(
+                        db, user_id=resume.user_id, resume_id=resume.id,
+                        reason="File is not a resume.",
+                    )
+                    await db.commit()
+                    # Garbage-collect the file — it's not a resume
+                    if saved_path and os.path.isfile(saved_path):
+                        try:
+                            await asyncio.to_thread(os.unlink, saved_path)
+                        except OSError:
+                            pass
+                    return
+
                 resume.full_name = analysis.get("full_name", "")
                 resume.email = analysis.get("email", "")
                 resume.phone = analysis.get("phone", "")
@@ -367,28 +410,63 @@ async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename
                 resume.research_projects = analysis.get("research_projects", [])
                 resume.awards = analysis.get("awards", [])
                 resume.ref_list = analysis.get("ref_list", [])
-                # Issues will come from deterministic scorer below
                 resume.ai_suggestions = analysis.get("ai_suggestions", "")
-                resume.status = "completed"
+
+                # ── Minimum-data sanity check ──
+                # If the LLM returned valid JSON but extracted nothing
+                # meaningful (all fields empty), treat it as a failure
+                # rather than showing the user an empty resume.
+                _has_name = bool((resume.full_name or "").strip())
+                _has_email = bool((resume.email or "").strip())
+                _has_education = bool(resume.education)
+                _has_experience = bool(resume.experience)
+                _has_skills = bool(resume.skills)
+                _has_summary = bool((resume.summary or "").strip())
+                _extracted_something = (
+                    _has_name or _has_email or _has_education
+                    or _has_experience or _has_skills or _has_summary
+                )
+
+                if not _extracted_something:
+                    logger.warning(
+                        "AI returned empty data for resume %s — "
+                        "no name, email, education, experience, skills, or summary. "
+                        "Marking as error.",
+                        resume_id,
+                    )
+                    resume.status = "error"
+                    resume.issues = [{
+                        "field": "file",
+                        "severity": "urgent",
+                        "message": "AI could not extract any details from this file. The content may be in an unsupported format or language.",
+                        "suggestion": "Try uploading a clearer PDF, DOCX, or image file, or build your resume manually.",
+                    }]
+                    await emit_resume_failed(
+                        db,
+                        user_id=resume.user_id,
+                        resume_id=resume.id,
+                        reason="AI returned empty data.",
+                    )
+                else:
+                    resume.status = "completed"
                 
-                # Calculate level-aware score
-                resume_dict = {
-                    "email": resume.email, "phone": resume.phone, "location": resume.location,
-                    "linkedin_url": resume.linkedin_url, "summary": resume.summary,
-                    "education": resume.education or [], "experience": resume.experience or [],
-                    "research_projects": resume.research_projects or [], "skills": resume.skills or [],
-                    "certifications": resume.certifications or [], "publications": resume.publications or [],
-                    "languages": resume.languages or [],
-                }
-                degree_level = await _get_degree_level_by_user_id(db, resume.user_id)
-                score_result = _score_resume_level_aware(resume_dict, degree_level)
-                resume.overall_score = score_result["overall_score"]
-                resume.section_scores = score_result["section_scores"]
-                # Convert flat issues list to structured format with severity
-                resume.issues = [
-                    {"field": "general", "severity": "likely", "message": issue}
-                    for issue in score_result["issues"]
-                ]
+                    # Calculate level-aware score
+                    resume_dict = {
+                        "email": resume.email, "phone": resume.phone, "location": resume.location,
+                        "linkedin_url": resume.linkedin_url, "summary": resume.summary,
+                        "education": resume.education or [], "experience": resume.experience or [],
+                        "research_projects": resume.research_projects or [], "skills": resume.skills or [],
+                        "certifications": resume.certifications or [], "publications": resume.publications or [],
+                        "languages": resume.languages or [],
+                    }
+                    degree_level = await _get_degree_level_by_user_id(db, resume.user_id)
+                    score_result = _score_resume_level_aware(resume_dict, degree_level)
+                    resume.overall_score = score_result["overall_score"]
+                    resume.section_scores = score_result["section_scores"]
+                    resume.issues = [
+                        {"field": "general", "severity": "likely", "message": issue}
+                        for issue in score_result["issues"]
+                    ]
             else:
                 resume.status = "error"
                 resume.issues = [{"field": "file", "severity": "urgent", "message": "Could not extract text from file. Try a clearer image or PDF.", "suggestion": "Re-upload or paste text manually."}]
@@ -406,6 +484,16 @@ async def _run_analysis(resume_id: str, content: bytes, mime_type: str, filename
                 resume_id,
                 resume.status,
             )
+
+            # Delete the original file from disk after successful analysis.
+            # All structured data + raw_text are now in the DB — the file
+            # is no longer needed. Keep it on error so the user can retry.
+            if resume.status == "completed" and saved_path and os.path.isfile(saved_path):
+                try:
+                    await asyncio.to_thread(os.unlink, saved_path)
+                    logger.info("Cleaned up resume file after analysis: %s", saved_path)
+                except OSError as e:
+                    logger.warning("Failed to clean up resume file %s: %s", saved_path, e)
     except asyncio.TimeoutError:
         logger.warning("Background analysis timed out for resume %s", resume_id)
         try:
@@ -500,7 +588,7 @@ async def update_resume(resume_id: str, data: ResumeUpdate, background_tasks: Ba
 
 
 @router.delete("/{resume_id}")
-async def delete_resume(resume_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def delete_resume(resume_id: str, background_tasks: BackgroundTasks, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
     )
@@ -508,13 +596,47 @@ async def delete_resume(resume_id: str, user: User = Depends(get_current_user), 
     if not resume:
         raise HTTPException(404, "Resume not found")
 
+    was_primary = resume.is_primary
+    file_path = resume.original_file_url
+
     await db.delete(resume)
     await db.commit()
 
-    # If the deleted resume was primary, the next /api/matches will pick the
-    # most recent remaining resume (or no resume). Hard-clear the cache so
-    # stale scores don't leak, and mark dirty so the next read recomputes.
-    await clear_user_matches(user.id)
+    # Clean up the uploaded file from disk
+    if file_path and os.path.isfile(file_path):
+        try:
+            await asyncio.to_thread(os.unlink, file_path)
+            logger.info("Deleted resume file: %s", file_path)
+        except OSError as e:
+            logger.warning("Failed to delete resume file %s: %s", file_path, e)
+
+    if was_primary:
+        # Find remaining resumes for this user, ordered by completeness.
+        # Pick the one with the highest overall_score (closest to 100%).
+        remaining_q = await db.execute(
+            select(Resume)
+            .where(Resume.user_id == user.id)
+            .order_by(Resume.overall_score.desc().nullslast(), Resume.updated_at.desc())
+        )
+        remaining = remaining_q.scalars().all()
+
+        if remaining:
+            best = remaining[0]
+            best.is_primary = True
+            await db.commit()
+            logger.info(
+                "Auto-promoted resume %s (score=%s) to primary after deleting %s for user %s",
+                best.id, best.overall_score, resume_id, user.id,
+            )
+            # New primary → recompute matches against it
+            trigger_recompute(user.id, REASON_RESUME_DELETED, background_tasks)
+        else:
+            # No resumes left — clear stale matches entirely
+            await clear_user_matches(user.id)
+            logger.info("No resumes left for user %s after deleting %s — matches cleared", user.id, resume_id)
+    else:
+        # Deleted a non-primary resume — just mark dirty so scores stay fresh
+        await clear_user_matches(user.id)
 
     return {"status": "deleted"}
 
@@ -1053,6 +1175,117 @@ async def polish_endpoint(
     }
     degree_level = await _user_degree_level(db, user)
     score_result = _score_resume_level_aware(resume_dict, degree_level)
+    resume.overall_score = score_result["overall_score"]
+    resume.section_scores = score_result["section_scores"]
+    resume.issues = [
+        {"field": "general", "severity": "likely", "message": issue}
+        for issue in score_result["issues"]
+    ]
+
+    await db.commit()
+    await db.refresh(resume)
+
+    trigger_recompute(user.id, REASON_RESUME_UPDATED, BackgroundTasks())
+    return await _serialize_resume(resume, user, db)
+
+
+@router.post("/{resume_id}/ai-smart-edit", dependencies=[Depends(resume_rewrite_rate_limit)])
+async def ai_smart_edit(
+    resume_id: str,
+    body: dict,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Natural-language resume editing.
+
+    Body: { "prompt": "make my summary look professional and clean" }
+
+    The AI reads the ENTIRE resume for context and returns the updated section(s).
+    No need to specify which section — the AI figures it out from the prompt.
+
+    Returns:
+        { "sections": ["summary"], "changes": {"summary": "new text..."} }
+    """
+    _validate_ai_body(body)
+    prompt = body.get("prompt", "").strip()
+    if not prompt:
+        raise HTTPException(400, "prompt is required")
+
+    result = await db.execute(
+        select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)
+    )
+    resume = result.scalar_one_or_none()
+    if not resume:
+        raise HTTPException(404, "Resume not found")
+
+    # Build the FULL resume data for the LLM
+    resume_data = {
+        "full_name": resume.full_name,
+        "email": resume.email,
+        "phone": resume.phone,
+        "location": resume.location,
+        "linkedin_url": resume.linkedin_url,
+        "portfolio_url": resume.portfolio_url,
+        "summary": resume.summary,
+        "education": resume.education or [],
+        "experience": resume.experience or [],
+        "projects": resume.projects or [],
+        "research_projects": resume.research_projects or [],
+        "skills": resume.skills or [],
+        "certifications": resume.certifications or [],
+        "publications": resume.publications or [],
+        "awards": resume.awards or [],
+        "languages": resume.languages or [],
+        "ref_list": resume.ref_list or [],
+    }
+
+    try:
+        result = await asyncio.wait_for(
+            smart_edit(resume_data, prompt),
+            timeout=90,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(504, "AI smart edit timed out. Please try again.")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.exception("AI smart edit failed")
+        raise HTTPException(502, "AI smart edit failed. Please try again.")
+
+    # Auto-apply changes to the resume
+    changes = result.get("changes", {})
+    updated_sections = result.get("sections", [])
+
+    SECTION_FIELD_MAP = {
+        "summary": "summary",
+        "education": "education",
+        "experience": "experience",
+        "skills": "skills",
+        "projects": "projects",
+        "research_projects": "research_projects",
+        "certifications": "certifications",
+        "publications": "publications",
+        "awards": "awards",
+        "languages": "languages",
+        "ref_list": "ref_list",
+    }
+
+    for section in updated_sections:
+        field = SECTION_FIELD_MAP.get(section)
+        if field and section in changes:
+            setattr(resume, field, changes[section])
+
+    # Recalculate score
+    score_input = {
+        "email": resume.email, "phone": resume.phone, "location": resume.location,
+        "linkedin_url": resume.linkedin_url, "summary": resume.summary,
+        "education": resume.education or [], "experience": resume.experience or [],
+        "research_projects": resume.research_projects or [], "skills": resume.skills or [],
+        "certifications": resume.certifications or [], "publications": resume.publications or [],
+        "languages": resume.languages or [],
+    }
+    degree_level = await _user_degree_level(db, user)
+    score_result = _score_resume_level_aware(score_input, degree_level)
     resume.overall_score = score_result["overall_score"]
     resume.section_scores = score_result["section_scores"]
     resume.issues = [

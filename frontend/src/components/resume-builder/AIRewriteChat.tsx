@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { rewriteField, type Resume } from '@/services/api';
+import { aiSmartEdit, type Resume } from '@/services/api';
 
 interface Props {
   resume: Resume;
@@ -13,7 +13,7 @@ interface Props {
 interface Message {
   role: 'user' | 'ai' | 'system';
   content: string;
-  section?: string;
+  sections?: string[];
   timestamp: number;
 }
 
@@ -21,20 +21,34 @@ const SECTION_HINTS: Record<string, string> = {
   summary: 'Make my summary more impactful for scholarship applications',
   education: 'Polish my education section',
   experience: 'Rewrite my work experience with stronger action verbs',
-  research: 'Improve my research/projects descriptions',
+  research_projects: 'Improve my research/projects descriptions',
   skills: 'Organize and improve my skills list',
   certifications: 'Improve my certifications section',
   publications: 'Polish my publications section',
   awards: 'Improve my awards section',
   languages: 'Improve my languages section',
-  references: 'Polish my references section',
+  ref_list: 'Polish my references section',
+};
+
+const SECTION_LABELS: Record<string, string> = {
+  summary: 'Summary',
+  education: 'Education',
+  experience: 'Experience',
+  skills: 'Skills',
+  projects: 'Projects',
+  research_projects: 'Research',
+  certifications: 'Certifications',
+  publications: 'Publications',
+  awards: 'Awards',
+  languages: 'Languages',
+  ref_list: 'References',
 };
 
 export default function AIRewriteChat({ resume, onResumeUpdate, activeSection, onSectionTag }: Props) {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'system',
-      content: 'Hi! I can help improve your resume. Click a section on the preview or type @section to tag one, then tell me what to change.',
+      content: 'Hi! I can improve your resume using AI. Just tell me what you want to change — I\'ll read your full resume for context. You can also click a section on the preview or type @section to be specific.',
       timestamp: Date.now(),
     },
   ]);
@@ -58,13 +72,12 @@ export default function AIRewriteChat({ resume, onResumeUpdate, activeSection, o
   // When activeSection changes from preview click, show quick action
   useEffect(() => {
     if (activeSection && SECTION_HINTS[activeSection]) {
-      // Don't add duplicate hint
       const lastMsg = messages[messages.length - 1];
       if (lastMsg?.role !== 'system' || !lastMsg.content.includes(activeSection)) {
         setMessages(prev => [...prev, {
           role: 'system',
-          content: `Selected: ${activeSection}. ${SECTION_HINTS[activeSection]}`,
-          section: activeSection,
+          content: `Selected: ${SECTION_LABELS[activeSection] || activeSection}. ${SECTION_HINTS[activeSection]}`,
+          sections: [activeSection],
           timestamp: Date.now(),
         }]);
       }
@@ -109,46 +122,80 @@ export default function AIRewriteChat({ resume, onResumeUpdate, activeSection, o
     if (!trimmed || loading) return;
 
     const mentionedSection = extractMentionedSection(trimmed);
-    const targetSection = mentionedSection || activeSection;
 
     // Add user message
     const userMsg: Message = {
       role: 'user',
       content: trimmed,
-      section: targetSection || undefined,
+      sections: mentionedSection ? [mentionedSection] : undefined,
       timestamp: Date.now(),
     };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setShowMentions(false);
 
-    if (!targetSection) {
-      setMessages(prev => [...prev, {
-        role: 'ai',
-        content: 'Please tag a section first — click one on the preview or type @section (e.g. @summary, @experience).',
-        timestamp: Date.now(),
-      }]);
-      return;
-    }
-
     setLoading(true);
     try {
-      // Get current value for the section
-      const currentValue = getSectionValue(resume, targetSection);
-      const context = `Resume for ${resume.full_name || 'user'}, targeting ${resume.target_degree || 'scholarship'}. Section: ${targetSection}.`;
+      // Build the prompt — if user tagged a section, prepend it for clarity
+      let prompt = trimmed;
+      if (mentionedSection) {
+        prompt = `@${mentionedSection} ${trimmed}`;
+      }
 
-      const result = await rewriteField(resume.id, targetSection, currentValue, context + '\n\nUser instruction: ' + trimmed);
+      // Call smart edit — backend reads the full resume and auto-applies changes
+      const updatedResume = await aiSmartEdit(resume.id, prompt);
+
+      // Figure out which sections changed by comparing old vs new
+      const changedSections: string[] = [];
+      const fieldMap: Record<string, keyof Resume> = {
+        summary: 'summary',
+        education: 'education',
+        experience: 'experience',
+        skills: 'skills',
+        projects: 'projects',
+        research_projects: 'research_projects',
+        certifications: 'certifications',
+        publications: 'publications',
+        awards: 'awards',
+        languages: 'languages',
+        ref_list: 'ref_list',
+      };
+
+      for (const [section, field] of Object.entries(fieldMap)) {
+        const oldVal = JSON.stringify(resume[field] ?? '');
+        const newVal = JSON.stringify(updatedResume[field] ?? '');
+        if (oldVal !== newVal) {
+          changedSections.push(section);
+        }
+      }
+
+      const sectionNames = changedSections
+        .map(s => SECTION_LABELS[s] || s)
+        .join(', ');
+
+      // Build a summary of what changed
+      let changeSummary = '';
+      if (changedSections.length > 0) {
+        changeSummary = `Updated ${sectionNames} and applied to your resume.`;
+      } else {
+        changeSummary = 'No changes were needed — your resume already looks good for that request.';
+      }
 
       setMessages(prev => [...prev, {
         role: 'ai',
-        content: `Here's the improved ${targetSection}:\n\n${result.improved_value}`,
-        section: targetSection,
+        content: changeSummary,
+        sections: changedSections,
         timestamp: Date.now(),
       }]);
+
+      // Update the parent with the new resume data
+      onResumeUpdate(updatedResume);
+
     } catch (err: any) {
+      const detail = err?.response?.data?.detail;
       setMessages(prev => [...prev, {
         role: 'ai',
-        content: `Sorry, the rewrite failed. ${err?.response?.data?.detail || 'Please try again.'}`,
+        content: `Sorry, the edit failed. ${detail || 'Please try again.'}`,
         timestamp: Date.now(),
       }]);
     } finally {
@@ -182,10 +229,14 @@ export default function AIRewriteChat({ resume, onResumeUpdate, activeSection, o
                   : 'bg-gray-100 text-gray-700'
               }`}
             >
-              {msg.section && msg.role === 'system' && (
-                <span className="inline-block px-1.5 py-0.5 mb-1 text-[10px] font-bold bg-blue-100 text-blue-600 rounded uppercase">
-                  {msg.section}
-                </span>
+              {msg.sections && msg.sections.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-1">
+                  {msg.sections.map(s => (
+                    <span key={s} className="inline-block px-1.5 py-0.5 text-[10px] font-bold bg-blue-100 text-blue-600 rounded uppercase">
+                      {SECTION_LABELS[s] || s}
+                    </span>
+                  ))}
+                </div>
               )}
               <p className="whitespace-pre-wrap">{formatAIContent(msg.content)}</p>
             </div>
@@ -195,7 +246,7 @@ export default function AIRewriteChat({ resume, onResumeUpdate, activeSection, o
           <div className="flex justify-start">
             <div className="bg-gray-100 rounded-xl px-3 py-2 text-[13px] text-gray-500 flex items-center gap-2">
               <span className="material-symbols-outlined text-[16px] animate-spin">refresh</span>
-              Rewriting...
+              Reading your resume and editing...
             </div>
           </div>
         )}
@@ -207,7 +258,7 @@ export default function AIRewriteChat({ resume, onResumeUpdate, activeSection, o
         <div className="px-3 pb-1">
           <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-primary/5 rounded-lg border border-primary/20">
             <span className="material-symbols-outlined text-[14px] text-primary">target</span>
-            <span className="text-[11px] font-semibold text-primary">Active: {activeSection}</span>
+            <span className="text-[11px] font-semibold text-primary">Active: {SECTION_LABELS[activeSection] || activeSection}</span>
             <button
               onClick={() => {
                 setInput(prev => prev + `@${activeSection} `);
@@ -245,10 +296,10 @@ export default function AIRewriteChat({ resume, onResumeUpdate, activeSection, o
             value={input}
             onChange={(e) => handleInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type @section and your instruction..."
-            rows={1}
+            placeholder="Tell me what to change (e.g. make my summary professional)..."
+            rows={3}
             className="flex-1 px-3 py-2 text-[13px] bg-gray-50 border border-gray-200 rounded-xl focus:ring-1 focus:ring-primary focus:border-primary outline-none resize-none transition-all"
-            style={{ minHeight: 38, maxHeight: 100 }}
+            style={{ minHeight: 80, maxHeight: 160 }}
           />
           <button
             onClick={handleSend}
@@ -263,25 +314,8 @@ export default function AIRewriteChat({ resume, onResumeUpdate, activeSection, o
   );
 }
 
-function getSectionValue(resume: Resume, section: string): string {
-  switch (section) {
-    case 'summary': return resume.summary || '';
-    case 'education': return JSON.stringify(resume.education || []);
-    case 'experience': return JSON.stringify(resume.experience || []);
-    case 'research': return JSON.stringify(resume.research_projects || []);
-    case 'skills': return (resume.skills || []).join(', ');
-    case 'certifications': return JSON.stringify(resume.certifications || []);
-    case 'publications': return JSON.stringify(resume.publications || []);
-    case 'awards': return JSON.stringify(resume.awards || []);
-    case 'languages': return JSON.stringify(resume.languages || []);
-    case 'references': return JSON.stringify(resume.ref_list || []);
-    default: return '';
-  }
-}
-
 /** Format AI response content — render JSON as readable key/value, plain text as-is. */
 function formatAIContent(content: string): React.ReactNode {
-  // Try parsing as JSON for structured sections
   const trimmed = content.trim();
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
     try {

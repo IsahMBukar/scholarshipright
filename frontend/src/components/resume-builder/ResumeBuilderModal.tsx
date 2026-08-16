@@ -9,6 +9,7 @@ interface Props {
   resume: Resume;
   onResumeUpdate: (resume: Resume) => void;
   onClose: () => void;
+  onDelete?: () => void;
 }
 
 /**
@@ -16,7 +17,7 @@ interface Props {
  * responsive panel (full-screen sheet on mobile, large dialog on desktop).
  * Renders a skeleton while the parent supplies/refreshes the resume.
  */
-export default function ResumeBuilderModal({ resume, onResumeUpdate, onClose }: Props) {
+export default function ResumeBuilderModal({ resume, onResumeUpdate, onClose, onDelete }: Props) {
   const [ready, setReady] = useState(false);
 
   // Small delay so the (re)loaded resume settles before rendering the wizard,
@@ -38,6 +39,7 @@ export default function ResumeBuilderModal({ resume, onResumeUpdate, onClose }: 
             resume={resume}
             onResumeUpdate={onResumeUpdate}
             onClose={onClose}
+            onDelete={onDelete}
           />
         ) : (
           <BuilderWizardSkeleton />

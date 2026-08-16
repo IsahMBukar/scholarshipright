@@ -1069,3 +1069,156 @@ async def polish_resume(
 
     raise ValueError(f"Unknown polish level: {level}")
 
+
+# ── Smart Edit — natural-language resume editing ──────────────────────────
+# The user types a plain instruction like "make my summary more professional"
+# and the AI reads the ENTIRE resume to understand context, then returns only
+# the updated section(s). No explicit @section tagging required.
+
+_SECTIONS_CANONICAL = {
+    "summary", "education", "experience", "skills", "projects",
+    "research_projects", "certifications", "publications", "awards",
+    "languages", "ref_list",
+}
+
+# Friendly aliases → canonical field name
+_SECTION_ALIASES: dict[str, str] = {
+    "research": "research_projects",
+    "references": "ref_list",
+    "work": "experience",
+    "work_experience": "experience",
+    "certs": "certifications",
+    "cert": "certifications",
+    "langs": "languages",
+    "ref": "ref_list",
+    "refs": "ref_list",
+    "project": "projects",
+    "research project": "research_projects",
+    "research projects": "research_projects",
+}
+
+
+def _normalize_section(name: str) -> str | None:
+    """Map a user/LLM section name to the canonical resume field."""
+    low = name.strip().lower().replace(" ", "_")
+    if low in _SECTIONS_CANONICAL:
+        return low
+    return _SECTION_ALIASES.get(low)
+
+
+async def smart_edit(
+    resume_data: dict[str, Any],
+    user_prompt: str,
+) -> dict[str, Any]:
+    """Natural-language resume editing.
+
+    Sends the FULL resume JSON + the user's free-text instruction to the LLM.
+    The LLM identifies which section(s) to change and returns ONLY the updated
+    section(s) as structured JSON.
+
+    Returns:
+        {
+            "sections": ["summary"],           # which sections were updated
+            "changes": {"summary": "new text"} # field → new value
+        }
+    """
+    safe_prompt = _sanitize_user_input(user_prompt)
+    if not safe_prompt:
+        raise ValueError("Empty prompt")
+
+    # Build the full resume snapshot for the LLM
+    resume_json = json.dumps(resume_data, indent=2, ensure_ascii=False)
+
+    # Truncate if absurdly large (protect token budget)
+    if len(resume_json) > 15_000:
+        resume_json = resume_json[:15_000] + "\n... (truncated)"
+
+    system_msg = (
+        _SYSTEM_GUARD
+        + " You are a smart resume editor. You receive the user's FULL resume "
+        "as JSON and a natural-language instruction. You must:\n"
+        "1. Understand which section(s) the user wants to change.\n"
+        "2. Read the entire resume for context (education, experience, skills, "
+        "etc.) so the edit is coherent and cross-referenced.\n"
+        "3. Return ONLY the updated section(s) as a JSON object.\n\n"
+        "RESPONSE FORMAT (strict JSON, no markdown):\n"
+        '{"sections": ["section_name"], "changes": {"section_name": new_value}}\n\n'
+        "RULES:\n"
+        "- 'sections' is a list of canonical field names you changed "
+        "(summary, education, experience, skills, projects, research_projects, "
+        "certifications, publications, awards, languages, ref_list).\n"
+        "- 'changes' maps each field to its NEW value. For text fields "
+        "(summary) the value is a string. For list fields (education, "
+        "experience, etc.) the value is the FULL updated list.\n"
+        "- If the user's instruction is vague, default to 'summary'.\n"
+        "- Keep ALL existing data — only modify what the user asked for.\n"
+        "- Never fabricate credentials, degrees, or experience.\n"
+        "- Return valid JSON only. No markdown fences, no explanations."
+    )
+
+    user_msg = (
+        f"Here is my complete resume:\n{resume_json}\n\n"
+        f"My instruction: {safe_prompt}"
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=_LLM_TIMEOUT) as client:
+            resp = await client.post(
+                _llm_chat_url(),
+                headers={"Authorization": f"Bearer {settings.resolved_llm_api_key}"},
+                json={
+                    "model": settings.resolved_llm_model,
+                    "messages": [
+                        {"role": "system", "content": system_msg},
+                        {"role": "user", "content": user_msg},
+                    ],
+                    "temperature": 0.4,
+                    "max_tokens": 3000,
+                    **_no_thinking_kwargs(),
+                },
+            )
+            data = resp.json()
+            content = _strip_fences(_extract_message_content(data))
+
+            result = json.loads(content)
+
+            # Validate structure
+            sections = result.get("sections", [])
+            changes = result.get("changes", {})
+            if not sections or not changes:
+                raise ValueError("LLM returned empty sections/changes")
+
+            # Normalize section names
+            normalized: dict[str, Any] = {}
+            canonical_sections: list[str] = []
+            for sec in sections:
+                canon = _normalize_section(sec)
+                if canon and canon in changes:
+                    normalized[canon] = changes[canon] if canon != sec else changes[sec]
+                    canonical_sections.append(canon)
+                elif sec in changes:
+                    normalized[sec] = changes[sec]
+                    canonical_sections.append(sec)
+
+            # Also normalize keys in changes that weren't in sections list
+            for key, val in changes.items():
+                canon = _normalize_section(key)
+                target = canon or key
+                if target not in normalized:
+                    normalized[target] = val
+                    canonical_sections.append(target)
+
+            if not normalized:
+                raise ValueError("No valid sections found in LLM response")
+
+            return {"sections": canonical_sections, "changes": normalized}
+
+    except json.JSONDecodeError as e:
+        logger.error("smart_edit returned invalid JSON: %s", content[:500])
+        raise RuntimeError("AI returned an invalid response. Please try again.") from e
+    except (ValueError, RuntimeError):
+        raise
+    except Exception as e:
+        logger.exception("smart_edit failed")
+        raise RuntimeError("AI smart edit failed. Please try again.") from e
+

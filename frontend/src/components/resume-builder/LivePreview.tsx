@@ -97,20 +97,35 @@ export default function LivePreview({
         className="flex-1 overflow-auto flex items-start justify-center p-4"
         onWheel={handleWheel}
       >
-        <div
-          style={{
-            transform: `scale(${zoom})`,
-            transformOrigin: 'top center',
-          }}
-        >
-          <ResumePreview
-            resume={resume}
-            activeSection={activeSection}
-            onSectionClick={handleSectionClick}
-            mode={mode}
-            style={style}
-          />
-        </div>
+        {/* Error state: resume has no usable content */}
+        {resume.status === 'error' || resume.overall_score === 0 ? (
+          <div className="flex flex-col items-center justify-center text-center py-16 px-6 max-w-sm">
+            <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mb-4">
+              <span className="material-symbols-outlined text-red-400 text-[28px]">error</span>
+            </div>
+            <p className="text-[15px] font-semibold text-text-primary">
+              {resume.status === 'error' ? 'Analysis failed' : 'No content to preview'}
+            </p>
+            <p className="text-[13px] text-text-secondary mt-1.5">
+              {resume.issues?.[0]?.message || 'This resume has no usable content. Try uploading a different file or build manually.'}
+            </p>
+          </div>
+        ) : (
+          <div
+            style={{
+              transform: `scale(${zoom})`,
+              transformOrigin: 'top center',
+            }}
+          >
+            <ResumePreview
+              resume={resume}
+              activeSection={activeSection}
+              onSectionClick={handleSectionClick}
+              mode={mode}
+              style={style}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

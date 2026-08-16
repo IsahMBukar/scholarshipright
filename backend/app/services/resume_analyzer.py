@@ -347,7 +347,8 @@ Analyze this CV/resume text and return a JSON object with the following structur
       "contact": "string"
     }}
   ],
-  "ai_suggestions": "Overall suggestions for improving this resume for scholarship applications"
+  "ai_suggestions": "Overall suggestions for improving this resume for scholarship applications",
+  "is_resume": true or false — set to false if the text is NOT a resume/CV (e.g. an invoice, letter, article, random document). Set to true if it contains any resume-like content (education, work experience, skills, projects, etc.)
 }}
 
 TARGET FIELDS: {', '.join(target_fields) if target_fields else 'General'}
@@ -358,6 +359,7 @@ CRITICAL RULES:
 - experience: ONLY paid employment, internships, volunteer work at organizations. Must have a real company/organization name.
 - If the CV mentions "Key Project" or "Final-Year Project" or personal projects, put them in research_projects, NOT experience.
 - ref_list: Extract any references mentioned (name, position, contact info). If none found, use empty array [].
+- is_resume: CAREFULLY judge whether this document is actually a resume/CV or curriculum vitae. If the text is a random document, invoice, receipt, article, letter, contract, or anything that is NOT a resume or CV, set is_resume to false. Only set to true if the document clearly contains resume/CV-like sections (education history, work experience, skills, projects, etc.).
 
 CV TEXT:
 {raw_text[:4000]}

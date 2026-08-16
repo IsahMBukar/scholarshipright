@@ -497,8 +497,10 @@ export async function uploadResume(file: File, title: string, targetFields: stri
   formData.append('title', title);
   formData.append('target_fields', JSON.stringify(targetFields));
   formData.append('target_degree', targetDegree);
+  // Do NOT set Content-Type manually — axios auto-sets multipart/form-data
+  // WITH the correct boundary. Setting it manually strips the boundary and
+  // can cause the server to reject or the browser to hang on the response.
   const { data } = await api.post('/api/resumes', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 120000,
   });
   return data;
@@ -601,6 +603,16 @@ export async function aiGenerateSummary(resumeId: string, tone: string = 'profes
 
 export async function aiSuggest(resumeId: string, section: string, instruction: string = ''): Promise<{ section: string; suggestion: string }> {
   const { data } = await api.post(`/api/resumes/${resumeId}/ai-suggest`, { section, instruction });
+  return data;
+}
+
+export interface SmartEditResult {
+  sections: string[];
+  changes: Record<string, any>;
+}
+
+export async function aiSmartEdit(resumeId: string, prompt: string): Promise<Resume> {
+  const { data } = await api.post(`/api/resumes/${resumeId}/ai-smart-edit`, { prompt });
   return data;
 }
 

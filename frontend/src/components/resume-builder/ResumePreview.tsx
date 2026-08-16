@@ -339,10 +339,8 @@ function Section({
       onClick={() => onSectionClick?.(region)}
       style={{
         cursor: onSectionClick ? 'pointer' : undefined,
-        borderRadius: 4,
-        transition: 'background-color 150ms',
-        backgroundColor: isActive ? `${primaryColor}14` : 'transparent',
-        borderLeft: isActive ? `3px solid ${primaryColor}` : '3px solid transparent',
+        transition: 'border-color 150ms',
+        border: isActive ? `1px solid ${primaryColor}` : '1px solid transparent',
         padding: '4px 6px',
         marginBottom: 2,
       }}
@@ -490,7 +488,6 @@ function ExperienceEntry({ exp, concise }: { exp: ResumeExperience; concise: boo
 }
 
 function ResearchEntry({ project }: { project: ResumeResearchProject }) {
-  const ptype = (project.type || 'project').charAt(0).toUpperCase() + (project.type || 'project').slice(1);
   const details = [project.role, project.organization, [project.start_date, project.end_date].filter(Boolean).join(' - ')]
     .filter(Boolean)
     .join(' | ');
@@ -498,7 +495,7 @@ function ResearchEntry({ project }: { project: ResumeResearchProject }) {
   return (
     <div style={{ marginBottom: 8 }}>
       <p style={{ fontSize: 11, fontWeight: 700, color: '#1e1e1e', margin: 0 }}>
-        [{ptype}] {project.title || 'Untitled'}
+        {project.title || 'Untitled'}
       </p>
       {details && <p style={{ fontSize: 10, color: '#646464', margin: '1px 0 0' }}>{details}</p>}
       {project.technologies && (
