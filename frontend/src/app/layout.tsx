@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { SITE_URL } from '@/lib/env';
 import './globals.css';
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog';
+import { ToastProvider } from '@/components/admin/ui/Toast';
 import { AuthProvider } from '@/hooks/useAuth';
 import { SessionExpiryHandler } from '@/components/SessionExpiryHandler';
 import AuthModal from '@/components/AuthModal';
@@ -115,7 +116,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider>
           <SessionExpiryHandler />
           <AuthModal />
-          <ConfirmProvider>{children}</ConfirmProvider>
+          <ConfirmProvider>
+            <ToastProvider>{children}</ToastProvider>
+          </ConfirmProvider>
         </AuthProvider>
       </body>
     </html>

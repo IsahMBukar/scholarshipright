@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { uploadResume, fetchResume, type Resume } from '@/services/api';
+import { uploadResume, fetchResume, resumeFileError, type Resume } from '@/services/api';
 
 interface Props {
   onClose: () => void;
@@ -17,7 +17,7 @@ interface Props {
 type Mode = 'choose' | 'upload' | 'manual';
 type UploadState =
   | { kind: 'idle' }
-  | { kind: 'uploading'; fileName: string }
+  | { kind: 'uploading'; fileName: string; progress: number }
   | { kind: 'analyzing'; fileName: string; resumeId: string; progress: number }
   | { kind: 'error'; message: string; suggestion?: string; fileName?: string };
 
@@ -40,10 +40,11 @@ export default function AddResumeModal({ onClose, onUploadComplete, onResumeCrea
   const fileRef = useRef<HTMLInputElement>(null);
   const uploadingRef = useRef(false);
   const cancelledRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   // Cleanup: mark cancelled so polling loop stops when modal unmounts
   useEffect(() => {
-    return () => { cancelledRef.current = true; };
+    return () => { cancelledRef.current = true; abortRef.current?.abort(); };
   }, []);
 
   const handleFile = async (file: File) => {
@@ -51,26 +52,44 @@ export default function AddResumeModal({ onClose, onUploadComplete, onResumeCrea
     uploadingRef.current = true;
     cancelledRef.current = false;
 
-    // Validate file size (max 10MB)
-    if (file.size > 10 * 1024 * 1024) {
+    // Validate file type and size before starting anything
+    const validationError = resumeFileError(file);
+    if (validationError) {
       setMode('upload');
       setUploadState({
         kind: 'error',
-        message: `File is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum size is 10MB.`,
+        message: validationError,
+        fileName: file.name,
       });
       uploadingRef.current = false;
       return;
     }
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setMode('upload');
-    setUploadState({ kind: 'uploading', fileName: file.name });
+    setUploadState({ kind: 'uploading', fileName: file.name, progress: 0 });
 
     // ── Stage 1: Upload file ──
     let resume: Resume;
     try {
-      resume = await uploadResume(file, file.name.replace(/\.[^.]+$/, ''), [], '');
+      resume = await uploadResume(file, file.name.replace(/\.[^.]+$/, ''), [], '', {
+        signal: controller.signal,
+        onProgress: (percent) => {
+          setUploadState((s) =>
+            s.kind === 'uploading' ? { ...s, progress: percent } : s,
+          );
+        },
+      });
     } catch (err) {
       uploadingRef.current = false;
+      abortRef.current = null;
+      // User cancelled — don't show an error, just return to choose.
+      if (cancelledRef.current || (err as { code?: string })?.code === 'ERR_CANCELED') {
+        backToChoose();
+        return;
+      }
       const e = err as { response?: { data?: { detail?: string } }; message?: string };
       setUploadState({
         kind: 'error',
@@ -79,6 +98,7 @@ export default function AddResumeModal({ onClose, onUploadComplete, onResumeCrea
       });
       return;
     }
+    abortRef.current = null;
 
     if (cancelledRef.current) return;
 
@@ -169,6 +189,8 @@ export default function AddResumeModal({ onClose, onUploadComplete, onResumeCrea
   const backToChoose = () => {
     cancelledRef.current = true;
     uploadingRef.current = false;
+    abortRef.current?.abort();
+    abortRef.current = null;
     setMode('choose');
     setUploadState({ kind: 'idle' });
     setDragOver(false);
@@ -206,8 +228,26 @@ export default function AddResumeModal({ onClose, onUploadComplete, onResumeCrea
               </p>
             </div>
           </div>
-          {/* Hide close button during upload/analyzing to prevent accidental dismiss */}
-          {uploadState.kind !== 'uploading' && uploadState.kind !== 'analyzing' && (
+          {/* During upload / analysis we hide the close button, but keep a
+              cancel affordance so a slow upload or long analysis isn't a dead end. */}
+          {uploadState.kind === 'uploading' ? (
+            <button
+              onClick={backToChoose}
+              aria-label="Cancel upload"
+              className="flex items-center gap-1 px-3 py-1.5 text-[12px] font-semibold text-text-secondary hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <span className="material-symbols-outlined text-[16px]">close</span>
+              Cancel
+            </button>
+          ) : uploadState.kind === 'analyzing' ? (
+            <button
+              onClick={backToChoose}
+              className="flex items-center gap-1 px-3 py-1.5 text-[12px] font-semibold text-text-secondary hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <span className="material-symbols-outlined text-[16px]">close</span>
+              Cancel
+            </button>
+          ) : (
             <button onClick={onClose} aria-label="Close" className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
               <span className="material-symbols-outlined text-[20px] text-text-secondary">close</span>
             </button>
@@ -259,8 +299,9 @@ export default function AddResumeModal({ onClose, onUploadComplete, onResumeCrea
                 <span className="material-symbols-outlined text-primary text-[44px] block mx-auto">cloud_upload</span>
                 <p className="text-[15px] font-semibold text-text-primary mt-2">Drop your CV here</p>
                 <p className="text-[13px] text-text-secondary mt-1">
-                  or <span className="text-primary font-semibold">browse</span> · PDF, DOC, image
+                  or <span className="text-primary font-semibold">browse</span> · PDF, DOC, or image
                 </p>
+                <p className="text-[11px] text-text-tertiary mt-1">Max 10MB per file</p>
                 <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp" className="hidden" onChange={onFileInput} />
               </div>
               <p className="text-center text-[11px] text-text-secondary mt-4">
@@ -291,7 +332,7 @@ export default function AddResumeModal({ onClose, onUploadComplete, onResumeCrea
           )}
 
           {uploadState.kind === 'uploading' && (
-            <UploadingState fileName={uploadState.fileName} />
+            <UploadingState fileName={uploadState.fileName} progress={uploadState.progress} />
           )}
 
           {uploadState.kind === 'analyzing' && (
@@ -303,8 +344,8 @@ export default function AddResumeModal({ onClose, onUploadComplete, onResumeCrea
   );
 }
 
-/* ── Uploading: simple spinner ── */
-function UploadingState({ fileName }: { fileName: string }) {
+/* ── Uploading: real progress bar ── */
+function UploadingState({ fileName, progress }: { fileName: string; progress: number }) {
   return (
     <div className="flex flex-col items-center text-center py-8">
       <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
@@ -312,7 +353,14 @@ function UploadingState({ fileName }: { fileName: string }) {
       </div>
       <h4 className="text-[16px] font-bold text-text-primary">Uploading your file…</h4>
       <p className="text-[13px] text-text-secondary mt-1">{fileName}</p>
-      <p className="text-[11px] text-text-secondary mt-2">Sending securely…</p>
+      <div className="w-72 h-1.5 bg-gray-200 rounded-full overflow-hidden mt-5">
+        <div
+          className="h-full bg-primary rounded-full transition-all duration-300 ease-out"
+          style={{ width: `${Math.max(progress, 3)}%` }}
+        />
+      </div>
+      <p className="text-[11px] text-text-secondary mt-2">{Math.max(progress, 0)}%</p>
+      <p className="text-[11px] text-text-secondary mt-1">Sending securely…</p>
     </div>
   );
 }

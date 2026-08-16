@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   updateResume,
   polishResume,
@@ -9,6 +9,8 @@ import {
   type PolishLevel,
 } from '@/services/api';
 import { POPULAR_FIELDS, FIELDS_OF_STUDY_VALUES } from '@/data/fieldsOfStudy';
+import { useToast } from '@/components/admin/ui/Toast';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Props {
   resume: Resume;
@@ -118,28 +120,98 @@ const LIST_FIELD_MAP: Record<string, keyof Resume> = {
 const LIST_KEYS = new Set(Object.keys(LIST_FIELD_MAP));
 
 export default function ResumeFormWizard({ resume, onResumeUpdate, onFinish, onClose }: Props) {
-  const [stepIndex, setStepIndex] = useState(0);
-  const [data, setData] = useState<Partial<Resume>>(() => ({
-    title: resume.title,
-    target_fields: resume.target_fields || [],
-    target_degree: resume.target_degree,
-    full_name: resume.full_name,
-    email: resume.email,
-    phone: resume.phone,
-    location: resume.location,
-    linkedin_url: resume.linkedin_url,
-    portfolio_url: resume.portfolio_url,
-    summary: resume.summary,
-    education: resume.education || [],
-    experience: resume.experience || [],
-    research_projects: resume.research_projects || [],
-    skills: resume.skills || [],
-    certifications: resume.certifications || [],
-    publications: resume.publications || [],
-    awards: resume.awards || [],
-    languages: resume.languages || [],
-    ref_list: resume.ref_list || [],
-  }));
+  const toast = useToast();
+  const confirm = useConfirm();
+
+  // ── Draft persistence ──────────────────────────────────────────────
+  // Local edits are auto-saved to localStorage (keyed by resume) so
+  // closing the modal — even accidentally — doesn't lose typed input.
+  // Drafts are cleared whenever the server confirms a save.
+  const DRAFT_KEY = `sr-resume-draft-${resume.id}`;
+  const [stepIndex, setStepIndex] = useState(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const draft = JSON.parse(raw) as { stepIndex?: number };
+        return typeof draft.stepIndex === 'number' ? draft.stepIndex : 0;
+      }
+    } catch {
+      // corrupted draft — ignore
+    }
+    return 0;
+  });
+
+  const [data, setData] = useState<Partial<Resume>>(() => {
+    const base = {
+      title: resume.title,
+      target_fields: resume.target_fields || [],
+      target_degree: resume.target_degree,
+      full_name: resume.full_name,
+      email: resume.email,
+      phone: resume.phone,
+      location: resume.location,
+      linkedin_url: resume.linkedin_url,
+      portfolio_url: resume.portfolio_url,
+      summary: resume.summary,
+      education: resume.education || [],
+      experience: resume.experience || [],
+      research_projects: resume.research_projects || [],
+      skills: resume.skills || [],
+      certifications: resume.certifications || [],
+      publications: resume.publications || [],
+      awards: resume.awards || [],
+      languages: resume.languages || [],
+      ref_list: resume.ref_list || [],
+    };
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const draft = JSON.parse(raw) as { data?: Partial<Resume>; savedAt?: number };
+        // Ignore drafts older than the resume's last server update.
+        const serverTime = resume.updated_at ? new Date(resume.updated_at).getTime() : 0;
+        if (draft.data && (!draft.savedAt || draft.savedAt > serverTime)) {
+          return { ...base, ...draft.data };
+        }
+      }
+    } catch {
+      // corrupted draft — ignore
+    }
+    return base;
+  });
+
+  const lastPersisted = useRef<string>(JSON.stringify(data));
+  const skipDraftSave = useRef(true);
+  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Debounced draft save on any data/step change (skips first render).
+  useEffect(() => {
+    if (skipDraftSave.current) {
+      skipDraftSave.current = false;
+      return;
+    }
+    if (draftTimer.current) clearTimeout(draftTimer.current);
+    draftTimer.current = setTimeout(() => {
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ data, stepIndex, savedAt: Date.now() }));
+      } catch {
+        // storage full/blocked — draft persistence is best-effort
+      }
+    }, 800);
+    return () => {
+      if (draftTimer.current) clearTimeout(draftTimer.current);
+    };
+  }, [data, stepIndex, DRAFT_KEY]);
+
+  const clearDraft = () => {
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      // ignore
+    }
+  };
+
+  const isDirty = () => JSON.stringify(data) !== lastPersisted.current;
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [polishLevel, setPolishLevel] = useState<PolishLevel>('simple');
@@ -158,14 +230,33 @@ export default function ResumeFormWizard({ resume, onResumeUpdate, onFinish, onC
     try {
       const updated = await updateResume(resume.id, partial || data);
       onResumeUpdate(updated);
+      const merged = { ...data, ...updated };
       setData((d) => ({ ...d, ...updated }));
+      lastPersisted.current = JSON.stringify(merged);
+      clearDraft();
       return updated;
     } catch (e: any) {
-      setError(e?.response?.data?.detail || 'Failed to save. Please try again.');
+      const msg = e?.response?.data?.detail || 'Failed to save. Please try again.';
+      setError(msg);
+      toast.error('Could not save this step', 'Your changes weren’t saved. Please try again.');
       return null;
     } finally {
       setSaving(false);
     }
+  }
+
+  // Confirm before abandoning unsaved local edits.
+  async function guardClose(): Promise<boolean> {
+    if (!isDirty()) return true;
+    const ok = await confirm({
+      title: 'Leave without saving?',
+      description: 'You have unsaved changes in this step. Your draft is saved on this device, so you can pick up where you left off.',
+      confirmLabel: 'Leave',
+      cancelLabel: 'Keep editing',
+      tone: 'danger',
+    });
+    if (ok) clearDraft();
+    return ok;
   }
 
   async function handleContinue() {
@@ -175,9 +266,12 @@ export default function ResumeFormWizard({ resume, onResumeUpdate, onFinish, onC
       try {
         const updated = await polishResume(resume.id, polishLevel);
         onResumeUpdate(updated);
+        clearDraft();
         onFinish(updated);
       } catch (e: any) {
-        setError(e?.response?.data?.detail || 'Polishing failed. Please try again.');
+        const msg = e?.response?.data?.detail || 'Polishing failed. Please try again.';
+        setError(msg);
+        toast.error('Could not polish your resume', 'Please try again.');
       } finally {
         setSaving(false);
       }
@@ -260,7 +354,11 @@ export default function ResumeFormWizard({ resume, onResumeUpdate, onFinish, onC
               <p className="text-[12px] text-text-secondary">{step.hint}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+          <button
+            onClick={() => { void guardClose().then((ok) => ok && onClose()); }}
+            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+            aria-label="Close"
+          >
             <span className="material-symbols-outlined text-[20px] text-text-secondary">close</span>
           </button>
         </div>
@@ -303,7 +401,10 @@ export default function ResumeFormWizard({ resume, onResumeUpdate, onFinish, onC
 
         {/* Footer nav */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-t border-gray-100">
-          <button onClick={isFirst ? onClose : goPrev} className="flex items-center gap-1 text-[13px] text-text-secondary hover:text-primary transition-colors">
+          <button
+            onClick={() => { void guardClose().then((ok) => ok && (isFirst ? onClose() : goPrev())); }}
+            className="flex items-center gap-1 text-[13px] text-text-secondary hover:text-primary transition-colors"
+          >
             <span className="material-symbols-outlined text-[18px]">{isFirst ? 'close' : 'arrow_back'}</span>
             {isFirst ? 'Cancel' : 'Back'}
           </button>
@@ -336,7 +437,7 @@ function Field({
   label: string; value: any; onChange: (v: string) => void;
   placeholder?: string; type?: string; textarea?: boolean;
 }) {
-  const cls = "w-full p-3 bg-white border border-gray-200 rounded-xl text-[14px] text-text-primary focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all";
+  const cls = "w-full p-3 bg-white border border-gray-200 rounded-xl text-[16px] text-text-primary focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all";
   return (
     <div>
       <label className="text-[13px] font-semibold text-text-primary block mb-1.5">{label}</label>
@@ -380,7 +481,7 @@ function MetaStep({ data, setField }: { data: Partial<Resume>; setField: (k: key
           value={(data.title as string) || ''}
           onChange={(e) => setField('title', e.target.value)}
           placeholder="e.g. CS Master's Resume, PhD Research CV…"
-          className="w-full p-3 bg-white border border-gray-200 rounded-xl text-[14px] text-text-primary focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
+          className="w-full p-3 bg-white border border-gray-200 rounded-xl text-[16px] text-text-primary focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
         />
         <p className="text-[11px] text-text-secondary mt-1">Helps you tell your resumes apart in the list.</p>
       </div>
@@ -436,7 +537,7 @@ function MetaStep({ data, setField }: { data: Partial<Resume>; setField: (k: key
                 value={fieldQuery}
                 onChange={(e) => setFieldQuery(e.target.value)}
                 placeholder="Search 2,500+ fields…"
-                className="w-full p-2.5 bg-white border border-gray-200 rounded-lg text-[13px] focus:ring-1 focus:ring-primary outline-none"
+                className="w-full p-2.5 bg-white border border-gray-200 rounded-lg text-[16px] focus:ring-1 focus:ring-primary outline-none"
               />
               <div className="mt-2 max-h-48 overflow-y-auto border border-gray-100 rounded-lg">
                 {filteredAll.map((f) => (
@@ -509,7 +610,7 @@ function SkillsStep({ skills, adding, setAdding, draft, setDraft, onAdd, onRemov
       )}
       {adding ? (
         <div className="flex gap-2">
-          <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} className="flex-1 p-3 bg-white border border-gray-200 rounded-xl text-[14px] focus:ring-2 focus:ring-primary outline-none resize-y" placeholder="e.g. Python, Data Analysis, Public Speaking" />
+          <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} className="flex-1 p-3 bg-white border border-gray-200 rounded-xl text-[16px] focus:ring-2 focus:ring-primary outline-none resize-y" placeholder="e.g. Python, Data Analysis, Public Speaking" />
           <div className="flex flex-col gap-1.5">
             <button onClick={onAdd} className="px-4 py-2 bg-primary text-white text-[13px] font-bold rounded-xl hover:brightness-110">Add</button>
             <button onClick={() => { setAdding(false); setDraft(''); }} className="px-4 py-2 border border-gray-200 text-[13px] rounded-xl hover:bg-gray-50">Cancel</button>
@@ -530,7 +631,7 @@ function SummaryStep({ data, setField, resumeId }: { data: Partial<Resume>; setF
   return (
     <div>
       <p className="text-[12px] text-text-secondary mb-3">A 2–3 sentence intro that highlights who you are and what you bring. You can auto-generate one from your details.</p>
-      <textarea value={data.summary || ''} onChange={(e) => setField('summary', e.target.value)} rows={5} className="w-full p-3 bg-white border border-gray-200 rounded-xl text-[14px] focus:ring-2 focus:ring-primary outline-none resize-y" placeholder="Write or generate a professional summary…" />
+      <textarea value={data.summary || ''} onChange={(e) => setField('summary', e.target.value)} rows={5} className="w-full p-3 bg-white border border-gray-200 rounded-xl text-[16px] focus:ring-2 focus:ring-primary outline-none resize-y" placeholder="Write or generate a professional summary…" />
       {err && <p className="text-[12px] text-red-600 mt-2">{err}</p>}
       <button
         onClick={async () => { setGen(true); setErr(null); try { const r = await aiGenerateSummary(resumeId); setField('summary', r.summary); } catch { setErr('Could not generate a summary. You can keep your own text.'); } finally { setGen(false); } }}

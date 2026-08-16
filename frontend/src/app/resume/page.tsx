@@ -10,6 +10,8 @@ import OnboardingProgress from '@/components/OnboardingProgress';
 import AddResumeModal from '@/components/resume-builder/AddResumeModal';
 import ResumeFormWizard from '@/components/resume-builder/ResumeFormWizard';
 import ResumeBuilderModal from '@/components/resume-builder/ResumeBuilderModal';
+import { useToast } from '@/components/admin/ui/Toast';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { fetchResumes, deleteResume, setPrimaryResume, createNewResume } from '@/services/api';
 import type { Resume, ResumeIssue } from '@/services/api';
 
@@ -47,6 +49,8 @@ function ResumePageInner() {
   // the page so the user doesn't get lost after leaving the hub.
   const searchParams = useSearchParams();
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
   const fromOnboarding = searchParams.get('onboarding') === '1';
   const editId = searchParams.get('edit');
 
@@ -70,6 +74,7 @@ function ResumePageInner() {
       setShowFormWizard(true);
     } catch (err) {
       console.error('Failed to start manual resume:', err);
+      toast.error('Could not start the manual builder', 'Something went wrong while creating your resume. Please try again.');
     }
   }
 
@@ -119,6 +124,7 @@ function ResumePageInner() {
       }
     } catch (err) {
       console.error('Failed to load resumes:', err);
+      toast.error('Could not load your resumes', 'Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -129,17 +135,31 @@ function ResumePageInner() {
     try {
       await setPrimaryResume(id);
       setResumes(prev => prev.map(r => ({ ...r, is_primary: r.id === id })));
+      toast.success('Primary resume updated');
     } catch (err) {
       console.error('Set primary failed:', err);
+      toast.error('Could not update primary resume', 'Please try again.');
     }
   }
 
   async function handleDelete(id: string) {
+    const resume = resumes.find((r) => r.id === id);
+    const ok = await confirm({
+      title: 'Delete this resume?',
+      description: resume
+        ? `"${resume.title}" will be permanently removed. This cannot be undone.`
+        : 'This resume will be permanently removed. This cannot be undone.',
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!ok) return;
     try {
       await deleteResume(id);
       setResumes(prev => prev.filter(r => r.id !== id));
+      toast.success('Resume deleted');
     } catch (err) {
       console.error('Delete failed:', err);
+      toast.error('Could not delete resume', 'Please try again.');
     }
   }
 

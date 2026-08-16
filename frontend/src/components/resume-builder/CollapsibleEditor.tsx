@@ -319,7 +319,7 @@ function PersonalEditor({ resume, onChange }: { resume: Partial<Resume>; onChang
             value={(resume as Record<string, string | undefined>)[f.key] ?? ''}
             onChange={(e) => onChange({ [f.key]: e.target.value })}
             placeholder={f.placeholder}
-            className="w-full mt-1 px-2.5 py-1.5 text-[13px] bg-gray-50 border border-gray-200 rounded-lg focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all"
+            className="w-full mt-1 px-2.5 py-1.5 text-[16px] bg-gray-50 border border-gray-200 rounded-lg focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all"
           />
         </div>
       ))}
@@ -337,7 +337,7 @@ function SummaryEditor({ resume, onChange }: { resume: Partial<Resume>; onChange
         onChange={(e) => onChange({ summary: e.target.value })}
         placeholder="Write a brief professional summary..."
         rows={4}
-        className="w-full px-2.5 py-2 text-[13px] bg-gray-50 border border-gray-200 rounded-lg focus:ring-1 focus:ring-primary focus:border-primary outline-none resize-y transition-all"
+        className="w-full px-2.5 py-2 text-[16px] bg-gray-50 border border-gray-200 rounded-lg focus:ring-1 focus:ring-primary focus:border-primary outline-none resize-y transition-all"
       />
     </div>
   );
@@ -378,7 +378,7 @@ function SkillsEditor({ resume, onChange }: { resume: Partial<Resume>; onChange:
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addSkill())}
           placeholder="Type a skill and press Enter"
-          className="flex-1 px-2.5 py-1.5 text-[13px] bg-gray-50 border border-gray-200 rounded-lg focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all"
+          className="flex-1 px-2.5 py-1.5 text-[16px] bg-gray-50 border border-gray-200 rounded-lg focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all"
         />
         <button
           onClick={addSkill}
@@ -465,7 +465,7 @@ function ListEditor({
                         onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
                         placeholder={f.placeholder}
                         rows={2}
-                        className="w-full mt-0.5 px-2 py-1 text-[12px] bg-white border border-gray-200 rounded-md focus:ring-1 focus:ring-primary outline-none resize-y"
+                        className="w-full mt-0.5 px-2 py-1 text-[16px] bg-white border border-gray-200 rounded-md focus:ring-1 focus:ring-primary outline-none resize-y"
                       />
                     ) : (
                       <input
@@ -473,7 +473,7 @@ function ListEditor({
                         value={draft[f.key] || ''}
                         onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
                         placeholder={f.placeholder}
-                        className="w-full mt-0.5 px-2 py-1 text-[12px] bg-white border border-gray-200 rounded-md focus:ring-1 focus:ring-primary outline-none"
+                        className="w-full mt-0.5 px-2 py-1 text-[16px] bg-white border border-gray-200 rounded-md focus:ring-1 focus:ring-primary outline-none"
                       />
                     )}
                   </div>
@@ -516,7 +516,7 @@ function ListEditor({
                     onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
                     placeholder={f.placeholder}
                     rows={2}
-                    className="w-full mt-0.5 px-2 py-1 text-[12px] bg-white border border-gray-200 rounded-md focus:ring-1 focus:ring-primary outline-none resize-y"
+                    className="w-full mt-0.5 px-2 py-1 text-[16px] bg-white border border-gray-200 rounded-md focus:ring-1 focus:ring-primary outline-none resize-y"
                   />
                 ) : (
                   <input
@@ -524,7 +524,7 @@ function ListEditor({
                     value={draft[f.key] || ''}
                     onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
                     placeholder={f.placeholder}
-                    className="w-full mt-0.5 px-2 py-1 text-[12px] bg-white border border-gray-200 rounded-md focus:ring-1 focus:ring-primary outline-none"
+                    className="w-full mt-0.5 px-2 py-1 text-[16px] bg-white border border-gray-200 rounded-md focus:ring-1 focus:ring-primary outline-none"
                   />
                 )}
               </div>

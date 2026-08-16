@@ -491,7 +491,29 @@ export async function fetchResume(id: string): Promise<Resume> {
   return data;
 }
 
-export async function uploadResume(file: File, title: string, targetFields: string[], targetDegree: string): Promise<Resume> {
+export interface UploadOptions {
+  /** Called with upload progress 0–100 as bytes are sent. */
+  onProgress?: (percent: number) => void;
+  /** Pass an AbortController.signal to allow cancelling the upload. */
+  signal?: AbortSignal;
+  timeout?: number;
+}
+
+/** Extensions we accept for resume uploads. Keep in sync with AddResumeModal accept-list. */
+export const ACCEPTED_RESUME_EXTENSIONS = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.webp'] as const;
+
+export function resumeFileError(file: File): string | null {
+  const ext = `.${file.name.split('.').pop()?.toLowerCase() ?? ''}`;
+  if (!(ACCEPTED_RESUME_EXTENSIONS as readonly string[]).includes(ext)) {
+    return 'Unsupported file type — please upload a PDF, DOC, or image (JPG, PNG, WEBP).';
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    return `File is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum size is 10MB.`;
+  }
+  return null;
+}
+
+export async function uploadResume(file: File, title: string, targetFields: string[], targetDegree: string, opts: UploadOptions = {}): Promise<Resume> {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('title', title);
@@ -501,7 +523,13 @@ export async function uploadResume(file: File, title: string, targetFields: stri
   // WITH the correct boundary. Setting it manually strips the boundary and
   // can cause the server to reject or the browser to hang on the response.
   const { data } = await api.post('/api/resumes', formData, {
-    timeout: 120000,
+    timeout: opts.timeout ?? 120000,
+    signal: opts.signal,
+    onUploadProgress: (e) => {
+      if (e.total && opts.onProgress) {
+        opts.onProgress(Math.min(Math.round((e.loaded / e.total) * 100), 100));
+      }
+    },
   });
   return data;
 }

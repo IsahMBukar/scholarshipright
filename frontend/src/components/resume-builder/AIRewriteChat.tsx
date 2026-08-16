@@ -298,7 +298,7 @@ export default function AIRewriteChat({ resume, onResumeUpdate, activeSection, o
             onKeyDown={handleKeyDown}
             placeholder="Tell me what to change (e.g. make my summary professional)..."
             rows={3}
-            className="flex-1 px-3 py-2 text-[13px] bg-gray-50 border border-gray-200 rounded-xl focus:ring-1 focus:ring-primary focus:border-primary outline-none resize-none transition-all"
+            className="flex-1 px-3 py-2 text-[16px] bg-gray-50 border border-gray-200 rounded-xl focus:ring-1 focus:ring-primary focus:border-primary outline-none resize-none transition-all"
             style={{ minHeight: 80, maxHeight: 160 }}
           />
           <button

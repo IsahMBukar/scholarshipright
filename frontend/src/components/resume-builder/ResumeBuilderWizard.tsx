@@ -11,6 +11,8 @@ import LivePreview from './LivePreview';
 import CollapsibleEditor from './CollapsibleEditor';
 import AIRewriteChat from './AIRewriteChat';
 import StyleTab, { DEFAULT_STYLE, type ResumeStyle } from './StyleTab';
+import { useToast } from '@/components/admin/ui/Toast';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 type Tab = 'ai-rewrite' | 'editor' | 'style';
 
@@ -22,6 +24,8 @@ interface Props {
 }
 
 export default function ResumeBuilderWizard({ resume, onResumeUpdate, onClose, onDelete }: Props) {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [activeTab, setActiveTab] = useState<Tab>('editor');
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
@@ -49,6 +53,7 @@ export default function ResumeBuilderWizard({ resume, onResumeUpdate, onClose, o
         onResumeUpdate(updated);
       } catch (err) {
         console.error('Failed to save style:', err);
+        toast.error('Could not save style', 'Your style change is still on screen, but wasn’t saved. Please try again.');
       }
     }, 500);
   };
@@ -61,6 +66,7 @@ export default function ResumeBuilderWizard({ resume, onResumeUpdate, onClose, o
       onResumeUpdate(updated);
     } catch (err) {
       console.error('Failed to save resume:', err);
+      toast.error('Could not save changes', 'Your change wasn’t saved. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -74,20 +80,31 @@ export default function ResumeBuilderWizard({ resume, onResumeUpdate, onClose, o
     setExporting(true);
     try {
       await exportResumePdf(resume.id, mode);
+      toast.success(mode === 'resume' ? 'Resume downloaded' : 'CV downloaded', 'Your download should start shortly.');
     } catch (err) {
       console.error('Export failed:', err);
+      toast.error('Could not create the PDF', 'Something went wrong on export. Please try again.');
     } finally {
       setExporting(false);
     }
   };
 
   const handleDelete = async () => {
+    const ok = await confirm({
+      title: 'Delete this resume?',
+      description: `"${resume.title}" will be permanently removed. This cannot be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!ok) return;
     setDeleting(true);
     try {
       await deleteResume(resume.id);
+      toast.success('Resume deleted');
       onDelete?.();
     } catch (err) {
       console.error('Delete failed:', err);
+      toast.error('Could not delete resume', 'Please try again.');
     } finally {
       setDeleting(false);
     }
