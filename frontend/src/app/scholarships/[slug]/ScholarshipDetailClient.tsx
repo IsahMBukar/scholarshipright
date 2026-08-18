@@ -440,9 +440,11 @@ export default function ScholarshipDetailClient() {
               >
                 <span className="material-symbols-outlined text-[18px]">{isSaved ? 'bookmark' : 'bookmark_border'}</span>
               </button>
+              {/* Customize Resume — temporarily disabled */}
               <button
-                onClick={() => setShowCustomizeModal(true)}
-                className="px-3 py-2 border border-primary/30 text-primary text-[13px] font-semibold rounded-lg hover:bg-primary/5 transition-all flex items-center gap-1.5"
+                disabled
+                title="Customize Resume is temporarily unavailable"
+                className="px-3 py-2 border border-gray-200 text-gray-300 text-[13px] font-semibold rounded-lg cursor-not-allowed flex items-center gap-1.5"
               >
                 <span className="material-symbols-outlined text-[16px]">auto_awesome</span>
                 Customize Resume
