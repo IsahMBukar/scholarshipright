@@ -354,15 +354,8 @@ async def get_scholarship(slug: str, request: Request, db: AsyncSession = Depend
         raise HTTPException(status_code=404, detail="Scholarship not found")
 
     if user_id:
-        # Safety net: recompute if user has 0 match_scores
-        from sqlalchemy import func as _func
-        ms_count = (await db.execute(
-            select(_func.count()).select_from(MatchScore).where(MatchScore.user_id == user_id)
-        )).scalar() or 0
-        if ms_count == 0:
-            await recompute_matches_for_user(user_id, reason=REASON_MANUAL)
-            await db.commit()
-
+        # Return the cached score for THIS scholarship if one exists — never
+        # recompute a scholarship that's already scored against this user.
         ms_result = await db.execute(
             select(MatchScore.score, MatchScore.breakdown).where(
                 MatchScore.user_id == user_id,
@@ -373,10 +366,12 @@ async def get_scholarship(slug: str, request: Request, db: AsyncSession = Depend
         if match:
             return _scholarship_response(scholarship, match.score, match.breakdown)
 
-        # On-demand single match: the user is logged in but has no cached score
-        # for THIS scholarship. This happens on a cold deep link (e.g. the user
-        # landed here from Google) for a scholarship added after their last full
-        # recompute. Compute just this pair so their breakdown shows immediately.
+        # Lazy on-demand single match: the user is logged in but has no cached
+        # score for THIS scholarship (cold deep link — e.g. landed from Google,
+        # or a scholarship added after their last recompute). Compute just this
+        # one pair so their breakdown shows immediately. We deliberately do NOT
+        # recompute the whole catalog here (the /scholarship list does that); a
+        # user who opened one scholarship gets one score.
         single = await compute_single_user_scholarship(db, user_id, scholarship.id)
         if single:
             return _scholarship_response(scholarship, single["score"], single["breakdown"])
