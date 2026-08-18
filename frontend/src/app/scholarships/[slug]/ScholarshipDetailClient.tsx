@@ -218,7 +218,12 @@ export default function ScholarshipDetailClient() {
         incrementScholarshipView(slug);
       }
     }
-  }, [params.slug]);
+    // Re-fetch when auth state changes: a guest who lands on this page (e.g.
+    // via a shared link) and then logs in on the same page must immediately
+    // get their match score + saved status without a manual reload. The first
+    // fetch carries no cookie (no user), so the score is absent until we fetch
+    // again with the now-present auth cookie.
+  }, [params.slug, isAuthenticated]);
 
   async function handleSave() {
     if (!scholarship) return;
