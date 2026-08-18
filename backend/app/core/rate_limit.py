@@ -229,6 +229,42 @@ async def probe_redis() -> dict:
 # ── Rule instances ────────────────────────────────────────────────
 # Identical values and names to the pre-M2 module so no route changes needed.
 
+
+async def check_rate_limit_identifier(
+    name: str,
+    identifier: str,
+    max_requests: int,
+    window_seconds: int,
+) -> tuple[bool, int]:
+    """Fixed-window rate check keyed by an arbitrary identifier string.
+
+    Unlike the `rate_limit()` dependency (which derives its identifier from
+    cookie/IP), this lets callers rate-limit by an explicit key — e.g. the
+    OAuth `sub` in `security.py`. Returns (is_over_limit, retry_after).
+    """
+    rule = RateLimitRule(name=name, max_requests=max_requests, window_seconds=window_seconds)
+    now = time.time()
+
+    r = await _get_redis()
+    if r is not None:
+        over, retry_after = await _redis_incr(r, rule, identifier, now)
+        if retry_after == -1:
+            pass  # Redis failed mid-request — fall through to in-memory
+        else:
+            return over, retry_after
+
+    _sweep_old_buckets(now)
+    key = f"{rule.name}:{identifier}"
+    timestamps = _MEM_BUCKETS[key]
+    while timestamps and now - timestamps[0] >= rule.window_seconds:
+        timestamps.popleft()
+    if len(timestamps) >= rule.max_requests:
+        retry_after = max(1, int(rule.window_seconds - (now - timestamps[0])))
+        return True, retry_after
+    timestamps.append(now)
+    return False, 0
+
+
 auth_register_rate_limit = rate_limit(
     "auth_register", max_requests=5, window_seconds=15 * 60
 )

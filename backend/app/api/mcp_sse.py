@@ -41,6 +41,7 @@ from app.mcp.oauth import (
     get_protected_resource_metadata,
     get_www_authenticate_header,
     get_server_url,
+    get_supported_scopes,
 )
 
 logger = logging.getLogger("scholarshipright.mcp_sse")
@@ -104,10 +105,12 @@ async def oauth_authorization_server_metadata():
         "issuer": server_url,
         "authorization_endpoint": f"{server_url}/api/auth/mcp-authorize",
         "token_endpoint": f"{server_url}/api/auth/mcp-token",
+        "revocation_endpoint": f"{server_url}/api/auth/mcp-revoke",
         "response_types_supported": ["code"],
-        "grant_types_supported": ["authorization_code"],
+        "grant_types_supported": ["authorization_code", "refresh_token"],
+        "revocation_endpoint_auth_methods_supported": ["none"],
         "code_challenge_methods_supported": ["S256"],
-        "scopes_supported": ["scholarships:read", "scholarships:write", "blogs:read", "blogs:write"],
+        "scopes_supported": get_supported_scopes(),
         "token_endpoint_auth_methods_supported": ["none"],
         "registration_endpoint": f"{server_url}/api/auth/mcp-register",
     }

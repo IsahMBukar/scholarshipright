@@ -866,10 +866,20 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 
 import hashlib
+import json
 import secrets as _secrets
 import time
+import uuid
 from base64 import urlsafe_b64encode
 from urllib.parse import urlparse
+
+from app.core.cache import get_redis as cache_get_redis
+from app.mcp.oauth import get_supported_scopes, is_oauth_enabled
+from app.models.mcp_refresh_token import (
+    McpRefreshToken,
+    generate_refresh_token,
+    hash_token,
+)
 
 # In-memory store for pending auth codes (code -> metadata)
 # TTL: 5 minutes. Max 1000 entries to prevent memory exhaustion.
@@ -884,6 +894,70 @@ def _cleanup_expired_codes() -> None:
     expired = [c for c, m in _mcp_auth_codes.items() if now > m["expires_at"]]
     for c in expired:
         _mcp_auth_codes.pop(c, None)
+
+
+async def _store_auth_code(auth_code: str, data: dict) -> bool:
+    """Store a pending auth code in Redis (preferred), in-memory fallback.
+
+    Returns True if stored (Redis), False if it went to the in-memory dict
+    (single-process fallback). Redis-backed codes survive restarts and are
+    shared across uvicorn workers.
+    """
+    r = await cache_get_redis()
+    if r is not None:
+        try:
+            await r.set(
+                f"mcp_auth_code:{auth_code}",
+                json.dumps(data),
+                ex=_AUTH_CODE_TTL,
+            )
+            return True
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "Redis set failed for auth code; using in-memory fallback",
+                exc_info=True,
+            )
+    _mcp_auth_codes[auth_code] = data
+    return False
+
+
+async def _pop_auth_code(auth_code: str) -> dict | None:
+    """Pop and return a pending auth code (single-use). Redis-first.
+
+    Returns None if the code is absent/expired.
+    """
+    r = await cache_get_redis()
+    if r is not None:
+        try:
+            raw = await r.get(f"mcp_auth_code:{auth_code}")
+            if raw:
+                await r.delete(f"mcp_auth_code:{auth_code}")
+                return json.loads(raw)
+            return None
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "Redis get failed for auth code; using in-memory fallback",
+                exc_info=True,
+            )
+    return _mcp_auth_codes.pop(auth_code, None)
+
+
+def _normalize_mcp_scope(requested: str) -> str:
+    """Normalize the requested MCP scope against the supported set.
+
+    MCP connections on this app are admin-only (the authorize endpoint requires
+    is_admin), so when the requested scope is empty or contains nothing we
+    advertise, we grant the full supported set rather than silently downgrading
+    to read-only (the historical bug). A valid explicit subset is respected.
+    """
+    supported = set(get_supported_scopes())
+    if not supported:
+        return requested
+    requested_set = {s.strip() for s in requested.split() if s.strip()}
+    granted = requested_set & supported
+    if not granted:
+        granted = set(supported)
+    return " ".join(sorted(granted))
 
 
 def _validate_redirect_uri(uri: str) -> str | None:
@@ -1024,7 +1098,7 @@ async def mcp_authorize(
         redirect_uri = request.query_params.get("redirect_uri", "")
         response_type = request.query_params.get("response_type", "code")
         state = request.query_params.get("state", "")
-        scope = request.query_params.get("scope", "scholarships:read")
+        scope = _normalize_mcp_scope(request.query_params.get("scope", ""))
         code_challenge = request.query_params.get("code_challenge", "")
         code_challenge_method = request.query_params.get("code_challenge_method", "")
 
@@ -1035,6 +1109,8 @@ async def mcp_authorize(
             return JSONResponse(status_code=400, content={"error": "unsupported_response_type", "error_description": "Only 'code' is supported"})
         if not code_challenge:
             return JSONResponse(status_code=400, content={"error": "invalid_request", "error_description": "code_challenge required (PKCE)"})
+        if code_challenge_method and code_challenge_method != "S256":
+            return JSONResponse(status_code=400, content={"error": "invalid_request", "error_description": "Only S256 PKCE is supported"})
 
         return HTMLResponse(
             _mcp_login_form_html(
@@ -1051,7 +1127,7 @@ async def mcp_authorize(
     redirect_uri = str(form.get("redirect_uri", ""))
     response_type = str(form.get("response_type", "code"))
     state = str(form.get("state", ""))
-    scope = str(form.get("scope", "scholarships:read"))
+    scope = _normalize_mcp_scope(str(form.get("scope", "")))
     code_challenge = str(form.get("code_challenge", ""))
     code_challenge_method = str(form.get("code_challenge_method", ""))
     email = str(form.get("email", "")).strip().lower()
@@ -1060,6 +1136,10 @@ async def mcp_authorize(
     uri_error = _validate_redirect_uri(redirect_uri)
     if uri_error:
         return JSONResponse(status_code=400, content={"error": "invalid_request", "error_description": uri_error})
+    if not code_challenge:
+        return JSONResponse(status_code=400, content={"error": "invalid_request", "error_description": "code_challenge required (PKCE)"})
+    if code_challenge_method and code_challenge_method != "S256":
+        return JSONResponse(status_code=400, content={"error": "invalid_request", "error_description": "Only S256 PKCE is supported"})
 
     def _form_error(msg, status_code=400):
         return HTMLResponse(
@@ -1086,15 +1166,14 @@ async def mcp_authorize(
     if not getattr(user, "is_admin", False):
         return _form_error("Only admin and staff members can connect AI agents.", 403)
 
-    # Enforce cap on stored auth codes
+    # Enforce cap on in-memory fallback auth codes (Redis has its own TTL).
+    _cleanup_expired_codes()
     if len(_mcp_auth_codes) >= _MAX_AUTH_CODES:
-        _cleanup_expired_codes()
-        if len(_mcp_auth_codes) >= _MAX_AUTH_CODES:
-            logger.error("MCP auth codes at capacity (%d), rejecting", _MAX_AUTH_CODES)
-            return _form_error("Server busy. Please try again in a moment.", 503)
+        logger.error("MCP auth codes at capacity (%d), rejecting", _MAX_AUTH_CODES)
+        return _form_error("Server busy. Please try again in a moment.", 503)
 
     auth_code = _secrets.token_urlsafe(32)
-    _mcp_auth_codes[auth_code] = {
+    await _store_auth_code(auth_code, {
         "user_id": str(user.id),
         "email": user.email,
         "client_id": client_id,
@@ -1103,7 +1182,7 @@ async def mcp_authorize(
         "code_challenge": code_challenge,
         "code_challenge_method": code_challenge_method,
         "expires_at": time.time() + _AUTH_CODE_TTL,
-    }
+    })
 
     logger.info("MCP OAuth: auth code issued for user=%s client=%s scope=%s", email, client_id, scope)
 
@@ -1114,9 +1193,163 @@ async def mcp_authorize(
     return RedirectResponse(url=callback, status_code=302)
 
 
+async def _issue_mcp_tokens(
+    db: AsyncSession,
+    user_id: str,
+    email: str,
+    client_id: str,
+    scope: str,
+    request: Request | None = None,
+) -> dict:
+    """Issue an access token + revocable refresh token pair for an MCP user.
+
+    The access token is a short-lived stateless JWT. The refresh token is a
+    long-lived opaque token stored hashed in the DB so it can be revoked and
+    rotated. Returns the full token response body plus the new refresh token
+    row id (for rotation bookkeeping).
+    """
+    settings = get_settings()
+    now = datetime.now(timezone.utc)
+    server_url = _get_server_url()
+    access_ttl = settings.mcp_access_token_ttl
+    refresh_ttl = settings.mcp_refresh_token_ttl
+
+    token_payload = {
+        "sub": user_id,
+        "email": email,
+        "client_id": client_id or "mcp-client",
+        "scope": scope,
+        "iss": server_url,
+        "aud": settings.mcp_oauth_audience or server_url,
+        "iat": int(now.timestamp()),
+        "exp": int(now.timestamp()) + access_ttl,
+        "jti": uuid.uuid4().hex,
+    }
+    access_token = jwt.encode(token_payload, settings.jwt_secret, algorithm=ALGORITHM)
+
+    raw_refresh = generate_refresh_token()
+    rt = McpRefreshToken(
+        token_hash=hash_token(raw_refresh),
+        token_prefix=raw_refresh[:8],
+        user_id=uuid.UUID(user_id),
+        client_id=client_id or "mcp-client",
+        scope=scope,
+        expires_at=now + timedelta(seconds=refresh_ttl),
+        ip_address=(request.client.host if request and request.client else None),
+        user_agent=(str(request.headers.get("user-agent", ""))[:500] if request else None),
+    )
+    db.add(rt)
+    await db.commit()
+
+    return {
+        "access_token": access_token,
+        "token_type": "Bearer",
+        "expires_in": access_ttl,
+        "refresh_token": raw_refresh,
+        "refresh_expires_in": refresh_ttl,
+        "scope": scope,
+        "refresh_token_id": str(rt.id),
+    }
+
+
+async def _token_auth_code(request: Request, db: AsyncSession, form) -> JSONResponse:
+    """authorization_code grant — exchange an auth code for tokens."""
+    code = str(form.get("code", ""))
+    redirect_uri = str(form.get("redirect_uri", ""))
+    client_id = str(form.get("client_id", ""))
+    code_verifier = str(form.get("code_verifier", ""))
+
+    if not code:
+        return JSONResponse(status_code=400, content={"error": "invalid_grant", "error_description": "Invalid or expired authorization code"})
+
+    code_data = await _pop_auth_code(code)
+    if not code_data:
+        return JSONResponse(status_code=400, content={"error": "invalid_grant", "error_description": "Invalid or expired authorization code"})
+
+    if code_data["redirect_uri"] != redirect_uri:
+        return JSONResponse(status_code=400, content={"error": "invalid_grant", "error_description": "redirect_uri mismatch"})
+
+    # PKCE is mandatory (authorize enforces a code_challenge) — always verify.
+    challenge = code_data.get("code_challenge")
+    if not challenge:
+        return JSONResponse(status_code=400, content={"error": "invalid_grant", "error_description": "PKCE challenge missing"})
+    computed_challenge = (
+        urlsafe_b64encode(hashlib.sha256(code_verifier.encode("ascii")).digest())
+        .rstrip(b"=").decode("ascii")
+    )
+    if computed_challenge != challenge:
+        return JSONResponse(status_code=400, content={"error": "invalid_grant", "error_description": "PKCE verification failed"})
+
+    scope = code_data.get("scope") or _normalize_mcp_scope("")
+    tokens = await _issue_mcp_tokens(
+        db,
+        code_data["user_id"],
+        code_data["email"],
+        code_data.get("client_id") or client_id or "mcp-client",
+        scope,
+        request,
+    )
+    tokens.pop("refresh_token_id", None)
+    logger.info("MCP OAuth: access + refresh issued for user=%s scope=%s", code_data["email"], scope)
+    return JSONResponse(content=tokens)
+
+
+async def _token_refresh(request: Request, db: AsyncSession, form) -> JSONResponse:
+    """refresh_token grant — mint a fresh access token + rotated refresh token."""
+    refresh_token = str(form.get("refresh_token", ""))
+    if not refresh_token:
+        return JSONResponse(status_code=400, content={"error": "invalid_request", "error_description": "refresh_token is required"})
+
+    token_hash = hash_token(refresh_token)
+    result = await db.execute(
+        select(McpRefreshToken).where(McpRefreshToken.token_hash == token_hash)
+    )
+    rt = result.scalar_one_or_none()
+
+    now = datetime.now(timezone.utc)
+    if not rt:
+        return JSONResponse(status_code=400, content={"error": "invalid_grant", "error_description": "Invalid refresh token"})
+    if rt.revoked_at is not None:
+        # Reuse of a rotated/revoked token → likely theft. Reject and leave
+        # the chain revoked so a stolen token can't keep minting.
+        logger.warning("MCP OAuth: refresh token reuse detected (id=%s)", rt.id)
+        return JSONResponse(status_code=400, content={"error": "invalid_grant", "error_description": "Refresh token has been revoked"})
+    if rt.expires_at <= now:
+        return JSONResponse(status_code=400, content={"error": "invalid_grant", "error_description": "Refresh token has expired"})
+
+    # Re-verify the user is still active + admin before re-granting.
+    uresult = await db.execute(select(User).where(User.id == rt.user_id))
+    user = uresult.scalar_one_or_none()
+    if not user or not user.is_active or not getattr(user, "is_admin", False):
+        rt.revoked_at = now
+        await db.commit()
+        return JSONResponse(status_code=400, content={"error": "invalid_grant", "error_description": "Account no longer authorized"})
+
+    # Issue a new pair, then rotate: revoke the old refresh token.
+    tokens = await _issue_mcp_tokens(
+        db, str(rt.user_id), user.email, rt.client_id, rt.scope, request,
+    )
+    successor_id = tokens.pop("refresh_token_id", None)
+    rt.revoked_at = now
+    if successor_id:
+        rt.replaced_by = uuid.UUID(successor_id)
+    await db.commit()
+
+    logger.info("MCP OAuth: refresh for user=%s scope=%s", user.email, rt.scope)
+    return JSONResponse(content=tokens)
+
+
 @router.post("/mcp-token")
-async def mcp_token(request: Request):
-    """OAuth 2.0 Token Endpoint (RFC 6749) with PKCE (RFC 7636)."""
+async def mcp_token(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """OAuth 2.0 Token Endpoint (RFC 6749) with PKCE (RFC 7636).
+
+    Supports:
+      grant_type=authorization_code  — exchange code (PKCE) for tokens
+      grant_type=refresh_token       — mint a fresh access token + rotate
+    """
     from app.core.rate_limit import mcp_token_rate_limit
     await mcp_token_rate_limit(request)
 
@@ -1124,55 +1357,62 @@ async def mcp_token(request: Request):
 
     form = await request.form()
     grant_type = str(form.get("grant_type", ""))
-    code = str(form.get("code", ""))
-    redirect_uri = str(form.get("redirect_uri", ""))
-    client_id = str(form.get("client_id", ""))
-    code_verifier = str(form.get("code_verifier", ""))
 
-    if grant_type != "authorization_code":
-        return JSONResponse(status_code=400, content={"error": "unsupported_grant_type", "error_description": "Only authorization_code is supported"})
+    if grant_type == "authorization_code":
+        return await _token_auth_code(request, db, form)
+    if grant_type == "refresh_token":
+        return await _token_refresh(request, db, form)
 
-    if not code or code not in _mcp_auth_codes:
-        return JSONResponse(status_code=400, content={"error": "invalid_grant", "error_description": "Invalid or expired authorization code"})
+    return JSONResponse(
+        status_code=400,
+        content={"error": "unsupported_grant_type", "error_description": "Supported grants: authorization_code, refresh_token"},
+    )
 
-    code_data = _mcp_auth_codes.pop(code)
 
-    if code_data["redirect_uri"] != redirect_uri:
-        return JSONResponse(status_code=400, content={"error": "invalid_grant", "error_description": "redirect_uri mismatch"})
+@router.post("/mcp-revoke")
+async def mcp_revoke(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """OAuth 2.0 Token Revocation (RFC 7009).
 
-    if code_data.get("code_challenge"):
-        computed_challenge = (
-            urlsafe_b64encode(hashlib.sha256(code_verifier.encode("ascii")).digest())
-            .rstrip(b"=").decode("ascii")
-        )
-        if computed_challenge != code_data["code_challenge"]:
-            return JSONResponse(status_code=400, content={"error": "invalid_grant", "error_description": "PKCE verification failed"})
+    Revokes a refresh token (the meaningful control — access JWTs are
+    stateless and self-expire). The agent can then no longer mint new
+    access tokens, i.e. it is effectively disconnected.
+    """
+    from app.core.rate_limit import mcp_register_rate_limit
+    await mcp_register_rate_limit(request)
 
-    settings = get_settings()
+    form = await request.form()
+    token = str(form.get("token", ""))
+    token_type_hint = str(form.get("token_type_hint", ""))
+
+    if not token:
+        return JSONResponse(status_code=400, content={"error": "invalid_request", "error_description": "token is required"})
+
     now = datetime.now(timezone.utc)
-    scope = code_data.get("scope", "scholarships:read")
-    server_url = _get_server_url()
 
-    token_payload = {
-        "sub": code_data["user_id"],
-        "email": code_data["email"],
-        "client_id": code_data.get("client_id", "mcp-client"),
-        "scope": scope,
-        "iss": server_url,
-        "aud": get_settings().mcp_oauth_audience or server_url,
-        "iat": int(now.timestamp()),
-        "exp": int(now.timestamp()) + 3600,
-    }
-    access_token = jwt.encode(token_payload, settings.jwt_secret, algorithm=ALGORITHM)
+    if token_type_hint == "access_token":
+        # Access tokens are stateless JWTs — nothing server-side to revoke.
+        # Always respond success per RFC 7009 (idempotent).
+        logger.info("MCP OAuth: revoke access_token requested (no-op, stateless JWT)")
+        return JSONResponse(status_code=200, content={})
 
-    logger.info("MCP OAuth: token issued for user=%s scope=%s", code_data["email"], scope)
+    # Default / refresh_token: revoke the matching stored refresh token.
+    result = await db.execute(
+        select(McpRefreshToken).where(McpRefreshToken.token_hash == hash_token(token))
+    )
+    rt = result.scalar_one_or_none()
+    if rt and rt.revoked_at is None:
+        rt.revoked_at = now
+        await db.commit()
+        logger.info(
+            "MCP OAuth: refresh token revoked id=%s user=%s client=%s",
+            rt.id, rt.user_id, rt.client_id,
+        )
 
-    return JSONResponse(content={
-        "access_token": access_token,
-        "token_type": "Bearer",
-        "expires_in": 3600,
-        "scope": scope,
-    })
+    # RFC 7009: always return 200 even if the token was invalid/already revoked.
+    return JSONResponse(status_code=200, content={})
 
 
 @router.post("/mcp-register")
@@ -1203,7 +1443,7 @@ async def mcp_register(request: Request):
         content={
             "client_id": client_id,
             "client_id_issued_at": int(time.time()),
-            "grant_types": ["authorization_code"],
+            "grant_types": ["authorization_code", "refresh_token"],
             "response_types": ["code"],
             "redirect_uris": redirect_uris,
             "token_endpoint_auth_method": "none",

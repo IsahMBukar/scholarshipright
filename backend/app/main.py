@@ -40,6 +40,7 @@ from app.models.scholarship import (
 )
 from app.models.pending_scholarship import ensure_pending_scholarships_table
 from app.mcp.auth import ensure_mcp_api_keys_table
+from app.models.mcp_refresh_token import ensure_mcp_refresh_tokens_table
 from app.mcp.security import ensure_mcp_security_tables
 from app.mcp.oauth import load_oauth_config
 from app.models.blog import ensure_blog_tables
@@ -153,6 +154,12 @@ async def lifespan(app: FastAPI):
         await ensure_mcp_security_tables()
     except Exception as e:  # noqa: BLE001
         logger.exception("ensure_mcp_security_tables failed: %s", e)
+
+    # Startup: ensure mcp_refresh_tokens table exists (idempotent).
+    try:
+        await ensure_mcp_refresh_tokens_table()
+    except Exception as e:  # noqa: BLE001
+        logger.exception("ensure_mcp_refresh_tokens_table failed: %s", e)
 
     # Startup: ensure blog tables exist (idempotent).
     try:

@@ -96,6 +96,15 @@ def is_oauth_enabled() -> bool:
     return _oauth_enabled
 
 
+def get_supported_scopes() -> list[str]:
+    """Return the list of scopes this MCP server supports.
+
+    Used by the token/authorize endpoints to default the requested scope and
+    to validate that a requested scope is within the advertised set.
+    """
+    return list(_scopes_supported)
+
+
 def get_server_url() -> str:
     """Return the MCP server's public URL (for OAuth metadata)."""
     return _server_url.rstrip("/")

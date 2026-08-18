@@ -133,6 +133,28 @@ async def require_mcp_auth(request: Request, db: AsyncSession = Depends(get_db))
         claims = await validate_oauth_token(raw_token)
         if claims:
             scopes = get_token_scopes(claims)
+            # Rate-limit the OAuth branch per user (sub) — the API-key branch
+            # is already limited in its own block; OAuth previously had none.
+            from app.core.rate_limit import check_rate_limit_identifier
+            from app.core.config import get_settings
+            settings = get_settings()
+            over, retry_after = await check_rate_limit_identifier(
+                "mcp_oauth",
+                f"oauth:{claims.get('sub', 'unknown')}",
+                settings.mcp_oauth_rate_limit_per_hour,
+                3600,
+            )
+            if over:
+                logger.warning(
+                    "MCP OAuth rate limit exceeded: sub=%s client=%s",
+                    claims.get("sub", "?"),
+                    claims.get("client_id", claims.get("azp", "?")),
+                )
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"MCP OAuth rate limit exceeded. Retry in {retry_after}s.",
+                    headers={"Retry-After": str(retry_after)},
+                )
             logger.info(
                 "MCP OAuth auth: sub=%s client=%s scopes=%s",
                 claims.get("sub", "?"),

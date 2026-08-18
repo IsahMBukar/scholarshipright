@@ -79,6 +79,19 @@ class Settings(BaseSettings):
     mcp_oauth_server_url: str = ""
     mcp_oauth_audience: str = ""
 
+    # MCP OAuth token lifetimes (seconds).
+    # Access tokens are short-lived JWTs; refresh tokens are long-lived and
+    # revoked when rotated / explicitly disconnected.
+    mcp_access_token_ttl: int = Field(default=3600, alias="MCP_ACCESS_TOKEN_TTL")
+    mcp_refresh_token_ttl: int = Field(
+        default=30 * 24 * 3600, alias="MCP_REFRESH_TOKEN_TTL"
+    )
+    # Per-user OAuth rate limit on live MCP tool calls (protects the OAuth
+    # branch which, unlike API keys, previously had no rate limit).
+    mcp_oauth_rate_limit_per_hour: int = Field(
+        default=3000, alias="MCP_OAUTH_RATE_LIMIT_PER_HOUR"
+    )
+
     # pydantic-settings v2 model_config. extra="ignore" lets us keep
     # extra env vars (agent_*, dev_return_reset_token) in .env without
     # declaring them on the model. The original inner-class Config
