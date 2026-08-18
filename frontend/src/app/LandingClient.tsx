@@ -264,7 +264,7 @@ export default function LandingClient() {
           <nav className="flex flex-col">
             {isAuthed ? (
               <Link
-                href="/dashboard"
+                href="/scholarships"
                 onClick={closeDrawer}
                 className="flex items-center gap-3 px-3 py-3.5 rounded-xl text-[15px] font-semibold text-[#1a1a1a] hover:bg-[#fdfbf7] active:bg-[#fdfbf7] transition"
               >
@@ -292,7 +292,7 @@ export default function LandingClient() {
         {/* Drawer footer */}
         <div className="px-5 py-4 border-t border-[#f0ebe0]">
           <Link
-            href={isAuthed ? '/dashboard' : '/signup'}
+            href={isAuthed ? '/scholarships' : '/signup'}
             onClick={closeDrawer}
             className="flex items-center justify-center w-full py-3.5 bg-[#f5b942] text-[#1a1a1a] text-sm font-bold rounded-xl hover:bg-[#d4972e] transition"
           >
@@ -327,7 +327,7 @@ export default function LandingClient() {
           ))}
         </div>
         <Link
-          href={isAuthed ? '/dashboard' : '/signup'}
+          href={isAuthed ? '/scholarships' : '/signup'}
           className="ml-[clamp(0.125rem,0.05rem+0.3vw,0.5rem)] flex-shrink-0 inline-flex items-center justify-center w-[4.5rem] h-[1.75rem] sm:w-[6.5rem] sm:h-[2.25rem] md:w-[8rem] md:h-[2.5rem] text-[0.625rem] sm:text-sm md:text-base font-semibold text-[#1a1a1a] bg-[#f5b942] rounded-full hover:bg-[#d4972e] hover:text-white transition whitespace-nowrap"
         >
           {isAuthed ? 'Dashboard' : 'Start free'}
@@ -676,7 +676,7 @@ export default function LandingClient() {
           </Link>
           <p className="text-xs text-gray-400 mt-5">
             {isAuthed ? (
-              <Link href="/dashboard" className="text-[#d4972e] font-semibold hover:underline">
+              <Link href="/scholarships" className="text-[#d4972e] font-semibold hover:underline">
                 Continue to Dashboard →
               </Link>
             ) : (

@@ -18,7 +18,7 @@ from app.services.document_defaults import apply_auto_defaults
 from app.api.users import COOKIE_NAME
 from app.api.auth import decode_token
 from app.models.user import User
-from app.services.match_auto import recompute_matches_for_user, REASON_MANUAL
+from app.services.match_auto import recompute_matches_for_user, compute_single_user_scholarship, REASON_MANUAL
 from app.core.cache import cache_get, cache_set, cache_invalidate, CacheKeys, invalidate_scholarship_caches
 
 router = APIRouter()
@@ -372,6 +372,14 @@ async def get_scholarship(slug: str, request: Request, db: AsyncSession = Depend
         match = ms_result.first()
         if match:
             return _scholarship_response(scholarship, match.score, match.breakdown)
+
+        # On-demand single match: the user is logged in but has no cached score
+        # for THIS scholarship. This happens on a cold deep link (e.g. the user
+        # landed here from Google) for a scholarship added after their last full
+        # recompute. Compute just this pair so their breakdown shows immediately.
+        single = await compute_single_user_scholarship(db, user_id, scholarship.id)
+        if single:
+            return _scholarship_response(scholarship, single["score"], single["breakdown"])
 
     # Materialise the 5 "cement + flexible" fields from degree_levels
     apply_auto_defaults(scholarship)

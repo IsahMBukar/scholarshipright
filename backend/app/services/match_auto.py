@@ -449,6 +449,95 @@ async def recompute_scholarship_for_all_users(scholarship_id: UUID) -> dict:
             return {"status": "error", "error": str(e)[:200]}
 
 
+async def compute_single_user_scholarship(
+    db: AsyncSession,
+    user_id: UUID,
+    scholarship_id: UUID,
+    reason: str = REASON_MANUAL,
+) -> Optional[dict]:
+    """Compute (and cache) the match score for ONE user × ONE scholarship.
+
+    Used by the scholarship detail endpoint so that a logged-in user who
+    lands on a scholarship page directly (deep link — e.g. from Google) still
+    gets their score breakdown immediately, even if this particular
+    scholarship has no cached MatchScore row yet (e.g. it was added after the
+    user's last full recompute).
+
+    Returns {\"score\": float, \"breakdown\": dict} or None if the user has no
+    profile or the scholarship scores <= 0 (not a match). Runs in the caller's
+    session so the returned values and the cached row stay consistent.
+    """
+    try:
+        profile_result = await db.execute(select(Profile).where(Profile.user_id == user_id))
+        profile = profile_result.scalar_one_or_none()
+        if not profile:
+            return None
+
+        sch_result = await db.execute(
+            select(Scholarship).where(
+                Scholarship.id == scholarship_id,
+                Scholarship.is_active == True,  # noqa: E712
+            )
+        )
+        sch = sch_result.scalar_one_or_none()
+        if not sch:
+            return None
+
+        resume_result = await db.execute(
+            select(Resume).where(Resume.user_id == user_id, Resume.is_primary == True)  # noqa: E712
+        )
+        resume = resume_result.scalar_one_or_none()
+        if not resume:
+            resume_result = await db.execute(
+                select(Resume).where(Resume.user_id == user_id).order_by(Resume.updated_at.desc())
+            )
+            resume = resume_result.scalar_one_or_none()
+
+        eligibility_info = passes_country_gate(
+            user_nationality=getattr(profile, "nationality_code", None),
+            user_residency=getattr(profile, "residency_code", None),
+            eligibility_basis=getattr(sch, "eligibility_basis", "either") or "either",
+            resolved_countries=list(getattr(sch, "resolved_countries", []) or []),
+            eligibility_unresolved=bool(getattr(sch, "eligibility_unresolved", False)),
+            eligibility_display=getattr(sch, "eligibility_display", None),
+        )
+
+        result = compute_match_score(profile, sch, resume=resume, eligibility_info=eligibility_info)
+        if result["score"] <= 0:
+            return None
+
+        # Upsert the cached row so subsequent visits are instant.
+        await db.execute(
+            delete(MatchScore).where(
+                MatchScore.user_id == user_id,
+                MatchScore.scholarship_id == scholarship_id,
+            )
+        )
+        db.add(MatchScore(
+            user_id=user_id,
+            scholarship_id=scholarship_id,
+            score=result["score"],
+            breakdown=result["breakdown"],
+        ))
+        await db.commit()
+
+        logger.info(
+            "single match computed user=%s scholarship=%s reason=%s score=%s",
+            user_id, scholarship_id, reason, result["score"],
+        )
+        return {"score": result["score"], "breakdown": result["breakdown"]}
+    except IntegrityError:
+        await db.rollback()
+        return None
+    except Exception as e:  # noqa: BLE001
+        await db.rollback()
+        logger.warning(
+            "single match compute failed user=%s scholarship=%s: %s",
+            user_id, scholarship_id, e,
+        )
+        return None
+
+
 async def clear_user_matches(user_id: UUID) -> None:
     """Hard-delete a user's cached matches (e.g. after their resume is removed)."""
     async with AsyncSessionLocal() as db:
