@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { Profile } from '@/services/api';
 import { COUNTRY_NAMES } from '@/data/countries';
-import { FIELDS_OF_STUDY } from '@/data/fieldsOfStudy';
+import FieldOfStudyPicker from '@/components/form/FieldOfStudyPicker';
 
 /**
  * ProfileSlide — slide 2 of the onboarding carousel.
@@ -321,16 +321,16 @@ export default function ProfileSlide({
           <label className="text-[12px] font-bold text-text-secondary uppercase tracking-wide block mb-1.5">
             Field of study
           </label>
-          <select
-            value={field}
-            onChange={(e) => setField(e.target.value)}
-            className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-btn text-[14px] text-text-primary focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
-          >
-            <option value="">Select a field…</option>
-            {FIELDS_OF_STUDY.map(f => (
-              <option key={f.value} value={f.value}>{f.label}</option>
-            ))}
-          </select>
+          <FieldOfStudyPicker
+            value={field ? [field] : []}
+            onChange={(next) => setField(next[0] ?? '')}
+            placeholder="Select a field…"
+          />
+          {field && (
+            <p className="mt-1.5 text-[12px] text-text-secondary">
+              Matched against scholarships in <span className="font-medium text-text-primary">{field}</span>
+            </p>
+          )}
         </div>
 
         {/* Target countries (multi-select chips) */}
