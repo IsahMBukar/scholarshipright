@@ -7,6 +7,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Plus, Pencil, Trash2, ExternalLink, ChevronDown, ChevronUp, X, Search } from 'lucide-react';
+import { Skeleton } from '@/components/admin/ui/Skeleton';
 import AdminLayout from '@/components/admin/AdminLayout';
 import Button from '@/components/admin/ui/Button';
 import Badge, { type BadgeTone } from '@/components/admin/ui/Badge';
@@ -409,8 +410,8 @@ export default function AdminGroupsPage() {
         {groups.isLoading && (
           <div className="space-y-3">
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-20 bg-gray-100 rounded-lg animate-pulse" />
-            ))}
+                          <Skeleton key={i} className="h-20 rounded-lg" />
+                        ))}
           </div>
         )}
 

@@ -1,7 +1,5 @@
+import { AdminPageSkeleton } from '@/components/admin/ui/Skeleton';
+
 export default function Loading() {
-  return (
-    <div className="flex items-center justify-center h-64">
-      <div className="animate-pulse text-text-secondary">Loading review queue...</div>
-    </div>
-  );
+  return <AdminPageSkeleton variant="table" />;
 }

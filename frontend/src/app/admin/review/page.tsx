@@ -14,6 +14,7 @@ import {
   ExternalLink,
   AlertTriangle,
   Eye,
+  Loader2,
 } from 'lucide-react';
 import AdminLayout from '@/components/admin/AdminLayout';
 import DataTable, { type Column } from '@/components/admin/ui/DataTable';
@@ -375,7 +376,10 @@ export default function ReviewQueuePage() {
             </details>
           </div>
         ) : (
-          <div className="text-text-secondary text-sm">Loading...</div>
+          <div className="flex items-center gap-2 text-text-secondary text-sm py-8 justify-center">
+            <Loader2 className="w-4 h-4 animate-spin text-primary-readable" />
+            Loading…
+          </div>
         )}
       </Drawer>
     </AdminLayout>

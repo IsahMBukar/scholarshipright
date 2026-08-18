@@ -30,6 +30,7 @@ import { ChevronDown, ChevronUp, ChevronsUpDown, Search } from 'lucide-react';
 import Button from './Button';
 import Badge from './Badge';
 import EmptyState from './EmptyState';
+import { Skeleton } from './Skeleton';
 
 export type SortDir = 'asc' | 'desc' | null;
 
@@ -289,16 +290,16 @@ export default function DataTable<T>({
           </thead>
           <tbody>
             {isLoading ? (
-              Array.from({ length: Math.min(pageSize, 8) }).map((_, i) => (
-                <tr key={`sk-${i}`} className="border-b border-gray-100">
-                  {columns.map((col) => (
-                    <td key={col.key} className="px-3 py-3">
-                      <div className="h-4 w-3/4 rounded bg-gray-100 animate-pulse" />
-                    </td>
-                  ))}
-                </tr>
-              ))
-            ) : error ? (
+                          Array.from({ length: Math.min(pageSize, 8) }).map((_, i) => (
+                            <tr key={`sk-${i}`} className="border-b border-gray-100">
+                              {columns.map((col) => (
+                                <td key={col.key} className="px-3 py-3">
+                                  <Skeleton className="h-4 w-3/4" />
+                                </td>
+                              ))}
+                            </tr>
+                          ))
+                        ) : error ? (
               <tr>
                 <td colSpan={columns.length + 1} className="px-3 py-12 text-center text-sm text-red-600">
                   {error}
