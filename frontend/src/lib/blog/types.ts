@@ -33,6 +33,12 @@ export interface BlogPostOut {
   created_at: string;
   updated_at: string;
   scholarship_tags: ScholarshipTagOut[];
+  // Present while status='pending_review' after an external (MCP) edit
+  pending_changes?: {
+    edited_via?: string;
+    changed_fields: string[];
+    old: Record<string, unknown>;
+  } | null;
 }
 
 export interface BlogListOut {
@@ -46,6 +52,8 @@ export interface BlogListOut {
   tags: string[];
   reading_time_minutes: number;
   view_count: number;
+  status: string;
+  has_pending_changes?: boolean;
   published_at?: string | null;
 }
 

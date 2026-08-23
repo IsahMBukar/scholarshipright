@@ -47,6 +47,20 @@ export async function fetchBlogCategories(): Promise<string[]> {
 
 // ── Authenticated endpoints ──────────────────────────────────────
 
+function throwApiError(err: any, fallback: string): never {
+  const detail = err?.detail;
+  if (detail && typeof detail === 'object' && detail.code === 'scholarship_tag_invalid') {
+    const e: any = new Error(detail.message || `Invalid slugs: ${(detail.invalid_slugs || []).join(', ')}`);
+    e.code = detail.code;
+    e.invalid_slugs = detail.invalid_slugs;
+    e.suggestions = detail.suggestions;
+    e.detail = detail;
+    throw e;
+  }
+  const msg = typeof detail === 'string' ? detail : detail?.message || detail?.detail || fallback;
+  throw new Error(msg);
+}
+
 export async function createBlogPost(
   payload: BlogCreatePayload,
 ): Promise<BlogPostOut> {
@@ -58,7 +72,7 @@ export async function createBlogPost(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Create failed: ${res.status}`);
+    throwApiError(err, `Create failed: ${res.status}`);
   }
   return res.json();
 }
@@ -75,8 +89,19 @@ export async function updateBlogPost(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Update failed: ${res.status}`);
+    throwApiError(err, `Update failed: ${res.status}`);
   }
+  return res.json();
+}
+
+export async function validateScholarshipSlugs(slugs: string[]): Promise<{ valid: string[]; invalid: { slug: string; suggestions: { slug: string; name: string; host_country?: string }[] }[] }> {
+  const res = await fetch(`${API_URL}/api/scholarships/validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ slugs }),
+  });
+  if (!res.ok) throw new Error(`Validate failed: ${res.status}`);
   return res.json();
 }
 
@@ -107,5 +132,13 @@ export async function adminFetchAllPosts(params?: {
     credentials: 'include',
   });
   if (!res.ok) throw new Error(`Admin fetch failed: ${res.status}`);
+  return res.json();
+}
+
+export async function adminFetchPost(postId: string): Promise<BlogPostOut> {
+  const res = await fetch(`${API_URL}/api/blog/admin/${postId}`, {
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(`Post not found: ${res.status}`);
   return res.json();
 }

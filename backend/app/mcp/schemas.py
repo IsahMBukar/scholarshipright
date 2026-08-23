@@ -176,7 +176,11 @@ SCHOLARSHIP_FIELDS = {
 
 BLOG_FIELDS = {
     "title": {"type": "string", "description": "Blog post title (3-300 chars)", "required": True},
-    "body": {"type": "string", "description": "Post content in Markdown. Use @[scholarship:slug] to embed scholarship cards inline.", "required": True},
+    "body": {
+        "type": "string",
+        "description": "Post content in Markdown. Use @[scholarship:slug] to embed scholarship cards. IMPORTANT: every slug MUST be verified via list_scholarships (search) or POST /api/scholarships/validate before use. Unverified/inactive slugs cause 422 error with suggestions. Never guess slugs.",
+        "required": True,
+    },
     "excerpt": {"type": "string", "description": "Short summary shown in the blog list (optional, auto-generated if omitted)"},
     "cover_image_url": {"type": "string", "description": "URL to the cover/hero image"},
     "category": {
@@ -265,7 +269,7 @@ def get_tool_schemas() -> dict:
         },
         # Blog tools
         "create_blog_post": {
-            "description": "Create a new blog post. AI submissions go to pending_review for admin approval before publishing. Use @[scholarship:slug] in the body to embed scholarship cards inline.",
+            "description": "Create a new blog post. AI submissions go to pending_review for admin approval. Use @[scholarship:slug] to embed cards. MUST verify slugs via list_scholarships or POST /api/scholarships/validate first. Invalid/inactive slugs return error with suggestions.",
             "inputSchema": {
                 "type": "object",
                 "properties": blog_properties,
@@ -296,7 +300,7 @@ def get_tool_schemas() -> dict:
             },
         },
         "edit_blog_post": {
-            "description": "Edit an existing blog post. Only pass the fields you want to change. Use post_id (UUID) from get_blog_post or list_blog_posts.",
+            "description": "Edit an existing blog post. Only pass the fields you want to change. Use post_id (UUID). Body @[scholarship:slug] markers are validated — invalid/inactive slugs error with suggestions. Verify via list_scholarships or POST /api/scholarships/validate.",
             "inputSchema": {
                 "type": "object",
                 "properties": {

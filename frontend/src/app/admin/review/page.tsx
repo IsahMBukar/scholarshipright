@@ -173,17 +173,22 @@ export default function ReviewQueuePage() {
     {
       key: 'name',
       header: 'Scholarship',
-      accessor: (row) => row.payload?.name || 'Untitled',
-      render: (row) => (
-        <div className="max-w-xs">
-          <div className="font-medium text-text-primary truncate">
-            {row.payload?.name || 'Untitled'}
+      accessor: (row) => row.payload?.name || row.payload?.scholarship_name || 'Untitled',
+      render: (row) => {
+        const isEdit = !!row.payload?.is_edit;
+        const displayName = row.payload?.name || row.payload?.scholarship_name || 'Untitled';
+        return (
+          <div className="max-w-xs">
+            <div className="font-medium text-text-primary truncate flex items-center gap-1.5">
+              {displayName}
+              {isEdit && <Badge tone="neutral" className="text-[10px] px-1 py-0">Edit</Badge>}
+            </div>
+            <div className="text-xs text-text-secondary truncate">
+              {row.payload?.host_country || row.payload?.scholarship_slug || '—'} · {row.payload?.funding_type || '—'}
+            </div>
           </div>
-          <div className="text-xs text-text-secondary truncate">
-            {row.payload?.host_country || '—'} · {row.payload?.funding_type || '—'}
-          </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       key: 'submitted_by',
@@ -204,9 +209,9 @@ export default function ReviewQueuePage() {
     {
       key: 'deadline',
       header: 'Deadline',
-      accessor: (row) => row.payload?.deadline || '',
+      accessor: (row) => row.payload?.deadline || row.payload?.changes?.deadline?.new || '',
       render: (row) => (
-        <span className="text-sm">{row.payload?.deadline || '—'}</span>
+        <span className="text-sm">{row.payload?.deadline || row.payload?.changes?.deadline?.new || '—'}</span>
       ),
     },
     {
@@ -230,7 +235,7 @@ export default function ReviewQueuePage() {
               Review Queue
             </h1>
             <p className="text-sm text-text-secondary mt-1">
-              Approve or reject scholarship submissions from agents and scrapers.
+              Approve or reject scholarship submissions and edit proposals from agents and scrapers.
             </p>
           </div>
         </div>
@@ -325,6 +330,12 @@ export default function ReviewQueuePage() {
       >
         {selected ? (
           <div className="space-y-6">
+            {selected.payload?.is_edit && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+                <div className="font-medium text-amber-800">Edit proposal for: {selected.payload?.scholarship_name}</div>
+                <div className="text-amber-700 text-xs">{selected.payload?.scholarship_slug} · {selected.target_scholarship_id}</div>
+              </div>
+            )}
             {/* Meta */}
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
@@ -334,6 +345,10 @@ export default function ReviewQueuePage() {
               <div>
                 <span className="text-text-secondary">Submitted at</span>
                 <div className="font-medium">{fmtDate(selected.created_at)}</div>
+              </div>
+              <div>
+                <span className="text-text-secondary">Type</span>
+                <div><Badge tone={selected.payload?.is_edit ? 'neutral' : 'info'}>{selected.payload?.is_edit ? 'Edit Proposal' : 'New Submission'}</Badge></div>
               </div>
               <div>
                 <span className="text-text-secondary">Status</span>
@@ -350,20 +365,63 @@ export default function ReviewQueuePage() {
             {/* Payload Preview */}
             <div>
               <h3 className="text-sm font-semibold text-text-primary mb-2 flex items-center gap-1.5">
-                <Eye className="w-4 h-4" /> Submitted Data
+                <Eye className="w-4 h-4" />
+                {selected.payload?.is_edit ? 'Proposed Edit Diff' : 'Submitted Data'}
               </h3>
               <div className="bg-gray-50 rounded-lg p-4 space-y-3 text-sm">
-                <PayloadField label="Name" value={selected.payload?.name} />
-                <PayloadField label="Country" value={selected.payload?.host_country} />
-                <PayloadField label="Institution" value={selected.payload?.host_institution} />
-                <PayloadField label="Provider" value={selected.payload?.provider} />
-                <PayloadField label="Funding" value={selected.payload?.funding_type} />
-                <PayloadField label="Degree Levels" value={selected.payload?.degree_levels?.join(', ')} />
-                <PayloadField label="Fields" value={selected.payload?.fields_of_study?.join(', ')} />
-                <PayloadField label="Deadline" value={selected.payload?.deadline} />
-                <PayloadField label="Stipend" value={selected.payload?.monthly_stipend_usd ? `$${selected.payload.monthly_stipend_usd}` : null} />
-                <PayloadField label="URL" value={selected.payload?.official_url} isLink />
-                <PayloadField label="Description" value={selected.payload?.description} />
+                {selected.payload?.is_edit && selected.payload?.changes ? (
+                  // Edit proposal diff table
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-300">
+                          <th className="pb-2 font-medium text-text-secondary">Field</th>
+                          <th className="pb-2 font-medium text-text-secondary">Current</th>
+                          <th className="pb-2 font-medium text-text-secondary">Proposed</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(selected.payload.changes as Record<string, { old?: string | null; new?: string | null }>).map(([field, ch]) => (
+                          <tr key={field} className="border-b border-gray-200">
+                            <td className="py-2 font-medium text-text-primary">{field}</td>
+                            <td className="py-2 text-text-secondary font-mono">
+                              {ch.old === null ? '(none)' : ch.old ?? '—'}
+                            </td>
+                            <td className="py-2 text-text-primary font-mono">
+                              {ch.new === null ? '(none)' : ch.new ?? '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  // New submission fields
+                  <>
+                    <PayloadField label="Name" value={selected.payload?.name} />
+                    <PayloadField label="Country" value={selected.payload?.host_country} />
+                    <PayloadField label="Institution" value={selected.payload?.host_institution} />
+                    <PayloadField label="Provider" value={selected.payload?.provider} />
+                    <PayloadField label="Funding" value={selected.payload?.funding_type} />
+                    <PayloadField label="Degree Levels" value={selected.payload?.degree_levels?.join(', ')} />
+                    <PayloadField label="Fields" value={selected.payload?.fields_of_study?.join(', ')} />
+                    <PayloadField label="Deadline" value={selected.payload?.deadline} />
+                    <PayloadField label="Stipend" value={selected.payload?.monthly_stipend_usd ? `$${selected.payload.monthly_stipend_usd}` : null} />
+                    <PayloadField label="URL" value={selected.payload?.official_url} isLink />
+                    <PayloadField label="Description" value={selected.payload?.description} />
+                  </>
+                )}
+                {/* Document changes summary for edits */}
+                {selected.payload?.is_edit && selected.payload?.doc_changes_summary && (
+                  <div className="pt-2 border-t border-gray-200">
+                    <div className="font-medium text-text-secondary mb-1">Document Changes</div>
+                    <ul className="list-disc list-inside text-sm text-text-secondary space-y-1">
+                      {selected.payload.doc_changes_summary.map((dc: string, i: number) => (
+                        <li key={i}>{dc}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
 

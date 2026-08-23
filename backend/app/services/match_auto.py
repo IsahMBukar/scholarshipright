@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal, engine
 from app.models.match_score import MatchScore
+from app.models.pending_match_email import PendingMatchEmail
 from app.models.scholarship import Scholarship
 from app.models.user import User
 from app.models.profile import Profile
@@ -210,64 +211,36 @@ async def recompute_matches_for_user(user_id: UUID, reason: str = REASON_MANUAL)
 
             await db.commit()
 
-            # Send new-match emails (after commit, fire-and-forget)
-            # Bundle all new matches into ONE email (max 10) instead of
-            # sending individual emails per scholarship.
-            if notif_new > 0:
-                from app.services.email import send_templated_email
-                from app.services.weekly_digest import _build_match_card
-                user_row = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
-                if user_row:
-                    # Collect all new matches, sort by score, cap at 10
-                    new_matches = []
-                    for sch_id, new_score in new_scores.items():
-                        old_score = old_scores.get(sch_id)
-                        if old_score is None and is_new_match(new_score):
-                            sch = (await db.execute(select(Scholarship).where(Scholarship.id == sch_id))).scalar_one_or_none()
-                            if sch:
-                                new_matches.append((sch, new_score))
-                    new_matches.sort(key=lambda x: x[1], reverse=True)
-                    new_matches = new_matches[:10]
-
-                    if new_matches:
-                        cards = []
-                        for sch, score in new_matches:
-                            deadline_str = sch.deadline.strftime("%b %d, %Y") if sch.deadline else "Open"
-                            amount = getattr(sch, "amount", None) or "See details"
-                            country = getattr(sch, "host_country", None) or ""
-                            cards.append(_build_match_card(
-                                scholarship_name=sch.name,
-                                score=float(score),
-                                amount=amount,
-                                deadline=deadline_str,
-                                country=country,
-                            ))
-
-                        match_cards_html = "\n".join(cards)
-                        count = len(new_matches)
-                        if count == 1:
-                            heading = "New scholarship match!"
-                            subtext = f"a new scholarship just scored {round(new_matches[0][1])}% against your profile."
-                            subject = f"New match: {new_matches[0][0].name} ({round(new_matches[0][1])}%)"
-                        else:
-                            heading = f"{count} new scholarship matches!"
-                            subtext = f"you have {count} new scholarships that scored 70%+ against your profile."
-                            top_name = new_matches[0][0].name
-                            subject = f"{count} new matches — top: {top_name} ({round(new_matches[0][1])}%)"
-
-                        await send_templated_email(
-                            to=user_row.email,
-                            template="new_matches_bundle",
-                            variables={
-                                "RECIPIENT_NAME": user_row.full_name or "Student",
-                                "HEADING": heading,
-                                "SUBTEXT": subtext,
-                                "MATCH_CARDS": match_cards_html,
-                                "USER_ID": str(user_id),
-                                "UNSUBSCRIBE_CATEGORY": "new_matches",
-                            },
-                            subject=subject,
+            # Queue new/improved matches for the daily bundle email instead
+            # of sending instantly — one bundled email per user at end of day.
+            if notif_new > 0 or notif_improved > 0:
+                queued = 0
+                for sch_id, new_score in new_scores.items():
+                    old_score = old_scores.get(sch_id)
+                    kind = None
+                    if old_score is None and is_new_match(new_score):
+                        kind = "new"
+                    elif old_score is not None and is_improvement(new_score, old_score):
+                        kind = "improved"
+                    if kind is None:
+                        continue
+                    existing = await db.execute(
+                        select(PendingMatchEmail.id).where(
+                            PendingMatchEmail.user_id == user_id,
+                            PendingMatchEmail.scholarship_id == sch_id,
                         )
+                    )
+                    if existing.scalar_one_or_none() is None:
+                        db.add(PendingMatchEmail(
+                            user_id=user_id,
+                            scholarship_id=sch_id,
+                            score=float(new_score),
+                            kind=kind,
+                        ))
+                        queued += 1
+                await db.commit()
+                if queued:
+                    logger.info("queued match emails user=%s queued=%s", user_id, queued)
 
             logger.info(
                 "recompute ok user=%s reason=%s matches=%s penalized=%s new_notifs=%s improved_notifs=%s",
@@ -299,7 +272,7 @@ async def recompute_scholarship_for_all_users(scholarship_id: UUID) -> dict:
     Side effects:
       - Upserts match_scores for this scholarship × every user with a profile
       - Emits match_new / match_improved notifications
-      - Sends email for new matches ≥70%
+      - Queues new ≥70% matches for the daily bundle email
     """
     async with AsyncSessionLocal() as db:
         try:
@@ -363,10 +336,9 @@ async def recompute_scholarship_for_all_users(scholarship_id: UUID) -> dict:
 
             await db.commit()
 
-            # ── Notifications + email (separate session) ────────────
+            # ── Notifications + queue for daily bundle email ────────
             notif_new = 0
             notif_improved = 0
-            email_user_ids: list[UUID] = []
 
             async with AsyncSessionLocal() as db2:
                 for r in results:
@@ -388,7 +360,20 @@ async def recompute_scholarship_for_all_users(scholarship_id: UUID) -> dict:
                             )
                             if n is not None:
                                 notif_new += 1
-                                email_user_ids.append(uid)
+                            # Queue for the daily bundle email (dedup via
+                            # the (user_id, scholarship_id) unique index).
+                            existing_q = await db2.execute(
+                                select(PendingMatchEmail.id).where(
+                                    PendingMatchEmail.user_id == uid,
+                                    PendingMatchEmail.scholarship_id == scholarship_id,
+                                )
+                            )
+                            if existing_q.scalar_one_or_none() is None:
+                                db2.add(PendingMatchEmail(
+                                    user_id=uid,
+                                    scholarship_id=scholarship_id,
+                                    score=float(new_score),
+                                ))
                     else:
                         if is_improvement(new_score, float(old_row)):
                             n = await emit_match_improved(
@@ -398,38 +383,22 @@ async def recompute_scholarship_for_all_users(scholarship_id: UUID) -> dict:
                             )
                             if n is not None:
                                 notif_improved += 1
+                                # Queue for the daily bundle email (improved tier)
+                                existing_iq = await db2.execute(
+                                    select(PendingMatchEmail.id).where(
+                                        PendingMatchEmail.user_id == uid,
+                                        PendingMatchEmail.scholarship_id == scholarship_id,
+                                    )
+                                )
+                                if existing_iq.scalar_one_or_none() is None:
+                                    db2.add(PendingMatchEmail(
+                                        user_id=uid,
+                                        scholarship_id=scholarship_id,
+                                        score=float(new_score),
+                                        kind="improved",
+                                    ))
 
                 await db2.commit()
-
-            # ── New-match emails (after commit, fire-and-forget) ────
-            if email_user_ids:
-                from app.services.email import send_templated_email
-                from app.services.weekly_digest import _build_match_card
-
-                deadline_str = sch.deadline.strftime("%b %d, %Y") if sch.deadline else "Open"
-                amount = getattr(sch, "amount", None) or "See details"
-                country = getattr(sch, "host_country", None) or ""
-                card = _build_match_card(
-                    scholarship_name=sch.name, score=float(results[0]["score"]),
-                    amount=amount, deadline=deadline_str, country=country,
-                )
-                for uid in email_user_ids:
-                    user_row = (await db.execute(select(User).where(User.id == uid))).scalar_one_or_none()
-                    if user_row:
-                        score_val = next((r["score"] for r in results if r["user_id"] == uid), 0)
-                        await send_templated_email(
-                            to=user_row.email,
-                            template="new_match",
-                            variables={
-                                "RECIPIENT_NAME": user_row.full_name or "Student",
-                                "SCHOLARSHIP_NAME": sch.name,
-                                "MATCH_SCORE": str(round(score_val)),
-                                "MATCH_CARDS": card,
-                                "USER_ID": str(uid),
-                                "UNSUBSCRIBE_CATEGORY": "new_matches",
-                            },
-                            subject=f"New match: {sch.name} ({round(score_val)}%)",
-                        )
 
             logger.info(
                 "recompute_scholarship_all_users scholarship=%s matches=%s notifs_new=%s notifs_improved=%s",

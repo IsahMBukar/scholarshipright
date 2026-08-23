@@ -37,6 +37,9 @@ from app.models.scholarship import Scholarship
 # for the same (user, kind, scholarship_id) tuple.
 DEDUP_WINDOWS = {
     "deadline": timedelta(hours=12),       # the deadline loop also gates per-day
+    "deadline_closed": timedelta(days=3),  # one "deadline passed" notice max
+    "deadline_extended": timedelta(days=3),  # one extension notice per change
+    "win_back": timedelta(days=30),        # re-engagement email at most monthly
     "match_new": timedelta(days=7),
     "match_improved": timedelta(days=3),
     "resume_failed": timedelta(hours=1),   # don't spam if user keeps retrying

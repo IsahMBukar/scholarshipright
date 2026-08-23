@@ -477,6 +477,15 @@ async def _run_analysis(resume_id: str, saved_path: str, mime_type: str, filenam
                 resume.status,
             )
 
+            # Activation email: "your resume is ready" with top match
+            # scores (immediate — exempt from daily batching).
+            if resume.status == "completed":
+                try:
+                    from app.services.resume_ready import send_resume_ready_email
+                    await send_resume_ready_email(resume.user_id)
+                except Exception:  # noqa: BLE001
+                    logger.exception("resume_ready email failed resume=%s", resume_id)
+
             # Delete the original file from disk after successful analysis.
             # All structured data + raw_text are now in the DB — the file
             # is no longer needed. Keep it on error so the user can retry.
@@ -742,6 +751,14 @@ async def reanalyze_resume(resume_id: str, user: User = Depends(get_current_user
 
     await db.commit()
     await db.refresh(resume)
+
+    if resume.status == "completed":
+        try:
+            from app.services.resume_ready import send_resume_ready_email
+            await send_resume_ready_email(user.id)
+        except Exception:  # noqa: BLE001
+            logger.exception("resume_ready email failed resume=%s", resume_id)
+
     return resume
 
 

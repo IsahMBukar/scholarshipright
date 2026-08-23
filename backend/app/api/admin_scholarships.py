@@ -455,6 +455,8 @@ async def patch_scholarship(
     is_active_flipped_on = False
     eligibility_changed = False
     match_affecting_changed = False
+    old_deadline = s.deadline
+    deadline_extended = False
     for k, v in coerced.items():
         if not hasattr(s, k):
             continue
@@ -470,6 +472,9 @@ async def patch_scholarship(
             # Track match-affecting field changes
             if k in _MATCH_AFFECTING_FIELDS:
                 match_affecting_changed = True
+            # Track deadline extensions (for saved-scholarship notifications)
+            if k == "deadline":
+                deadline_extended = True
             setattr(s, k, v)
 
     if changes:
@@ -500,6 +505,15 @@ async def patch_scholarship(
             "scholarship.patch: triggered incremental recompute (scholarship_id=%s, active_flip=%s, fields_changed=%s)",
             s.id, is_active_flipped_on, match_affecting_changed,
         )
+
+    # Deadline extended → good-news notification for everyone who saved it.
+    if deadline_extended:
+        try:
+            from app.services.deadline_extended import notify_deadline_extension
+            await notify_deadline_extension(db, scholarship=s, old_deadline=old_deadline)
+            await db.commit()
+        except Exception:  # noqa: BLE001 — never fail the PATCH over notifications
+            logger.exception("deadline extension notify failed scholarship=%s", s.id)
 
     return AdminScholarshipResponse.model_validate(apply_auto_defaults(s))
 

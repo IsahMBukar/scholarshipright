@@ -33,6 +33,7 @@ from app.models.blog import BlogPost, BlogScholarshipTag, extract_scholarship_sl
 from app.models.user import User
 from app.mcp.schemas import get_tool_schemas, SCHOLARSHIP_FIELDS
 from app.utils.db import escape_like
+from app.utils.scholarship_tags import validate_scholarship_slugs, sync_scholarship_tags as _shared_sync
 
 logger = logging.getLogger("scholarshipright.mcp")
 
@@ -218,6 +219,7 @@ async def _handle_edit(args: dict[str, Any]) -> list[TextContent]:
         if not sch:
             return [TextContent(type="text", text=f"Not found: {id_or_slug}")]
 
+        old_deadline = sch.deadline
         changed = []
         for field, value in editable.items():
             if not hasattr(sch, field):
@@ -298,6 +300,16 @@ async def _handle_edit(args: dict[str, Any]) -> list[TextContent]:
         if doc_changes:
             data["document_changes"] = doc_changes
 
+        # Deadline extended → good-news notification for savers.
+        if "deadline" in changed:
+            try:
+                from app.services.deadline_extended import notify_deadline_extension
+                await notify_deadline_extension(db, scholarship=sch, old_deadline=old_deadline)
+                await db.commit()
+                data["deadline_extension_notified"] = True
+            except Exception:  # noqa: BLE001 — never fail the update over notifications
+                logger.exception("deadline extension notify failed scholarship=%s", sch.id)
+
     # Trigger incremental recompute: this scholarship against all users.
     from app.services.match_auto import trigger_scholarship_recompute
     trigger_scholarship_recompute(sch.id)
@@ -311,20 +323,7 @@ from app.utils.blog import slugify as _slugify, reading_time as _reading_time
 
 
 async def _sync_blog_tags(db: AsyncSession, post_id, body: str) -> None:
-    slugs = extract_scholarship_slugs(body)
-    if not slugs:
-        await db.execute(sa_text("DELETE FROM blog_scholarship_tags WHERE blog_post_id = :pid"), {"pid": str(post_id)})
-        return
-
-    rows = await db.execute(select(Scholarship.id, Scholarship.slug).where(Scholarship.slug.in_(slugs)))
-    slug_to_id = {r.slug: r.id for r in rows.all()}
-
-    await db.execute(sa_text("DELETE FROM blog_scholarship_tags WHERE blog_post_id = :pid"), {"pid": str(post_id)})
-
-    for i, slug in enumerate(slugs):
-        sch_id = slug_to_id.get(slug)
-        if sch_id:
-            db.add(BlogScholarshipTag(blog_post_id=post_id, scholarship_id=sch_id, position_hint=i))
+    await _shared_sync(db, post_id, body)
 
 
 # ── Blog handlers ─────────────────────────────────────────────────
@@ -345,7 +344,17 @@ async def _handle_blog_create(args: dict[str, Any]) -> list[TextContent]:
     status = args.get("status", "pending_review")
 
     async with AsyncSessionLocal() as db:
-        # For stdio (local Claude Desktop): prefer super_admin, then admin, then any user
+        slugs = extract_scholarship_slugs(body)
+        if slugs:
+            v = await validate_scholarship_slugs(db, slugs)
+            if v["invalid"]:
+                lines = [f"Invalid scholarship slugs: {', '.join(v['invalid'])}"]
+                for bad in v["invalid"]:
+                    sug = v["suggestions"].get(bad, [])
+                    if sug:
+                        lines.append(f"  '{bad}' did you mean: {', '.join(s['slug'] for s in sug)}")
+                lines.append("Call list_scholarships with search=<term> or POST /api/scholarships/validate. Only active scholarships can be tagged.")
+                return [TextContent(type="text", text="\n".join(lines))]
         author_id = None
         for role_filter in [
             User.is_admin == True, User.admin_role == "super_admin",  # noqa: E712
@@ -507,6 +516,16 @@ async def _handle_blog_edit(args: dict[str, Any]) -> list[TextContent]:
             changed.append("title")
 
         if "body" in editable:
+            slugs = extract_scholarship_slugs(editable["body"])
+            if slugs:
+                v = await validate_scholarship_slugs(db, slugs)
+                if v["invalid"]:
+                    lines = [f"Invalid scholarship slugs: {', '.join(v['invalid'])}"]
+                    for bad in v["invalid"]:
+                        sug = v["suggestions"].get(bad, [])
+                        if sug:
+                            lines.append(f"  '{bad}' did you mean: {', '.join(s['slug'] for s in sug)}")
+                    return [TextContent(type="text", text="\n".join(lines))]
             post.body = editable["body"]
             post.reading_time_minutes = _reading_time(editable["body"])
             await _sync_blog_tags(db, post.id, editable["body"])

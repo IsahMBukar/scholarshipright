@@ -28,13 +28,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db, AsyncSessionLocal
 from app.models.scholarship import Scholarship
-from app.models.scholarship_degree_document import ScholarshipDegreeDocument, auto_derive_for_level
-from app.models.scholarship_custom_document import ScholarshipCustomDocument
 from app.models.pending_scholarship import PendingScholarship
 from app.models.blog import BlogPost, BlogScholarshipTag, extract_scholarship_slugs
 from app.models.user import User
 from app.mcp.schemas import get_tool_schemas, SCHOLARSHIP_FIELDS
 from app.utils.db import escape_like
+from app.utils.scholarship_tags import validate_scholarship_slugs, sync_scholarship_tags as _shared_sync
 from app.mcp.security import require_mcp_auth, McpAuthRecord, log_mcp_request
 from app.mcp.oauth import (
     is_oauth_enabled,
@@ -338,7 +337,7 @@ async def _call_tool(
         elif name == "get_scholarship":
             result = await _handle_get(args)
         elif name == "edit_scholarship":
-            result = await _handle_edit(args)
+            result = await _handle_edit(args, auth)
         elif name == "create_blog_post":
             result = await _handle_blog_create(args, auth)
         elif name == "list_blog_posts":
@@ -501,8 +500,12 @@ async def _handle_get(args: dict[str, Any]) -> dict:
         return {"content": [{"type": "text", "text": json.dumps(data, indent=2, default=str)}]}
 
 
-async def _handle_edit(args: dict[str, Any]) -> dict:
-    """Edit an existing scholarship. Only provided fields are updated."""
+async def _handle_edit(args: dict[str, Any], auth: McpAuthRecord) -> dict:
+    """Propose an edit to an existing scholarship.
+
+    Changes are NOT applied directly — they are queued as an edit proposal
+    (PendingScholarship with target_scholarship_id) for admin approval.
+    Only provided fields are included in the diff."""
     from uuid import UUID
     from datetime import date as date_type
     from app.mcp.schemas import SCHOLARSHIP_FIELDS
@@ -548,9 +551,9 @@ async def _handle_edit(args: dict[str, Any]) -> dict:
                 "isError": True,
             }
 
-        # Apply changes
-        changed_fields = []
+        # Compute the field-level diff against the live record
         date_fields = {"deadline", "open_date", "program_start_date"}
+        changes: dict[str, dict] = {}
 
         for field, value in editable.items():
             if not hasattr(sch, field):
@@ -568,99 +571,58 @@ async def _handle_edit(args: dict[str, Any]) -> dict:
                     }
 
             if old != value:
-                setattr(sch, field, value)
-                changed_fields.append(field)
+                changes[field] = {"old": str(old) if old is not None else None,
+                                  "new": value.isoformat() if isinstance(value, date_type) else value}
 
-        doc_changes = []
-
-        # ── Inline degree-level documents ─────────────────────────
+        # Summarise document changes (full arrays stored for re-application on approve)
+        doc_changes_summary = []
         if inline_degree_docs is not None:
-            for dd in inline_degree_docs:
-                level = dd.get("degree_level")
-                if not level:
-                    continue
-                await db.execute(
-                    sa_text("DELETE FROM scholarship_degree_documents WHERE scholarship_id = :sid AND degree_level = :lvl"),
-                    {"sid": str(sch.id), "lvl": level},
-                )
-                defaults = auto_derive_for_level(level)
-                doc = ScholarshipDegreeDocument(
-                    scholarship_id=sch.id,
-                    degree_level=level,
-                    req_transcripts=dd.get("req_transcripts", True),
-                    req_cv_resume=dd.get("req_cv_resume", True),
-                    req_sop_motivation_letter=dd.get("req_sop_motivation_letter", True),
-                    req_recommendation_letters=dd.get("req_recommendation_letters", True),
-                    req_english_test=dd.get("req_english_test", True),
-                    req_passport_or_id=dd.get("req_passport_or_id", True),
-                    req_financial_proof=dd.get("req_financial_proof", False),
-                    req_photo=dd.get("req_photo", False),
-                    previous_degree_required=dd.get("previous_degree_required") or defaults["previous_degree_required"],
-                    recommendation_letters_count=dd.get("recommendation_letters_count") or defaults["recommendation_letters_count"],
-                    research_proposal_required=dd.get("research_proposal_required") if "research_proposal_required" in dd else defaults["research_proposal_required"],
-                    writing_sample_required=dd.get("writing_sample_required") if "writing_sample_required" in dd else defaults["writing_sample_required"],
-                    standardized_test=dd.get("standardized_test") or defaults["standardized_test"],
-                )
-                db.add(doc)
-                doc_changes.append(f"degree_docs:{level}")
-
-        # ── Inline custom documents ───────────────────────────────
+            levels = [d.get("degree_level", "?") for d in inline_degree_docs]
+            doc_changes_summary.append(f"Replace degree documents: {', '.join(levels)}")
         if inline_custom_docs is not None:
-            await db.execute(
-                sa_text("DELETE FROM scholarship_custom_documents WHERE scholarship_id = :sid"),
-                {"sid": str(sch.id)},
-            )
-            for i, cd in enumerate(inline_custom_docs):
-                name = cd.get("name", "").strip()
-                if not name:
-                    continue
-                doc = ScholarshipCustomDocument(
-                    scholarship_id=sch.id,
-                    name=name,
-                    description=cd.get("description"),
-                    required=cd.get("required", True),
-                    degree_level=cd.get("degree_level"),
-                    position=cd.get("position", i),
-                )
-                db.add(doc)
-                doc_changes.append(f"custom_doc:{name}")
+            names = [d.get("name", "?") for d in inline_custom_docs]
+            doc_changes_summary.append(f"Replace custom documents with {len(inline_custom_docs)} item(s): {', '.join(names)}")
 
-        if not changed_fields and not doc_changes:
+        if not changes and not doc_changes_summary:
             return {
                 "content": [{"type": "text", "text": f"No changes detected for scholarship: {sch.name}"}],
             }
 
-        from datetime import datetime, timezone
-        sch.updated_at = datetime.now(timezone.utc)
+        identity = _get_auth_identity(auth)
+        pending = PendingScholarship(
+            payload={
+                "is_edit": True,
+                "scholarship_name": sch.name,
+                "scholarship_slug": sch.slug,
+                "changes": changes,
+                "doc_changes_summary": doc_changes_summary,
+                "degree_documents": inline_degree_docs,
+                "custom_documents": inline_custom_docs,
+            },
+            submitted_by=f"mcp:{identity}",
+            agent_key_id=auth.id if auth.auth_method == "api_key" else None,
+            status="pending_review",
+            target_scholarship_id=sch.id,
+        )
+        db.add(pending)
         await db.commit()
-        await db.refresh(sch)
+        await db.refresh(pending)
 
-        logger.info("MCP edit_scholarship: id=%s fields=%s docs=%s", sch.id, changed_fields, doc_changes)
+        lines = [
+            f"Edit proposed for scholarship '{sch.name}' (proposal ID: {pending.id})",
+            "Status: pending_review",
+            "The live scholarship is unchanged until an admin approves this edit.",
+            "",
+            "Proposed field changes:",
+        ]
+        for field, ch in changes.items():
+            old_v = ch["old"] if ch["old"] is not None else "(none)"
+            new_v = ch["new"] if ch["new"] is not None else "(none)"
+            lines.append(f"  - {field}: {old_v} → {new_v}")
+        for dc in doc_changes_summary:
+            lines.append(f"  - {dc}")
 
-        data = {
-            "id": str(sch.id),
-            "name": sch.name,
-            "slug": sch.slug,
-            "host_country": sch.host_country,
-            "host_institution": sch.host_institution,
-            "provider": sch.provider,
-            "degree_levels": sch.degree_levels or [],
-            "funding_type": sch.funding_type,
-            "deadline": str(sch.deadline) if sch.deadline else None,
-            "official_url": sch.official_url,
-            "description": sch.description,
-            "is_active": sch.is_active,
-        }
-        if changed_fields:
-            data["updated_fields"] = changed_fields
-        if doc_changes:
-            data["document_changes"] = doc_changes
-
-    # Trigger incremental recompute: this scholarship against all users.
-    from app.services.match_auto import trigger_scholarship_recompute
-    trigger_scholarship_recompute(sch.id)
-
-    return {"content": [{"type": "text", "text": json.dumps(data, indent=2, default=str)}]}
+        return {"content": [{"type": "text", "text": "\n".join(lines)}]}
 
 
 # ── Blog tool handlers ────────────────────────────────────────────
@@ -669,36 +631,7 @@ from app.utils.blog import slugify as _slugify, reading_time as _reading_time
 
 
 async def _sync_blog_scholarship_tags(db: AsyncSession, post_id, body: str) -> None:
-    """Parse @[scholarship:slug] from body and sync the tag table."""
-    from sqlalchemy import text as sa_text
-
-    slugs = extract_scholarship_slugs(body)
-    if not slugs:
-        await db.execute(
-            sa_text("DELETE FROM blog_scholarship_tags WHERE blog_post_id = :pid"),
-            {"pid": str(post_id)},
-        )
-        return
-
-    rows = await db.execute(
-        select(Scholarship.id, Scholarship.slug).where(Scholarship.slug.in_(slugs))
-    )
-    slug_to_id = {r.slug: r.id for r in rows.all()}
-
-    await db.execute(
-        sa_text("DELETE FROM blog_scholarship_tags WHERE blog_post_id = :pid"),
-        {"pid": str(post_id)},
-    )
-
-    for i, slug in enumerate(slugs):
-        sch_id = slug_to_id.get(slug)
-        if sch_id:
-            tag = BlogScholarshipTag(
-                blog_post_id=post_id,
-                scholarship_id=sch_id,
-                position_hint=i,
-            )
-            db.add(tag)
+    await _shared_sync(db, post_id, body)
 
 
 async def _handle_blog_create(args: dict[str, Any], auth: McpAuthRecord) -> dict:
@@ -724,8 +657,19 @@ async def _handle_blog_create(args: dict[str, Any], auth: McpAuthRecord) -> dict
     status = args.get("status", "pending_review")
 
     async with AsyncSessionLocal() as db:
-        # Resolve auth identity to a user ID
-        # OAuth → try email from claims; API key → find super_admin
+        slugs = extract_scholarship_slugs(body)
+        if slugs:
+            v = await validate_scholarship_slugs(db, slugs)
+            if v["invalid"]:
+                lines = [f"Invalid scholarship slugs: {', '.join(v['invalid'])}"]
+                for bad in v["invalid"]:
+                    sug = v["suggestions"].get(bad, [])
+                    if sug:
+                        lines.append(f"  '{bad}' did you mean: {', '.join(s['slug'] for s in sug)}")
+                    else:
+                        lines.append(f"  '{bad}' not found (no suggestions). Call list_scholarships with search='{bad}' to find correct slug.")
+                lines.append("Fix @[scholarship:slug] markers or call POST /api/scholarships/validate to check. Only active scholarships can be tagged.")
+                return {"content": [{"type": "text", "text": "\n".join(lines)}], "isError": True}
         author_id = None
         identity = _get_auth_identity(auth)
 
@@ -735,7 +679,6 @@ async def _handle_blog_create(args: dict[str, Any], auth: McpAuthRecord) -> dict
             author_id = user_row.scalar_one_or_none()
 
         if not author_id:
-            # Fallback: find super_admin, then any admin, then any user
             for role_filter in [
                 User.is_admin == True, User.admin_role == "super_admin",  # noqa: E712
             ]:
@@ -924,6 +867,9 @@ async def _handle_blog_edit(args: dict[str, Any], auth: McpAuthRecord) -> dict:
         if not post:
             return {"content": [{"type": "text", "text": f"Blog post not found: {post_id}"}], "isError": True}
 
+        # Snapshot current values so admins can review a before/after diff
+        _tracked = ("title", "excerpt", "body", "cover_image_url", "category", "tags")
+        old_values = {f: getattr(post, f) for f in _tracked if f in editable}
         changed = []
 
         # Handle title change → regenerate slug
@@ -940,6 +886,18 @@ async def _handle_blog_edit(args: dict[str, Any], auth: McpAuthRecord) -> dict:
             changed.append("title")
 
         if "body" in editable:
+            slugs = extract_scholarship_slugs(editable["body"])
+            if slugs:
+                v = await validate_scholarship_slugs(db, slugs)
+                if v["invalid"]:
+                    lines = [f"Invalid scholarship slugs: {', '.join(v['invalid'])}"]
+                    for bad in v["invalid"]:
+                        sug = v["suggestions"].get(bad, [])
+                        if sug:
+                            lines.append(f"  '{bad}' did you mean: {', '.join(s['slug'] for s in sug)}")
+                        else:
+                            lines.append(f"  '{bad}' not found. Call list_scholarships search='{bad}'")
+                    return {"content": [{"type": "text", "text": "\n".join(lines)}], "isError": True}
             post.body = editable["body"]
             post.reading_time_minutes = _reading_time(editable["body"])
             await _sync_blog_scholarship_tags(db, post.id, editable["body"])
@@ -951,10 +909,13 @@ async def _handle_blog_edit(args: dict[str, Any], auth: McpAuthRecord) -> dict:
                 changed.append(field)
 
         # Handle status change
+        reverted_to_review = False
         if "status" in editable:
             new_status = editable["status"]
             if new_status == "published" and post.status != "published":
                 post.published_at = datetime.now(timezone.utc)
+                # Explicit publish — any earlier proposed changes are now moot
+                post.pending_changes = None
             post.status = new_status
             changed.append("status")
         elif post.status == "published" and changed:
@@ -962,6 +923,21 @@ async def _handle_blog_edit(args: dict[str, Any], auth: McpAuthRecord) -> dict:
             # revert to pending_review so admin re-approves before it goes live again.
             post.status = "pending_review"
             changed.append("status→pending_review")
+            reverted_to_review = True
+
+        # Track what the agent changed while the post awaits re-approval,
+        # so the admin blogs UI can show a before/after diff.
+        if reverted_to_review or (post.status == "pending_review" and changed):
+            identity = _get_auth_identity(auth)
+            post.pending_changes = {
+                "edited_via": f"mcp:{identity}",
+                "changed_fields": changed,
+                "old": {
+                    f: old_values[f]
+                    for f in changed
+                    if f in old_values
+                },
+            }
 
         if not changed:
             return {"content": [{"type": "text", "text": f"No changes for: {post.title}"}]}
@@ -978,7 +954,7 @@ async def _handle_blog_edit(args: dict[str, Any], auth: McpAuthRecord) -> dict:
             "updated_fields": changed,
         }
         if post.status == "pending_review":
-            data["note"] = "Post reverted to pending_review — admin will re-approve before it goes live again."
+            data["note"] = "Post set to pending_review with tracked changes — admin will review the diff before it goes live again."
         return {"content": [{"type": "text", "text": json.dumps(data, indent=2, default=str)}]}
 
 

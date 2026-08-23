@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query, HTTPException, Request
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_, update, case
 from typing import Optional, List
@@ -8,6 +9,7 @@ from uuid import UUID
 from app.core.rate_limit import scholarship_view_rate_limit
 import hashlib
 import json
+import re
 
 from app.db.session import get_db
 from app.models.scholarship import Scholarship
@@ -335,6 +337,32 @@ async def filter_metadata(db: AsyncSession = Depends(get_db)):
 
     await cache_set(CacheKeys.FILTER_META, result, CacheKeys.FILTER_META_TTL)
     return result
+
+
+class ScholarshipValidateRequest(BaseModel):
+    slugs: List[str] = Field(..., min_length=1, max_length=50, description="Scholarship slugs to validate")
+
+
+class ScholarshipValidateResponse(BaseModel):
+    valid: List[str]
+    invalid: List[dict]
+
+
+@router.post("/validate", response_model=ScholarshipValidateResponse)
+async def validate_scholarships(payload: ScholarshipValidateRequest, db: AsyncSession = Depends(get_db)):
+    from app.utils.scholarship_tags import validate_scholarship_slugs
+    slugs = [s.strip().lower() for s in payload.slugs if s and s.strip()]
+    slugs = list(dict.fromkeys(slugs))
+    if not slugs:
+        raise HTTPException(status_code=400, detail="No slugs provided")
+    for s in slugs:
+        if not re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", s):
+            raise HTTPException(status_code=400, detail=f"Invalid slug format: {s}")
+    result = await validate_scholarship_slugs(db, slugs)
+    invalid_detailed = []
+    for slug in result["invalid"]:
+        invalid_detailed.append({"slug": slug, "suggestions": result["suggestions"].get(slug, [])})
+    return ScholarshipValidateResponse(valid=result["valid"], invalid=invalid_detailed)
 
 
 @router.get("/{slug}", response_model=ScholarshipResponse)

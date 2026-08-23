@@ -17,6 +17,11 @@ Schema:
         status varchar(20) NOT NULL DEFAULT 'draft',
         -- 'draft' | 'published' | 'pending_review' | 'archived'
         published_at timestamptz,
+        -- While status='pending_review' after an external (MCP) edit:
+        -- {"edited_via": str, "changed_fields": [..], "old": {field: value}}
+        -- so admins can review a before/after diff. Cleared once the post
+        -- leaves pending_review via admin action.
+        pending_changes jsonb,
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
     )
@@ -37,7 +42,7 @@ from sqlalchemy import (
     Column, String, DateTime, Text, Integer, SmallInteger, ForeignKey,
     UniqueConstraint, text as sa_text,
 )
-from sqlalchemy.dialects.postgresql import UUID, ARRAY
+from sqlalchemy.dialects.postgresql import UUID, ARRAY, JSONB
 from app.db.session import Base, engine
 
 
@@ -60,6 +65,7 @@ class BlogPost(Base):
     view_count = Column(Integer, nullable=False, default=0)
     status = Column(String(20), nullable=False, default="draft", index=True)
     published_at = Column(DateTime(timezone=True), nullable=True)
+    pending_changes = Column(JSONB, nullable=True)
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc), nullable=False,
@@ -128,10 +134,14 @@ async def ensure_blog_tables() -> None:
                     view_count INT NOT NULL DEFAULT 0,
                     status VARCHAR(20) NOT NULL DEFAULT 'draft',
                     published_at TIMESTAMPTZ,
+                    pending_changes JSONB,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
                 )
             """))
+            await conn.execute(sa_text(
+                "ALTER TABLE blog_posts ADD COLUMN IF NOT EXISTS pending_changes JSONB"
+            ))
             await conn.execute(sa_text(
                 "CREATE INDEX IF NOT EXISTS ix_blog_posts_author_id ON blog_posts (author_id)"
             ))

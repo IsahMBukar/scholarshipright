@@ -476,6 +476,7 @@ export interface PendingScholarship {
   rejection_reason: string | null;
   approved_scholarship_id: string | null;
   duplicate_of: string | null;
+  target_scholarship_id: string | null;
   created_at: string;
   updated_at: string;
 }

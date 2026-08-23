@@ -31,6 +31,7 @@ from app.api.users import get_current_user
 from app.core.admin import require_admin
 from app.core.rate_limit import blog_write_rate_limit, blog_view_rate_limit
 from app.utils.blog import slugify as _slugify, reading_time as _reading_time
+from app.utils.scholarship_tags import validate_scholarship_slugs, sync_scholarship_tags
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +125,9 @@ class BlogPostOut(BaseModel):
     created_at: str
     updated_at: str
     scholarship_tags: list[ScholarshipTagOut] = []
+    # Present while status='pending_review' after an external (MCP) edit:
+    # {"edited_via": str, "changed_fields": [...], "old": {field: value}}
+    pending_changes: Optional[dict] = None
 
 
 class BlogListOut(BaseModel):
@@ -137,6 +141,8 @@ class BlogListOut(BaseModel):
     tags: list[str] = []
     reading_time_minutes: int
     view_count: int
+    status: str = "published"
+    has_pending_changes: bool = False
     published_at: Optional[str] = None
 
 
@@ -213,6 +219,7 @@ async def list_posts(
             tags=p.tags or [],
             reading_time_minutes=p.reading_time_minutes,
             view_count=p.view_count,
+            status="published",
             published_at=p.published_at.isoformat() if p.published_at else None,
         )
         for p in posts
@@ -340,8 +347,20 @@ async def create_post(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new blog post. Auth required."""
+    slugs = extract_scholarship_slugs(payload.body)
+    if slugs:
+        v = await validate_scholarship_slugs(db, slugs)
+        if v["invalid"]:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "scholarship_tag_invalid",
+                    "message": f"Invalid scholarship slugs: {', '.join(v['invalid'])}",
+                    "invalid_slugs": v["invalid"],
+                    "suggestions": v["suggestions"],
+                },
+            )
     slug = _slugify(payload.title)
-    # Ensure unique slug
     existing = await db.execute(select(BlogPost.id).where(BlogPost.slug == slug))
     if existing.scalar_one_or_none():
         slug = f"{slug}-{_uuid.uuid4().hex[:6]}"
@@ -363,8 +382,7 @@ async def create_post(
     db.add(post)
     await db.flush()
 
-    # Parse scholarship tags from body
-    await _sync_scholarship_tags(db, post.id, payload.body, 0)
+    await sync_scholarship_tags(db, post.id, payload.body, 0)
 
     await db.commit()
     await db.refresh(post)
@@ -419,14 +437,32 @@ async def update_post(
             new_slug = f"{new_slug}-{_uuid.uuid4().hex[:6]}"
         post.slug = new_slug
 
-    # If body changed, recalculate reading time and re-sync scholarship tags
     if "body" in update_data:
+        slugs = extract_scholarship_slugs(update_data["body"])
+        if slugs:
+            v = await validate_scholarship_slugs(db, slugs)
+            if v["invalid"]:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "scholarship_tag_invalid",
+                        "message": f"Invalid scholarship slugs: {', '.join(v['invalid'])}",
+                        "invalid_slugs": v["invalid"],
+                        "suggestions": v["suggestions"],
+                    },
+                )
         update_data["reading_time_minutes"] = _reading_time(update_data["body"])
-        await _sync_scholarship_tags(db, post.id, update_data["body"], 0)
+        await sync_scholarship_tags(db, post.id, update_data["body"], 0)
 
     # If status changed to published, set published_at
     if update_data.get("status") == "published" and post.status != "published":
         update_data["published_at"] = datetime.now(timezone.utc)
+
+    # Leaving pending_review (admin approved/rejected the proposed changes)
+    # clears the tracked before/after diff.
+    if update_data.get("status") and update_data["status"] != post.status:
+        if update_data["status"] != "pending_review":
+            update_data["pending_changes"] = None
 
     for key, val in update_data.items():
         setattr(post, key, val)
@@ -558,6 +594,8 @@ async def admin_list_all_posts(
             tags=p.tags or [],
             reading_time_minutes=p.reading_time_minutes,
             view_count=p.view_count,
+            status=p.status,
+            has_pending_changes=bool(p.pending_changes),
             published_at=p.published_at.isoformat() if p.published_at else None,
         )
         for p in posts
@@ -565,43 +603,46 @@ async def admin_list_all_posts(
     return PaginatedBlogs(items=items, total=total, page=page, pages=pages)
 
 
-# ── Scholarship tag sync helper ──────────────────────────────────
+@router.get("/admin/{post_id}", response_model=BlogPostOut)
+async def admin_get_post(
+    post_id: str,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: get any post by ID regardless of status — includes pending_changes
+    so the UI can show a before/after diff of agent edits."""
+    try:
+        row = await db.execute(select(BlogPost).where(BlogPost.id == _uuid.UUID(post_id)))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid post ID")
+    post = row.scalar_one_or_none()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
 
-async def _sync_scholarship_tags(
-    db: AsyncSession,
-    post_id: _uuid.UUID,
-    body: str,
-    start_offset: int = 0,
-) -> None:
-    """Parse @[scholarship:slug] from body and sync the tag table."""
-    slugs = extract_scholarship_slugs(body)
-    if not slugs:
-        # Clear existing tags if body no longer has any
-        await db.execute(
-            text("DELETE FROM blog_scholarship_tags WHERE blog_post_id = :pid"),
-            {"pid": str(post_id)},
-        )
-        return
+    author = (await db.execute(select(User.full_name).where(User.id == post.author_id))).scalar()
 
-    # Resolve slugs → scholarship ids
-    rows = await db.execute(
-        select(Scholarship.id, Scholarship.slug)
-        .where(Scholarship.slug.in_(slugs))
+    return BlogPostOut(
+        id=str(post.id),
+        author_id=str(post.author_id),
+        author_name=author or "Anonymous",
+        title=post.title,
+        slug=post.slug,
+        excerpt=post.excerpt,
+        body=post.body,
+        html_body=_md_to_html(post.body),
+        cover_image_url=post.cover_image_url,
+        category=post.category,
+        tags=post.tags or [],
+        reading_time_minutes=post.reading_time_minutes,
+        view_count=post.view_count,
+        status=post.status,
+        published_at=post.published_at.isoformat() if post.published_at else None,
+        created_at=post.created_at.isoformat(),
+        updated_at=post.updated_at.isoformat(),
+        scholarship_tags=[],
+        pending_changes=post.pending_changes,
     )
-    slug_to_id = {r.slug: r.id for r in rows.all()}
 
-    # Clear old tags and re-insert
-    await db.execute(
-        text("DELETE FROM blog_scholarship_tags WHERE blog_post_id = :pid"),
-        {"pid": str(post_id)},
-    )
 
-    for i, slug in enumerate(slugs):
-        sch_id = slug_to_id.get(slug)
-        if sch_id:
-            tag = BlogScholarshipTag(
-                blog_post_id=post_id,
-                scholarship_id=sch_id,
-                position_hint=start_offset + i,
-            )
-            db.add(tag)
+async def _sync_scholarship_tags(db: AsyncSession, post_id: _uuid.UUID, body: str, start_offset: int = 0) -> None:
+    await sync_scholarship_tags(db, post_id, body, start_offset)

@@ -25,6 +25,9 @@ class NotificationPreference(Base):
     email_weekly_digest = Column(Boolean, default=True, nullable=False)
     # Marketing / product updates: new features, tips, etc.
     email_marketing = Column(Boolean, default=True, nullable=False)
+    # Product/onboarding emails: feature spotlights and profile nudges
+    # for users with incomplete profiles (the drip sequence).
+    email_product_updates = Column(Boolean, default=True, nullable=False)
 
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -45,9 +48,14 @@ async def ensure_notification_preference_columns() -> None:
                     email_deadline_reminders BOOLEAN NOT NULL DEFAULT TRUE,
                     email_weekly_digest BOOLEAN NOT NULL DEFAULT TRUE,
                     email_marketing BOOLEAN NOT NULL DEFAULT TRUE,
+                    email_product_updates BOOLEAN NOT NULL DEFAULT TRUE,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
+            """))
+            await conn.execute(sa_text("""
+                ALTER TABLE notification_preferences
+                ADD COLUMN IF NOT EXISTS email_product_updates BOOLEAN NOT NULL DEFAULT TRUE
             """))
             await conn.execute(sa_text(
                 "CREATE UNIQUE INDEX IF NOT EXISTS ix_notification_preferences_user_id "

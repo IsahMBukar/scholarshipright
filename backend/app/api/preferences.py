@@ -17,6 +17,7 @@ class PreferenceResponse(BaseModel):
     email_deadline_reminders: bool
     email_weekly_digest: bool
     email_marketing: bool
+    email_product_updates: bool
 
     class Config:
         from_attributes = True
@@ -28,6 +29,7 @@ class PreferenceUpdate(BaseModel):
     email_deadline_reminders: Optional[bool] = None
     email_weekly_digest: Optional[bool] = None
     email_marketing: Optional[bool] = None
+    email_product_updates: Optional[bool] = None
 
 
 @router.get("", response_model=PreferenceResponse)

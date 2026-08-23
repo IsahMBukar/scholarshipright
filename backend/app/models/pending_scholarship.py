@@ -27,6 +27,10 @@ Schema:
         approved_scholarship_id uuid NULL REFERENCES scholarships(id),
         -- Duplicate detection: if admin flagged as duplicate
         duplicate_of uuid NULL REFERENCES scholarships(id),
+        -- Edit proposals: when set, this record is a proposed EDIT to an
+        -- existing scholarship (payload['changes'] holds {field: {old,new}}).
+        -- NULL means a new-submission proposal.
+        target_scholarship_id uuid NULL REFERENCES scholarships(id),
         -- Timestamps
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
@@ -54,6 +58,7 @@ class PendingScholarship(Base):
     rejection_reason = Column(Text, nullable=True)
     approved_scholarship_id = Column(UUID(as_uuid=True), ForeignKey("scholarships.id", ondelete="SET NULL"), nullable=True)
     duplicate_of = Column(UUID(as_uuid=True), ForeignKey("scholarships.id", ondelete="SET NULL"), nullable=True)
+    target_scholarship_id = Column(UUID(as_uuid=True), ForeignKey("scholarships.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
@@ -77,10 +82,16 @@ async def ensure_pending_scholarships_table() -> None:
                     rejection_reason TEXT,
                     approved_scholarship_id UUID REFERENCES scholarships(id) ON DELETE SET NULL,
                     duplicate_of UUID REFERENCES scholarships(id) ON DELETE SET NULL,
+                    target_scholarship_id UUID REFERENCES scholarships(id) ON DELETE SET NULL,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
                 )
             """))
+            await conn.execute(sa_text("""
+                ALTER TABLE pending_scholarships
+                ADD COLUMN IF NOT EXISTS target_scholarship_id UUID REFERENCES scholarships(id) ON DELETE SET NULL
+            """))
+            await conn.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_pending_scholarships_target ON pending_scholarships (target_scholarship_id)"))
             await conn.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_pending_scholarships_status ON pending_scholarships (status)"))
             await conn.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_pending_scholarships_submitted_by ON pending_scholarships (submitted_by)"))
             await conn.execute(sa_text("CREATE INDEX IF NOT EXISTS ix_pending_scholarships_created_at ON pending_scholarships (created_at)"))

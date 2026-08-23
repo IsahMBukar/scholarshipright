@@ -52,6 +52,7 @@ class PendingScholarshipResponse(BaseModel):
     rejection_reason: Optional[str] = None
     approved_scholarship_id: Optional[UUID] = None
     duplicate_of: Optional[UUID] = None
+    target_scholarship_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime
 
@@ -163,12 +164,18 @@ async def approve_pending_scholarship(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Approve a pending submission → creates a real scholarship."""
+    """Approve a pending submission.
+
+    If the record is an edit proposal (target_scholarship_id set), apply the
+    proposed diff to the existing scholarship. Otherwise create a new one."""
     pending = await db.get(PendingScholarship, pending_id)
     if not pending:
         raise HTTPException(404, "Pending scholarship not found")
     if pending.status != "pending_review":
         raise HTTPException(400, f"Cannot approve — status is '{pending.status}'")
+
+    if pending.target_scholarship_id:
+        return await _approve_edit_proposal(pending, admin, db, background_tasks)
 
     payload = dict(pending.payload)
 
@@ -271,6 +278,136 @@ async def reject_pending_scholarship(
     await db.refresh(pending)
 
     logger.info("Rejected pending scholarship %s: %s", pending_id, body.reason)
+    return PendingScholarshipResponse.model_validate(pending)
+
+
+async def _approve_edit_proposal(
+    pending: PendingScholarship,
+    admin: User,
+    db: AsyncSession,
+    background_tasks: BackgroundTasks,
+):
+    """Apply an approved edit proposal to its target scholarship."""
+    from datetime import date as date_type
+    from sqlalchemy import text as sa_text
+    from app.models.scholarship_degree_document import ScholarshipDegreeDocument, auto_derive_for_level
+    from app.models.scholarship_custom_document import ScholarshipCustomDocument
+
+    sch = await db.get(Scholarship, pending.target_scholarship_id)
+    if not sch:
+        raise HTTPException(404, "Target scholarship no longer exists")
+
+    payload = dict(pending.payload or {})
+    changes: Dict[str, Any] = payload.get("changes") or {}
+    applied_fields = []
+    old_deadline = None
+
+    for field, ch in changes.items():
+        if not hasattr(sch, field) or not isinstance(ch, dict) or "new" not in ch:
+            continue
+        value = ch["new"]
+        if field in ("deadline", "open_date", "program_start_date") and isinstance(value, str):
+            try:
+                value = date_type.fromisoformat(value)
+            except (ValueError, TypeError):
+                continue
+        if field == "deadline":
+            try:
+                old_deadline = date_type.fromisoformat(ch["old"]) if isinstance(ch.get("old"), str) else ch.get("old")
+            except (ValueError, TypeError):
+                old_deadline = None
+        setattr(sch, field, value)
+        applied_fields.append(field)
+
+    # Re-apply inline document replacements, same semantics as the MCP edit tool
+    doc_changes = []
+    degree_docs = payload.get("degree_documents")
+    if isinstance(degree_docs, list):
+        for dd in degree_docs:
+            level = dd.get("degree_level")
+            if not level:
+                continue
+            await db.execute(
+                sa_text("DELETE FROM scholarship_degree_documents WHERE scholarship_id = :sid AND degree_level = :lvl"),
+                {"sid": str(sch.id), "lvl": level},
+            )
+            defaults = auto_derive_for_level(level)
+            doc = ScholarshipDegreeDocument(
+                scholarship_id=sch.id,
+                degree_level=level,
+                req_transcripts=dd.get("req_transcripts", True),
+                req_cv_resume=dd.get("req_cv_resume", True),
+                req_sop_motivation_letter=dd.get("req_sop_motivation_letter", True),
+                req_recommendation_letters=dd.get("req_recommendation_letters", True),
+                req_english_test=dd.get("req_english_test", True),
+                req_passport_or_id=dd.get("req_passport_or_id", True),
+                req_financial_proof=dd.get("req_financial_proof", False),
+                req_photo=dd.get("req_photo", False),
+                previous_degree_required=dd.get("previous_degree_required") or defaults["previous_degree_required"],
+                recommendation_letters_count=dd.get("recommendation_letters_count") or defaults["recommendation_letters_count"],
+                research_proposal_required=dd.get("research_proposal_required") if "research_proposal_required" in dd else defaults["research_proposal_required"],
+                writing_sample_required=dd.get("writing_sample_required") if "writing_sample_required" in dd else defaults["writing_sample_required"],
+                standardized_test=dd.get("standardized_test") or defaults["standardized_test"],
+            )
+            db.add(doc)
+            doc_changes.append(f"degree_docs:{level}")
+
+    custom_docs = payload.get("custom_documents")
+    if isinstance(custom_docs, list):
+        await db.execute(
+            sa_text("DELETE FROM scholarship_custom_documents WHERE scholarship_id = :sid"),
+            {"sid": str(sch.id)},
+        )
+        for i, cd in enumerate(custom_docs):
+            name = (cd.get("name") or "").strip()
+            if not name:
+                continue
+            doc = ScholarshipCustomDocument(
+                scholarship_id=sch.id,
+                name=name,
+                description=cd.get("description"),
+                required=cd.get("required", True),
+                degree_level=cd.get("degree_level"),
+                position=cd.get("position", i),
+            )
+            db.add(doc)
+            doc_changes.append(f"custom_doc:{name}")
+
+    sch.updated_at = datetime.now(timezone.utc)
+
+    pending.status = "approved"
+    pending.reviewed_by = admin.id
+    pending.reviewed_at = datetime.now(timezone.utc)
+    pending.approved_scholarship_id = sch.id
+
+    await log_admin_action(
+        db, admin.id, admin.email, "review.approve_edit", "pending_scholarship", str(pending.id),
+        payload={
+            "scholarship_id": str(sch.id),
+            "name": sch.name,
+            "applied_fields": applied_fields,
+            "document_changes": doc_changes,
+        }
+    )
+
+    await db.commit()
+    await db.refresh(pending)
+
+    # Deadline extended → good-news notification for savers.
+    if "deadline" in applied_fields:
+        try:
+            from app.services.deadline_extended import notify_deadline_extension
+            await notify_deadline_extension(db, scholarship=sch, old_deadline=None)
+            await db.commit()
+        except Exception:  # noqa: BLE001 — never fail the approval over notifications
+            logger.exception("deadline extension notify failed scholarship=%s", sch.id)
+
+    trigger_scholarship_recompute(sch.id, background_tasks)
+
+    logger.info(
+        "Approved edit proposal %s → updated scholarship %s (fields=%s docs=%s)",
+        pending.id, sch.id, applied_fields, doc_changes,
+    )
     return PendingScholarshipResponse.model_validate(pending)
 
 

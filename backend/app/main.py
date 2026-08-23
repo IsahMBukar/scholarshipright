@@ -25,6 +25,9 @@ from app.api.preferences import router as preferences_router
 from app.api.unsubscribe import router as unsubscribe_router
 from app.services.deadline_checker import deadline_checker_loop
 from app.services.weekly_digest import weekly_digest_loop
+from app.services.daily_match_bundle import daily_match_bundle_loop
+from app.services.nurture_drip import nurture_drip_loop
+from app.services.reengagement import win_back_loop
 from app.services.match_auto import ensure_schema_columns
 from app.core.admin import ensure_admin_schema_columns
 from app.models.admin_audit import ensure_audit_schema_columns
@@ -39,6 +42,7 @@ from app.models.scholarship import (
     ensure_eligibility_schema_columns,
 )
 from app.models.pending_scholarship import ensure_pending_scholarships_table
+from app.models.pending_match_email import ensure_pending_match_emails_table
 from app.mcp.auth import ensure_mcp_api_keys_table
 from app.models.mcp_refresh_token import ensure_mcp_refresh_tokens_table
 from app.mcp.security import ensure_mcp_security_tables
@@ -185,14 +189,29 @@ async def lifespan(app: FastAPI):
     except Exception as e:  # noqa: BLE001
         logger.exception("ensure_resume_style_column failed: %s", e)
 
+    # Startup: ensure pending_match_emails table exists (idempotent).
+    try:
+        await ensure_pending_match_emails_table()
+    except Exception as e:  # noqa: BLE001
+        logger.exception("ensure_pending_match_emails_table failed: %s", e)
+
     # Startup: start deadline checker in background
     deadline_task = asyncio.create_task(deadline_checker_loop())
     # Startup: start weekly digest in background
     digest_task = asyncio.create_task(weekly_digest_loop())
+    # Startup: start daily match bundle in background
+    bundle_task = asyncio.create_task(daily_match_bundle_loop())
+    # Startup: start onboarding drip in background
+    drip_task = asyncio.create_task(nurture_drip_loop())
+    # Startup: start win-back loop in background
+    win_back_task = asyncio.create_task(win_back_loop())
     yield
     # Shutdown: cancel background tasks
     deadline_task.cancel()
     digest_task.cancel()
+    bundle_task.cancel()
+    drip_task.cancel()
+    win_back_task.cancel()
 
 
 app = FastAPI(

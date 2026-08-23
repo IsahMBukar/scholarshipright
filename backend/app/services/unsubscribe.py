@@ -10,6 +10,7 @@ Categories map to notification_preferences columns:
     deadline_reminders → email_deadline_reminders
     weekly_digest      → email_weekly_digest
     marketing          → email_marketing
+    product_updates    → email_product_updates
     all                → all of the above
 """
 
@@ -27,6 +28,7 @@ CATEGORY_MAP = {
     "deadline_reminders": "email_deadline_reminders",
     "weekly_digest": "email_weekly_digest",
     "marketing": "email_marketing",
+    "product_updates": "email_product_updates",
 }
 ALL_CATEGORIES = list(CATEGORY_MAP.keys())
 

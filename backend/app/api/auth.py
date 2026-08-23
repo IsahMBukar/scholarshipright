@@ -498,6 +498,21 @@ async def reset_password(
     token_row.used_at = now
     await db.commit()
 
+    # Security confirmation — tell the user their password was changed.
+    try:
+        from app.services.email import send_templated_email
+        await send_templated_email(
+            to=user.email,
+            template="password_changed",
+            variables={
+                "RECIPIENT_NAME": user.full_name or "Student",
+                "USER_ID": str(user.id),
+            },
+            subject="Your ScholarshipRight password was changed",
+        )
+    except Exception:  # noqa: BLE001 — never block the reset response on email
+        pass
+
     return {"status": "ok"}
 
 

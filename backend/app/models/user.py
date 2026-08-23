@@ -3,7 +3,7 @@ import uuid
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import Column, String, DateTime, Boolean
+from sqlalchemy import Column, String, DateTime, Boolean, SmallInteger
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.session import Base
 
@@ -44,6 +44,11 @@ class User(Base):
     # the Google subject ID for fast lookups on subsequent logins.
     auth_provider = Column(String(20), nullable=True, server_default="local")
     google_id = Column(String(64), nullable=True, unique=True, index=True)
+    # Onboarding drip (nurture) state. drip_step is the index of the last
+    # sent step; 99 means "done/never email again". Users who complete
+    # their profile never enter (or leave) the drip.
+    drip_step = Column(SmallInteger, nullable=False, default=0, server_default="0")
+    drip_last_sent_at = Column(DateTime(timezone=True), nullable=True)
 
 
 def generate_email_confirm_token() -> str:
@@ -78,5 +83,11 @@ async def ensure_email_confirm_columns() -> None:
                 "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_google_id "
                 "ON users (google_id) WHERE google_id IS NOT NULL"
             ))
+            # Onboarding drip columns
+            await conn.execute(sa_text("""
+                ALTER TABLE users
+                ADD COLUMN IF NOT EXISTS drip_step SMALLINT NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS drip_last_sent_at TIMESTAMPTZ
+            """))
     except Exception:
         logger.exception("ensure_email_confirm_columns failed")

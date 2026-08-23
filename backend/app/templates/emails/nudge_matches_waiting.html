@@ -43,32 +43,36 @@
             <tr>
               <td style="background:#f5b942;border-radius:20px;padding:6px 16px;">
                 <p style="margin:0;font-family:'Inter',-apple-system,sans-serif;font-size:11px;font-weight:700;color:#1a1a1a;text-transform:uppercase;letter-spacing:1px;">
-                  🎯 New Matches
+                  ⏳ Your matches are waiting
                 </p>
               </td>
             </tr>
           </table>
 
           <!-- Heading -->
-          <h1 style="margin:0 0 8px;font-family:'Inter',-apple-system,sans-serif;font-size:26px;font-weight:800;color:#1a1a1a;text-align:center;letter-spacing:-0.5px;line-height:1.2;">
-            {{HEADING}}
+          <h1 style="margin:0 0 8px;font-family:'Inter',-apple-system,sans-serif;font-size:28px;font-weight:800;color:#1a1a1a;text-align:center;letter-spacing:-0.5px;line-height:1.2;">
+            Your matches are waiting
           </h1>
           <p style="margin:0 0 28px;font-family:'Inter',-apple-system,sans-serif;font-size:14px;color:#666;text-align:center;line-height:1.6;">
-            Hi {{RECIPIENT_NAME}}, {{SUBTEXT}}
+            Hi {{RECIPIENT_NAME}}, we currently track hundreds of fully funded scholarships — and some of them are looking for someone exactly like you. Complete your profile (it takes about 4 minutes) and our AI will score every single one against your background.
           </p>
 
-          <!-- Match Cards -->
-          {{MATCH_CARDS}}
-
-          <!-- Improved matches -->
-          {{IMPROVED_SECTION}}
+          <!-- Highlight -->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+            <tr>
+              <td align="center" style="padding:20px;background:#fdfbf7;border:1px solid #f0ebe0;border-radius:12px;">
+                <p style="margin:0 0 4px;font-family:'Inter',-apple-system,sans-serif;font-size:32px;font-weight:900;color:#d4972e;">4 min</p>
+                <p style="margin:0;font-family:'Inter',-apple-system,sans-serif;font-size:13px;color:#888;">is all it takes to see your personal match scores</p>
+              </td>
+            </tr>
+          </table>
 
           <!-- CTA -->
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
             <tr>
               <td align="center">
-                <a href="{{FRONTEND_URL}}/scholarships" style="display:inline-block;background:#f5b942;color:#1a1a1a;font-family:'Inter',-apple-system,sans-serif;font-size:14px;font-weight:700;text-decoration:none;padding:14px 32px;border-radius:50px;">
-                  View all matches →
+                <a href="{{FRONTEND_URL}}/onboarding" style="display:inline-block;background:#f5b942;color:#1a1a1a;font-family:'Inter',-apple-system,sans-serif;font-size:14px;font-weight:700;text-decoration:none;padding:14px 32px;border-radius:50px;">
+                  Complete my profile →
                 </a>
               </td>
             </tr>

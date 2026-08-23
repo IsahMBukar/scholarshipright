@@ -121,6 +121,7 @@ class TestUnsubscribeLogic:
             "email_deadline_reminders",
             "email_weekly_digest",
             "email_marketing",
+            "email_product_updates",
         }
         assert set(CATEGORY_MAP.values()) == expected_cols
 

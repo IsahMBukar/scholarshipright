@@ -63,6 +63,13 @@ class Settings(BaseSettings):
     # but not sent (dev mode).
     oqumail_api_key: str = ""
 
+    # Hour (UTC) at which the daily match-bundle email is sent.
+    daily_bundle_hour_utc: int = 18
+
+    # Onboarding drip (nurture) emails for users with incomplete profiles.
+    drip_enabled: bool = True
+    drip_send_hour_utc: int = 10
+
     # Google OAuth. Leave empty to disable Google sign-in.
     # Get credentials from https://console.cloud.google.com/apis/credentials
     google_client_id: str = ""

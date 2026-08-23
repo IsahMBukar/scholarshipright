@@ -1,145 +1,14 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import AdminLayout from '@/components/admin/AdminLayout';
-import { createBlogPost } from '@/lib/blog/api';
+import { createBlogPost, validateScholarshipSlugs } from '@/lib/blog/api';
 import { useAuth } from '@/hooks/useAuth';
-import { API_URL } from '@/lib/env';
 import type { BlogCreatePayload } from '@/lib/blog/types';
-
-// ── Scholarship search result type ────────────────────────────────
-
-interface SchSearchResult {
-  id: string;
-  slug: string;
-  name: string;
-  host_country: string;
-  provider?: string;
-  deadline?: string;
-  funding_type?: string;
-  degree_levels: string[];
-}
-
-// ── Scholarship picker ────────────────────────────────────────────
-
-function ScholarshipPicker({
-  onSelect,
-  selectedSlugs,
-}: {
-  onSelect: (sch: SchSearchResult) => void;
-  selectedSlugs: Set<string>;
-}) {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SchSearchResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [open, setOpen] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  const search = useCallback((q: string) => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!q.trim()) {
-      setResults([]);
-      return;
-    }
-    debounceRef.current = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(
-          `${API_URL}/api/scholarships?search=${encodeURIComponent(q)}&limit=8`,
-          { credentials: 'include' },
-        );
-        if (res.ok) {
-          const data = await res.json();
-          setResults(data.items || data.scholarships || []);
-        }
-      } catch (err) {
-        console.error('[BlogWrite] Scholarship search failed:', err);
-      } finally {
-        setLoading(false);
-      }
-    }, 300);
-  }, []);
-
-  return (
-    <div className="relative">
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
-            search
-          </span>
-          <input
-            type="text"
-            placeholder="Search scholarships to tag..."
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              search(e.target.value);
-              setOpen(true);
-            }}
-            onFocus={() => setOpen(true)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[#f0ebe0] bg-white text-sm text-[#1a1a1a] placeholder:text-gray-400 focus:outline-none focus:border-[#f5b942] focus:ring-2 focus:ring-[#f5b942]/20 transition"
-          />
-        </div>
-      </div>
-
-      {/* Dropdown */}
-      {open && query.trim() && (
-        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white rounded-xl border border-[#f0ebe0] shadow-lg max-h-64 overflow-y-auto">
-          {loading && (
-            <div className="p-4 text-center text-sm text-gray-400">
-              Searching...
-            </div>
-          )}
-          {!loading && results.length === 0 && (
-            <div className="p-4 text-center text-sm text-gray-400">
-              No scholarships found
-            </div>
-          )}
-          {!loading &&
-            results.map((sch) => {
-              const isSelected = selectedSlugs.has(sch.slug);
-              return (
-                <button
-                  key={sch.id}
-                  onClick={() => {
-                    if (!isSelected) {
-                      onSelect(sch);
-                    }
-                    setQuery('');
-                    setResults([]);
-                    setOpen(false);
-                  }}
-                  disabled={isSelected}
-                  className={`w-full text-left px-4 py-3 hover:bg-[#fdfbf7] transition border-b border-[#f0ebe0] last:border-0 ${
-                    isSelected ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-[#1a1a1a] truncate">
-                        {sch.name}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {sch.provider && <span>{sch.provider} · </span>}
-                        {sch.host_country}
-                      </p>
-                    </div>
-                    {isSelected && (
-                      <span className="text-xs text-emerald-600 font-medium flex-shrink-0">
-                        ✓ Tagged
-                      </span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-        </div>
-      )}
-    </div>
-  );
-}
+import { ScholarshipPicker, type SchSearchResult } from '@/components/blog/ScholarshipPicker';
+import { useScholarshipValidation } from '@/lib/blog/useScholarshipValidation';
 
 // ── Tag chips input ───────────────────────────────────────────────
 
@@ -234,8 +103,8 @@ export default function BlogWriteContent() {
   const [preview, setPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const { slugErrors, setSlugErrors, validating } = useScholarshipValidation(body);
 
-  // Redirect if not logged in
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/login?redirect=/blog/write');
@@ -273,6 +142,11 @@ export default function BlogWriteContent() {
       setError('Body is required');
       return;
     }
+    if (slugErrors && slugErrors.length > 0) {
+      const bad = slugErrors.map((e) => e.slug).join(', ');
+      setError(`Fix invalid scholarship slugs before saving: ${bad}`);
+      return;
+    }
 
     setSaving(true);
     setError('');
@@ -289,8 +163,19 @@ export default function BlogWriteContent() {
       };
       const post = await createBlogPost(payload);
       router.push(`/blog/${post.slug}`);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to save post');
+    } catch (e: any) {
+      if (e?.suggestions || e?.invalid_slugs) {
+        const sug = e.suggestions ? Object.entries(e.suggestions).map(([k, v]: any) => `${k} → ${(v as any[]).map((s) => s.slug).join(', ') || 'no suggestions'}`).join('; ') : '';
+        setError(`${e.message}${sug ? ` (${sug})` : ''}`);
+        if (e.invalid_slugs) {
+          try {
+            const data = await validateScholarshipSlugs(e.invalid_slugs);
+            setSlugErrors(data.invalid);
+          } catch {}
+        }
+      } else {
+        setError(e instanceof Error ? e.message : 'Failed to save post');
+      }
     } finally {
       setSaving(false);
     }
@@ -390,8 +275,25 @@ Use **bold**, *italic*, and [links](url).
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
                   rows={16}
-                  className="w-full text-sm text-[#1a1a1a] placeholder:text-gray-400 bg-white border border-[#f0ebe0] rounded-xl px-4 py-3 focus:outline-none focus:border-[#f5b942] focus:ring-2 focus:ring-[#f5b942]/20 transition resize-y font-mono leading-relaxed"
+                  className={`w-full text-sm text-[#1a1a1a] placeholder:text-gray-400 bg-white border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 transition resize-y font-mono leading-relaxed ${slugErrors ? 'border-red-300 focus:border-red-400 focus:ring-red-200' : 'border-[#f0ebe0] focus:border-[#f5b942] focus:ring-[#f5b942]/20'}`}
                 />
+              )}
+              {validating && <p className="text-xs text-gray-400">Validating scholarships...</p>}
+              {slugErrors && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-sm">
+                  <p className="font-semibold text-red-700 mb-1">Invalid scholarship slugs — save blocked:</p>
+                  {slugErrors.map((err) => (
+                    <div key={err.slug} className="text-red-700 text-xs">
+                      <span className="font-mono font-bold">@{err.slug}</span>
+                      {err.suggestions.length ? (
+                        <span> — did you mean: {err.suggestions.map((s) => s.slug).join(', ')}?</span>
+                      ) : (
+                        <span> — not found (inactive or typo)</span>
+                      )}
+                    </div>
+                  ))}
+                  <p className="text-[11px] text-red-500 mt-1">Only active scholarships can be tagged. Use search below to find correct slug.</p>
+                </div>
               )}
 
               {/* Scholarship tags */}
@@ -497,14 +399,16 @@ Use **bold**, *italic*, and [links](url).
               <div className="space-y-3">
                 <button
                   onClick={() => handleSave('published')}
-                  disabled={saving}
+                  disabled={saving || !!slugErrors}
+                  title={slugErrors ? `Fix invalid slugs: ${slugErrors.map((e) => e.slug).join(', ')}` : undefined}
                   className="w-full py-3 rounded-xl text-sm font-bold text-[#1a1a1a] bg-[#f5b942] hover:bg-[#d4972e] hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {saving ? 'Publishing...' : 'Publish'}
                 </button>
                 <button
                   onClick={() => handleSave('draft')}
-                  disabled={saving}
+                  disabled={saving || !!slugErrors}
+                  title={slugErrors ? `Fix invalid slugs: ${slugErrors.map((e) => e.slug).join(', ')}` : undefined}
                   className="w-full py-3 rounded-xl text-sm font-medium text-gray-600 bg-white border border-[#f0ebe0] hover:border-[#f5b942]/40 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Save as Draft

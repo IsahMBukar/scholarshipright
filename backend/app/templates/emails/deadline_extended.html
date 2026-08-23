@@ -41,34 +41,51 @@
           <!-- Badge -->
           <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 20px;">
             <tr>
-              <td style="background:#f5b942;border-radius:20px;padding:6px 16px;">
-                <p style="margin:0;font-family:'Inter',-apple-system,sans-serif;font-size:11px;font-weight:700;color:#1a1a1a;text-transform:uppercase;letter-spacing:1px;">
-                  🎯 New Matches
+              <td style="background:#2ecc71;border-radius:20px;padding:6px 16px;">
+                <p style="margin:0;font-family:'Inter',-apple-system,sans-serif;font-size:11px;font-weight:700;color:#ffffff;text-transform:uppercase;letter-spacing:1px;">
+                  📅 Good news
                 </p>
               </td>
             </tr>
           </table>
 
           <!-- Heading -->
-          <h1 style="margin:0 0 8px;font-family:'Inter',-apple-system,sans-serif;font-size:26px;font-weight:800;color:#1a1a1a;text-align:center;letter-spacing:-0.5px;line-height:1.2;">
-            {{HEADING}}
+          <h1 style="margin:0 0 8px;font-family:'Inter',-apple-system,sans-serif;font-size:28px;font-weight:800;color:#1a1a1a;text-align:center;letter-spacing:-0.5px;line-height:1.2;">
+            More time to apply!
           </h1>
-          <p style="margin:0 0 28px;font-family:'Inter',-apple-system,sans-serif;font-size:14px;color:#666;text-align:center;line-height:1.6;">
-            Hi {{RECIPIENT_NAME}}, {{SUBTEXT}}
+          <p style="margin:0 0 28px;font-family:'Inter',-apple-system,sans-serif;font-size:14px;color:#666666;text-align:center;line-height:1.6;">
+            Hi {{RECIPIENT_NAME}}, the deadline for <strong>{{SCHOLARSHIP_NAME}}</strong> — a scholarship you saved — was just extended. You now have extra time to get your application in.
           </p>
 
-          <!-- Match Cards -->
-          {{MATCH_CARDS}}
-
-          <!-- Improved matches -->
-          {{IMPROVED_SECTION}}
+          <!-- Deadline comparison -->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+            <tr>
+              <td style="padding:20px;background:#fdfbf7;border:1px solid #f0ebe0;border-radius:12px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td align="center" style="padding-bottom:8px;">
+                      <p style="margin:0;font-family:'Inter',-apple-system,sans-serif;font-size:11px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:1px;">Old deadline</p>
+                      <p style="margin:4px 0 0;font-family:'Inter',-apple-system,sans-serif;font-size:18px;font-weight:800;color:#999;text-decoration:line-through;">{{OLD_DEADLINE}}</p>
+                    </td>
+                    <td width="40" align="center" valign="middle">
+                      <p style="margin:0;font-family:'Inter',-apple-system,sans-serif;font-size:20px;font-weight:900;color:#d4972e;">→</p>
+                    </td>
+                    <td align="center" style="padding-bottom:8px;">
+                      <p style="margin:0;font-family:'Inter',-apple-system,sans-serif;font-size:11px;font-weight:700;color:#2ecc71;text-transform:uppercase;letter-spacing:1px;">New deadline</p>
+                      <p style="margin:4px 0 0;font-family:'Inter',-apple-system,sans-serif;font-size:22px;font-weight:900;color:#1a1a1a;">{{NEW_DEADLINE}}</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
 
           <!-- CTA -->
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
             <tr>
               <td align="center">
                 <a href="{{FRONTEND_URL}}/scholarships" style="display:inline-block;background:#f5b942;color:#1a1a1a;font-family:'Inter',-apple-system,sans-serif;font-size:14px;font-weight:700;text-decoration:none;padding:14px 32px;border-radius:50px;">
-                  View all matches →
+                  Use my extra time →
                 </a>
               </td>
             </tr>
