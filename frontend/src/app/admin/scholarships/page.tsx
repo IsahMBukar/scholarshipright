@@ -24,6 +24,8 @@ import {
   DEGREE_LEVEL_OPTIONS,
   FIELD_OF_STUDY_OPTIONS,
   COUNTRY_OPTIONS,
+  REGION_OPTIONS,
+  NATIONALITY_SUGGESTIONS,
   formFromScholarship,
   emptyForm,
   validateForm,
@@ -607,6 +609,34 @@ function ScholarshipDrawer({
                 placeholder="Pick fields of study — type to search…"
                 ariaLabel="Fields of study"
                 id="edit-fields-of-study"
+              />
+            </div>
+            <div>
+              <FieldLabel hint="Free-text or preset values. Use for descriptive rules not reducible to a country code (e.g. 'African countries'). For ISO-coded rules, use the structured builder below.">
+                Eligible nationalities (legacy)
+              </FieldLabel>
+              <MultiSelect
+                multiple
+                value={form.eligible_nationalities}
+                onChange={(v) => set('eligible_nationalities', v)}
+                options={NATIONALITY_SUGGESTIONS}
+                placeholder="Pick or type nationality descriptions…"
+                ariaLabel="Eligible nationalities"
+                id="edit-eligible-nationalities"
+              />
+            </div>
+            <div>
+              <FieldLabel hint="Free-text or canonical region values from the list.">
+                Eligible regions (legacy)
+              </FieldLabel>
+              <MultiSelect
+                multiple
+                value={form.eligible_regions}
+                onChange={(v) => set('eligible_regions', v)}
+                options={REGION_OPTIONS}
+                placeholder="Pick regions…"
+                ariaLabel="Eligible regions"
+                id="edit-eligible-regions"
               />
             </div>
             <div>

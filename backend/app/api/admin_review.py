@@ -26,6 +26,7 @@ from app.services.admin_audit import log_admin_action
 from app.utils.db import escape_like
 from app.services.document_defaults import apply_auto_defaults
 from app.services.match_auto import trigger_scholarship_recompute
+from app.services.eligibility import resolve_eligibility
 
 import logging
 
@@ -242,6 +243,37 @@ async def approve_pending_scholarship(
 
     await db.commit()
     await db.refresh(pending)
+    await db.refresh(scholarship)
+
+    # Re-resolve structured eligibility fields (included_countries/excluded_countries
+    # and groups) into the flat resolved_countries list the match engine reads.
+    # The admin direct-create path does this in admin_scholarships.py; the MCP
+    # approval path must do it too, otherwise MCP-submitted scholarships with
+    # country rules land with resolved_countries=[] and match as "open to all".
+    try:
+        inc_groups = list(scholarship.included_groups or [])
+        inc_countries = list(scholarship.included_countries or [])
+        exc_groups = list(scholarship.excluded_groups or [])
+        exc_countries = list(scholarship.excluded_countries or [])
+        if inc_groups or inc_countries or exc_groups or exc_countries:
+            resolved, unresolved = await resolve_eligibility(
+                included_groups=inc_groups,
+                included_countries=inc_countries,
+                excluded_groups=exc_groups,
+                excluded_countries=exc_countries,
+                db=db,
+            )
+            scholarship.resolved_countries = resolved
+            scholarship.eligibility_unresolved = unresolved
+            from datetime import datetime as _dt, timezone as _tz
+            scholarship.groups_resolved_at = _dt.now(_tz.utc)
+            await db.commit()
+            await db.refresh(scholarship)
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "eligibility re-resolve failed after approve (pending=%s, scholarship=%s)",
+            pending_id, scholarship.id,
+        )
 
     # Trigger incremental match: compute ONLY this scholarship against ALL users.
     trigger_scholarship_recompute(scholarship.id, background_tasks)
@@ -392,6 +424,41 @@ async def _approve_edit_proposal(
 
     await db.commit()
     await db.refresh(pending)
+    await db.refresh(sch)
+
+    # Re-resolve structured eligibility if the edit touched any of the
+    # country/group fields. Without this, an MCP-proposed edit that flips
+    # included_countries or excluded_countries leaves resolved_countries
+    # stale and the match engine keeps using the old country list.
+    _ELIGIBILITY_FIELDS = {
+        "eligibility_display", "eligibility_basis",
+        "included_groups", "included_countries",
+        "excluded_groups", "excluded_countries",
+    }
+    if applied_fields and any(f in _ELIGIBILITY_FIELDS for f in applied_fields):
+        try:
+            inc_groups = list(sch.included_groups or [])
+            inc_countries = list(sch.included_countries or [])
+            exc_groups = list(sch.excluded_groups or [])
+            exc_countries = list(sch.excluded_countries or [])
+            if inc_groups or inc_countries or exc_groups or exc_countries:
+                resolved, unresolved = await resolve_eligibility(
+                    included_groups=inc_groups,
+                    included_countries=inc_countries,
+                    excluded_groups=exc_groups,
+                    excluded_countries=exc_countries,
+                    db=db,
+                )
+                sch.resolved_countries = resolved
+                sch.eligibility_unresolved = unresolved
+                sch.groups_resolved_at = datetime.now(timezone.utc)
+                await db.commit()
+                await db.refresh(sch)
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "eligibility re-resolve failed after edit approve (pending=%s, scholarship=%s)",
+                pending.id, sch.id,
+            )
 
     # Deadline extended → good-news notification for savers.
     if "deadline" in applied_fields:

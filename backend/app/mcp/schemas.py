@@ -165,10 +165,10 @@ SCHOLARSHIP_FIELDS = {
         "enum": ["citizenship", "residency", "either"],
         "description": "What eligibility gates on",
     },
-    "included_groups": {"type": "array", "items": {"type": "string"}, "description": "Country groups to include (e.g. ['commonwealth', 'african_union'])"},
-    "included_countries": {"type": "array", "items": {"type": "string"}, "description": "Specific country codes to include (ISO alpha-2, e.g. ['NG', 'KE'])"},
-    "excluded_groups": {"type": "array", "items": {"type": "string"}, "description": "Country groups to exclude"},
-    "excluded_countries": {"type": "array", "items": {"type": "string"}, "description": "Specific country codes to exclude (ISO alpha-2)"},
+    "included_groups": {"type": "array", "items": {"type": "string"}, "description": "Country groups to include (e.g. ['COMMONWEALTH', 'EU']). Group codes are uppercased and looked up in the groups table — see /api/admin/groups for the canonical list."},
+    "included_countries": {"type": "array", "items": {"type": "string"}, "description": "Specific country codes to include (ISO 3166-1 alpha-2, e.g. ['NG', 'KE']). Combined with included_groups at write time."},
+    "excluded_groups": {"type": "array", "items": {"type": "string"}, "description": "Country groups to exclude. Subtracted from the included set at write time."},
+    "excluded_countries": {"type": "array", "items": {"type": "string"}, "description": "Specific country codes to exclude (ISO 3166-1 alpha-2). Subtracted from the included set at write time."},
 }
 
 
@@ -229,7 +229,18 @@ def get_tool_schemas() -> dict:
     return {
         # Scholarship tools
         "add_scholarship": {
-            "description": "Add a new scholarship to the review queue. Submissions are reviewed by an admin before going live. Use degree_documents for per-level doc configs and custom_documents for non-standard requirements (portfolio, video essay, etc.).",
+            "description": (
+                "Add a new scholarship to the review queue. Submissions are reviewed by an admin before going live. "
+                "Use degree_documents for per-level doc configs and custom_documents for non-standard requirements "
+                "(portfolio, video essay, etc.).\n\n"
+                "COUNTRY ELIGIBILITY — use the structured fields, NOT eligible_nationalities/eligible_regions:\n"
+                "  - included_groups / excluded_groups: country group codes (e.g. ['COMMONWEALTH'], ['EU'])\n"
+                "  - included_countries / excluded_countries: ISO 3166-1 alpha-2 codes (e.g. ['NG', 'KE'])\n"
+                "  - eligibility_basis: 'citizenship' | 'residency' | 'either' (default 'either')\n"
+                "These compose at write time: resolved = (included_groups + included_countries) - (excluded_groups + excluded_countries). "
+                "On approve, the server re-resolves the flat resolved_countries list the match engine reads. "
+                "Use eligible_nationalities only for free-text descriptions that don't reduce to a country code (e.g. 'African countries')."
+            ),
             "inputSchema": {
                 "type": "object",
                 "properties": sch_properties,
@@ -257,7 +268,15 @@ def get_tool_schemas() -> dict:
             },
         },
         "edit_scholarship": {
-            "description": "Edit an existing scholarship. Only pass the fields you want to change — omitted fields stay unchanged. Use degree_documents to set per-level doc configs (replaces existing for specified levels) and custom_documents to replace all custom docs.",
+            "description": (
+                "Propose an edit to an existing scholarship. Changes go to the review queue and only apply after an admin approves.\n\n"
+                "Only pass the fields you want to change — omitted fields stay unchanged. Use degree_documents to set per-level doc configs (replaces existing for specified levels) and custom_documents to replace all custom docs.\n\n"
+                "COUNTRY ELIGIBILITY — use the structured fields, NOT eligible_nationalities/eligible_regions:\n"
+                "  - included_groups / excluded_groups: country group codes (e.g. ['COMMONWEALTH'])\n"
+                "  - included_countries / excluded_countries: ISO 3166-1 alpha-2 codes (e.g. ['NG', 'KE'])\n"
+                "  - eligibility_basis: 'citizenship' | 'residency' | 'either'\n"
+                "On approve, the server re-resolves resolved_countries from these fields. Sending empty arrays for all four clears the rules and re-opens the scholarship to all countries."
+            ),
             "inputSchema": {
                 "type": "object",
                 "properties": {

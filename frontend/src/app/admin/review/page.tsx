@@ -133,10 +133,17 @@ export default function ReviewQueuePage() {
   // Approve handler
   const handleApprove = useCallback(async () => {
     if (!selected) return;
+    const isEdit = !!selected.payload?.is_edit;
+    const currentName = selected.payload?.scholarship_name || 'this scholarship';
+    const newName = isEdit
+      ? (selected.payload?.changes?.name?.new as string | undefined)
+      : (selected.payload?.name as string | undefined);
+    const displayName = newName || currentName;
+    const verb = isEdit ? 'Apply edit to' : 'Publish';
     const ok = await confirm({
-      title: 'Approve Scholarship',
-      description: `Publish "${selected.payload?.name || 'this scholarship'}" to the live catalog?`,
-      confirmLabel: 'Approve',
+      title: isEdit ? 'Apply Edit' : 'Approve Scholarship',
+      description: `${verb} "${displayName}"${isEdit && newName && newName !== currentName ? ` (was "${currentName}")` : ''}?`,
+      confirmLabel: isEdit ? 'Apply edit' : 'Approve',
       tone: 'primary',
     });
     if (ok) approveMutation.mutate(selected.id);
@@ -173,15 +180,27 @@ export default function ReviewQueuePage() {
     {
       key: 'name',
       header: 'Scholarship',
-      accessor: (row) => row.payload?.name || row.payload?.scholarship_name || 'Untitled',
+      accessor: (row) =>
+        row.payload?.name
+        || row.payload?.changes?.name?.new
+        || row.payload?.scholarship_name
+        || 'Untitled',
       render: (row) => {
         const isEdit = !!row.payload?.is_edit;
-        const displayName = row.payload?.name || row.payload?.scholarship_name || 'Untitled';
+        const currentName = row.payload?.scholarship_name || 'Untitled';
+        const newName = row.payload?.changes?.name?.new as string | undefined;
+        const proposedNew = row.payload?.name as string | undefined;
+        // For edit proposals, show old → new when the name itself is being changed.
+        // For new submissions, just show the submitted name.
+        const displayName = isEdit
+          ? (newName ? `${currentName} → ${newName}` : currentName)
+          : (proposedNew || currentName);
+        const truncated = displayName.length > 60 ? `${displayName.slice(0, 60)}…` : displayName;
         return (
           <div className="max-w-xs">
             <div className="font-medium text-text-primary truncate flex items-center gap-1.5">
-              {displayName}
-              {isEdit && <Badge tone="neutral" className="text-[10px] px-1 py-0">Edit</Badge>}
+              {truncated}
+              {isEdit && <Badge tone="warning" className="text-[10px] px-1.5 py-0">EDIT</Badge>}
             </div>
             <div className="text-xs text-text-secondary truncate">
               {row.payload?.host_country || row.payload?.scholarship_slug || '—'} · {row.payload?.funding_type || '—'}
@@ -332,8 +351,19 @@ export default function ReviewQueuePage() {
           <div className="space-y-6">
             {selected.payload?.is_edit && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
-                <div className="font-medium text-amber-800">Edit proposal for: {selected.payload?.scholarship_name}</div>
-                <div className="text-amber-700 text-xs">{selected.payload?.scholarship_slug} · {selected.target_scholarship_id}</div>
+                <div className="font-medium text-amber-800">
+                  Edit proposal for: {selected.payload?.scholarship_name}
+                  {selected.payload?.changes?.name?.new
+                    && selected.payload.changes.name.new !== selected.payload?.scholarship_name
+                    && (
+                      <span className="ml-2 text-amber-900">
+                        → <span className="font-semibold">{String(selected.payload.changes.name.new)}</span>
+                      </span>
+                    )}
+                </div>
+                <div className="text-amber-700 text-xs">
+                  {selected.payload?.scholarship_slug} · ID {selected.target_scholarship_id}
+                </div>
               </div>
             )}
             {/* Meta */}
