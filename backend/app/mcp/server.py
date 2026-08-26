@@ -21,13 +21,13 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
-from sqlalchemy import select, func, text as sa_text
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal
 from app.models.scholarship import Scholarship
 from app.models.pending_scholarship import PendingScholarship
-from app.models.scholarship_degree_document import ScholarshipDegreeDocument, auto_derive_for_level
+from app.models.scholarship_degree_document import ScholarshipDegreeDocument
 from app.models.scholarship_custom_document import ScholarshipCustomDocument
 from app.models.blog import BlogPost, BlogScholarshipTag, extract_scholarship_slugs
 from app.models.user import User
@@ -192,6 +192,13 @@ async def _handle_get(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_edit(args: dict[str, Any]) -> list[TextContent]:
+    """Propose an edit to an existing scholarship.
+
+    Changes are NOT applied directly — they are queued as an edit proposal
+    (PendingScholarship with target_scholarship_id) for admin approval.
+    Only provided fields are included in the diff. Matches the production
+    HTTP MCP handler behaviour in ``app.api.mcp_sse``.
+    """
     from uuid import UUID as UUID_T
     from datetime import date as date_t
 
@@ -199,7 +206,7 @@ async def _handle_edit(args: dict[str, Any]) -> list[TextContent]:
     if not id_or_slug:
         return [TextContent(type="text", text="id_or_slug is required.")]
 
-    # Extract inline documents — these are handled separately from flat fields
+    # Extract inline documents — handled separately from flat fields
     inline_degree_docs = args.get("degree_documents")
     inline_custom_docs = args.get("custom_documents")
 
@@ -219,102 +226,69 @@ async def _handle_edit(args: dict[str, Any]) -> list[TextContent]:
         if not sch:
             return [TextContent(type="text", text=f"Not found: {id_or_slug}")]
 
-        old_deadline = sch.deadline
-        changed = []
+        # Compute field-level diff against the live record
+        date_fields = {"deadline", "open_date", "program_start_date"}
+        changes: dict[str, dict] = {}
         for field, value in editable.items():
             if not hasattr(sch, field):
                 continue
-            if field in {"deadline", "open_date", "program_start_date"} and isinstance(value, str):
+            old = getattr(sch, field)
+            if field in date_fields and isinstance(value, str):
                 try:
                     value = date_t.fromisoformat(value)
                 except ValueError:
                     return [TextContent(type="text", text=f"Invalid date for {field}: {value}")]
-            if getattr(sch, field) != value:
-                setattr(sch, field, value)
-                changed.append(field)
+            if old != value:
+                changes[field] = {
+                    "old": str(old) if old is not None else None,
+                    "new": value.isoformat() if isinstance(value, date_t) else value,
+                }
 
-        doc_changes = []
-
-        # ── Inline degree-level documents ─────────────────────────
+        # Summarise document changes (full arrays stored for re-application on approve)
+        doc_changes_summary = []
         if inline_degree_docs is not None:
-            for dd in inline_degree_docs:
-                level = dd.get("degree_level")
-                if not level:
-                    continue
-                # Delete existing row for this level, then create new one
-                await db.execute(
-                    sa_text("DELETE FROM scholarship_degree_documents WHERE scholarship_id = :sid AND degree_level = :lvl"),
-                    {"sid": str(sch.id), "lvl": level},
-                )
-                defaults = auto_derive_for_level(level)
-                doc = ScholarshipDegreeDocument(
-                    scholarship_id=sch.id,
-                    degree_level=level,
-                    req_transcripts=dd.get("req_transcripts", True),
-                    req_cv_resume=dd.get("req_cv_resume", True),
-                    req_sop_motivation_letter=dd.get("req_sop_motivation_letter", True),
-                    req_recommendation_letters=dd.get("req_recommendation_letters", True),
-                    req_english_test=dd.get("req_english_test", True),
-                    req_passport_or_id=dd.get("req_passport_or_id", True),
-                    req_financial_proof=dd.get("req_financial_proof", False),
-                    req_photo=dd.get("req_photo", False),
-                    previous_degree_required=dd.get("previous_degree_required") or defaults["previous_degree_required"],
-                    recommendation_letters_count=dd.get("recommendation_letters_count") or defaults["recommendation_letters_count"],
-                    research_proposal_required=dd.get("research_proposal_required") if "research_proposal_required" in dd else defaults["research_proposal_required"],
-                    writing_sample_required=dd.get("writing_sample_required") if "writing_sample_required" in dd else defaults["writing_sample_required"],
-                    standardized_test=dd.get("standardized_test") or defaults["standardized_test"],
-                )
-                db.add(doc)
-                doc_changes.append(f"degree_docs:{level}")
-
-        # ── Inline custom documents ───────────────────────────────
+            levels = [d.get("degree_level", "?") for d in inline_degree_docs]
+            doc_changes_summary.append(f"Replace degree documents: {', '.join(levels)}")
         if inline_custom_docs is not None:
-            # Replace all custom docs for this scholarship
-            await db.execute(
-                sa_text("DELETE FROM scholarship_custom_documents WHERE scholarship_id = :sid"),
-                {"sid": str(sch.id)},
-            )
-            for i, cd in enumerate(inline_custom_docs):
-                name = cd.get("name", "").strip()
-                if not name:
-                    continue
-                doc = ScholarshipCustomDocument(
-                    scholarship_id=sch.id,
-                    name=name,
-                    description=cd.get("description"),
-                    required=cd.get("required", True),
-                    degree_level=cd.get("degree_level"),
-                    position=cd.get("position", i),
-                )
-                db.add(doc)
-                doc_changes.append(f"custom_doc:{name}")
+            names = [d.get("name", "?") for d in inline_custom_docs]
+            doc_changes_summary.append(f"Replace custom documents with {len(inline_custom_docs)} item(s): {', '.join(names)}")
 
-        if not changed and not doc_changes:
-            return [TextContent(type="text", text=f"No changes for: {sch.name}")]
+        if not changes and not doc_changes_summary:
+            return [TextContent(type="text", text=f"No changes detected for scholarship: {sch.name}")]
 
-        sch.updated_at = datetime.now(timezone.utc)
+        pending = PendingScholarship(
+            payload={
+                "is_edit": True,
+                "scholarship_name": sch.name,
+                "scholarship_slug": sch.slug,
+                "changes": changes,
+                "doc_changes_summary": doc_changes_summary,
+                "degree_documents": inline_degree_docs,
+                "custom_documents": inline_custom_docs,
+            },
+            submitted_by="mcp:local",
+            status="pending_review",
+            target_scholarship_id=sch.id,
+        )
+        db.add(pending)
         await db.commit()
-        data = _fmt(sch)
-        if changed:
-            data["updated_fields"] = changed
-        if doc_changes:
-            data["document_changes"] = doc_changes
+        await db.refresh(pending)
 
-        # Deadline extended → good-news notification for savers.
-        if "deadline" in changed:
-            try:
-                from app.services.deadline_extended import notify_deadline_extension
-                await notify_deadline_extension(db, scholarship=sch, old_deadline=old_deadline)
-                await db.commit()
-                data["deadline_extension_notified"] = True
-            except Exception:  # noqa: BLE001 — never fail the update over notifications
-                logger.exception("deadline extension notify failed scholarship=%s", sch.id)
+        lines = [
+            f"Edit proposed for scholarship '{sch.name}' (proposal ID: {pending.id})",
+            "Status: pending_review",
+            "The live scholarship is unchanged until an admin approves this edit.",
+            "",
+            "Proposed field changes:",
+        ]
+        for field, ch in changes.items():
+            old_v = ch["old"] if ch["old"] is not None else "(none)"
+            new_v = ch["new"] if ch["new"] is not None else "(none)"
+            lines.append(f"  - {field}: {old_v} → {new_v}")
+        for dc in doc_changes_summary:
+            lines.append(f"  - {dc}")
 
-    # Trigger incremental recompute: this scholarship against all users.
-    from app.services.match_auto import trigger_scholarship_recompute
-    trigger_scholarship_recompute(sch.id)
-
-    return [TextContent(type="text", text=json.dumps(data, indent=2, default=str))]
+        return [TextContent(type="text", text="\n".join(lines))]
 
 
 # ── Blog helpers (imported from app.utils.blog) ──────────────────
