@@ -105,14 +105,6 @@ export async function validateScholarshipSlugs(slugs: string[]): Promise<{ valid
   return res.json();
 }
 
-export async function deleteBlogPost(postId: string): Promise<void> {
-  const res = await fetch(`${API_URL}/api/blog/${postId}`, {
-    method: 'DELETE',
-    credentials: 'include',
-  });
-  if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
-}
-
 // ── Admin endpoints ──────────────────────────────────────────────
 
 export async function adminFetchAllPosts(params?: {

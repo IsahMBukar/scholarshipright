@@ -914,7 +914,9 @@ async def _handle_blog_edit(args: dict[str, Any], auth: McpAuthRecord) -> dict:
             new_status = editable["status"]
             if new_status == "published" and post.status != "published":
                 post.published_at = datetime.now(timezone.utc)
-                # Explicit publish — any earlier proposed changes are now moot
+            # Leaving pending_review (publish/approve, reject/archive, etc.)
+            # clears the tracked before/after diff — mirrors the REST update path.
+            if new_status != "pending_review":
                 post.pending_changes = None
             post.status = new_status
             changed.append("status")

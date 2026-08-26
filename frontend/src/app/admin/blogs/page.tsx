@@ -10,7 +10,6 @@ import {
   Pencil,
   Eye,
   Archive,
-  Trash2,
   Search,
   ExternalLink,
   GitCompare,
@@ -24,7 +23,7 @@ import Badge, { type BadgeTone } from '@/components/admin/ui/Badge';
 import Button from '@/components/admin/ui/Button';
 import Drawer from '@/components/admin/ui/Drawer';
 import { useToast } from '@/components/admin/ui/Toast';
-import { adminFetchAllPosts, adminFetchPost, updateBlogPost, deleteBlogPost, validateScholarshipSlugs } from '@/lib/blog/api';
+import { adminFetchAllPosts, adminFetchPost, updateBlogPost, validateScholarshipSlugs } from '@/lib/blog/api';
 import type { BlogListOut, PaginatedBlogs, BlogPostOut } from '@/lib/blog/types';
 import { ScholarshipPicker } from '@/components/blog/ScholarshipPicker';
 import { useScholarshipValidation } from '@/lib/blog/useScholarshipValidation';
@@ -95,15 +94,6 @@ export default function AdminBlogsPage() {
       success('Post archived');
     },
     onError: () => error('Failed to archive post'),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteBlogPost(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-blogs'] });
-      success('Post deleted');
-    },
-    onError: () => error('Failed to delete post'),
   });
 
   // Diff drawer state
@@ -184,12 +174,12 @@ export default function AdminBlogsPage() {
           <Button size="sm" variant="ghost" onClick={() => openEdit(row.id)} title="Edit">
             <Pencil className="w-4 h-4" />
           </Button>
-          {row.status !== 'published' && row.status !== 'archived' && (
+          {row.status !== 'published' && (
             <Button
               size="sm"
               variant="ghost"
               onClick={() => publishMutation.mutate(row.id)}
-              title="Publish"
+              title={row.status === 'archived' ? 'Restore (publish)' : 'Publish'}
             >
               <Eye className="w-4 h-4" />
             </Button>
@@ -204,26 +194,16 @@ export default function AdminBlogsPage() {
               <GitCompare className="w-4 h-4" />
             </Button>
           )}
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => archiveMutation.mutate(row.id)}
-            title="Archive"
-          >
-            <Archive className="w-4 h-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              if (confirm('Delete this post permanently?')) {
-                deleteMutation.mutate(row.id);
-              }
-            }}
-            title="Delete"
-          >
-            <Trash2 className="w-4 h-4 text-red-500" />
-          </Button>
+          {row.status !== 'archived' && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => archiveMutation.mutate(row.id)}
+              title="Archive"
+            >
+              <Archive className="w-4 h-4" />
+            </Button>
+          )}
         </div>
       ),
     },
