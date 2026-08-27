@@ -51,6 +51,15 @@ export interface Scholarship {
   degree_levels: string[];
   fields_of_study: string[];
   eligible_nationalities: string[];
+  // Structured country eligibility (the source the match engine uses).
+  included_groups?: string[];
+  included_countries?: string[];
+  excluded_groups?: string[];
+  excluded_countries?: string[];
+  resolved_countries?: string[];
+  eligibility_basis?: string;
+  eligibility_display?: string;
+  eligibility_unresolved?: boolean;
   funding_type: string;
   covers_tuition: boolean;
   covers_living: boolean;

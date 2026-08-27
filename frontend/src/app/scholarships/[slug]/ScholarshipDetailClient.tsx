@@ -12,6 +12,51 @@ import type { Scholarship, MatchBreakdown, DegreeDocument, CustomDocument, Profi
 import { isProfileComplete } from '@/hooks/useOnboarding';
 import { getDeadlineInfo } from '@/components/scholarship/ScholarshipAtoms';
 import ScholarshipCustomizeModal from '@/components/resume-builder/ScholarshipCustomizeModal';
+import { COUNTRIES } from '@/data/countries';
+
+// ── Country eligibility display ───────────────────────────────────
+// The match engine keys off the resolved structured set. Render that as the
+// source of truth, and only fall back to the legacy free-text field when no
+// structured eligibility is configured.
+
+export function countryName(code: string): string {
+  const c = COUNTRIES.find((x) => x.code.toUpperCase() === code.toUpperCase());
+  return c?.name ?? code;
+}
+
+export function eligibilityInfo(s: Scholarship): {
+  label: string;
+  names: string[];
+  basis?: string;
+} {
+  const resolved = (s.resolved_countries ?? []).filter(Boolean);
+  const legacy = (s.eligible_nationalities ?? []).filter(Boolean);
+  const hasStructured =
+    (s.included_groups?.length ?? 0) +
+      (s.included_countries?.length ?? 0) +
+      (s.excluded_groups?.length ?? 0) +
+      (s.excluded_countries?.length ?? 0) >
+    0;
+
+  // Structured eligibility is configured → it is the source of truth.
+  if (hasStructured) {
+    if (s.eligibility_unresolved) {
+      return { label: 'Eligibility pending review', names: [], basis: s.eligibility_basis };
+    }
+    if (resolved.length) {
+      const names = resolved.map(countryName).sort((a, b) => a.localeCompare(b));
+      const label = `${resolved.length} eligible ${resolved.length === 1 ? 'country' : 'countries'}`;
+      return { label, names, basis: s.eligibility_basis };
+    }
+    return { label: 'Restricted (no countries resolved)', names: [], basis: s.eligibility_basis };
+  }
+
+  // No structured config → fall back to the legacy free-text field.
+  if (legacy.length) {
+    return { label: legacy.join(', '), names: legacy };
+  }
+  return { label: 'Open to all', names: [] };
+}
 
 // ── Helper: build doc list from a degree-level document row ────────
 type Doc = { name: string; note?: string; required: boolean };
@@ -532,9 +577,9 @@ export default function ScholarshipDetailClient() {
                     {scholarship.degree_levels?.join(', ') || 'All levels'}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-primary text-[18px]">public</span>
-                    {scholarship.eligible_nationalities?.join(', ') || 'Open'}
-                  </div>
+                                      <span className="material-symbols-outlined text-primary text-[18px]">public</span>
+                                      {eligibilityInfo(scholarship).label}
+                                    </div>
                   {typeof scholarship.view_count === 'number' && scholarship.view_count > 0 && (
                     <div className="flex items-center gap-2" title={`${scholarship.view_count} students have viewed this scholarship`}>
                       <span className="material-symbols-outlined text-primary text-[18px]">visibility</span>
@@ -942,12 +987,17 @@ export default function ScholarshipDetailClient() {
                 )}
               </div>
 
-              {scholarship.eligible_nationalities?.length > 0 && (
-                <div className="pt-2">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-text-primary mb-1">Eligible Nationalities</h4>
-                  <p className="text-sm text-text-secondary">{scholarship.eligible_nationalities.join(', ')}</p>
-                </div>
-              )}
+              {(() => {
+                              const ei = eligibilityInfo(scholarship);
+                              if (!ei.names.length && !(scholarship.eligible_nationalities?.length)) return null;
+                              const shown = ei.names.length ? ei.names : (scholarship.eligible_nationalities ?? []);
+                              return (
+                                <div className="pt-2">
+                                  <h4 className="text-xs font-bold uppercase tracking-wider text-text-primary mb-1">Eligible Countries</h4>
+                                  <p className="text-sm text-text-secondary">{shown.join(', ')}</p>
+                                </div>
+                              );
+                            })()}
 
               {/* Accepted English Tests — pills */}
               {((scholarship.accepted_english_tests ?? []).length > 0) && (

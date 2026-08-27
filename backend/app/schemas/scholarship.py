@@ -76,6 +76,16 @@ class ScholarshipResponse(ScholarshipBase):
     degree_documents: Optional[List[dict]] = None
     # Custom/flexible document requirements added by admin
     custom_documents: Optional[List[dict]] = None
+    # ── Structured country eligibility (the source the match engine uses) ──
+    # Legacy free-text field; prefer the structured reality exposed below.
+    included_groups: List[str] = []
+    included_countries: List[str] = []
+    excluded_groups: List[str] = []
+    excluded_countries: List[str] = []
+    resolved_countries: List[str] = []          # the resolved eligible set (ISO codes)
+    eligibility_basis: Optional[str] = None      # 'citizenship' | 'residency' | 'either'
+    eligibility_display: Optional[str] = None    # human-readable text
+    eligibility_unresolved: bool = False
 
     class Config:
         from_attributes = True
