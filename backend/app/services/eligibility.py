@@ -40,6 +40,9 @@ async def get_group_members(db: AsyncSession, group_code: str) -> Set[str]:
     """Return the set of country codes belonging to a group.
 
     Raises ValueError if the group doesn't exist or is deprecated.
+
+    Codes are uppercased defensively in case the underlying row was
+    written before case-normalization was enforced on writes.
     """
     group = (
         await db.execute(
@@ -55,7 +58,7 @@ async def get_group_members(db: AsyncSession, group_code: str) -> Set[str]:
             select(GroupMember.country_code).where(GroupMember.group_id == group.id)
         )
     ).scalars().all()
-    return set(rows)
+    return {r.upper() for r in rows if r}
 
 
 async def get_groups_containing_country(db: AsyncSession, country_code: str) -> list[str]:
@@ -235,6 +238,108 @@ def passes_country_gate(
 
 
 # ── Re-resolution job ──────────────────────────────────────────────
+
+
+async def validate_eligibility_inputs(
+    included_groups: list[str],
+    included_countries: list[str],
+    excluded_groups: list[str],
+    excluded_countries: list[str],
+    db: AsyncSession,
+) -> dict:
+    """Dry-run the resolver and surface common agent mistakes.
+
+    Returns a dict with:
+      - resolved_count: int
+      - sample_resolved: list[str]  (first 10 codes)
+      - unresolved: bool  (any group code missing/deprecated)
+      - unresolved_groups: list[str]
+      - warnings: list[str]  (non-fatal, agent-actionable)
+      - excluded_countries_not_in_set: list[str]
+      - excluded_groups_not_in_set: list[str]
+    """
+    included_groups = list(included_groups or [])
+    included_countries = list(included_countries or [])
+    excluded_groups = list(excluded_groups or [])
+    excluded_countries = list(excluded_countries or [])
+
+    included_countries_upper = {c.upper() for c in included_countries}
+
+    # Build the included set the same way the resolver will.
+    included: Set[str] = set()
+    unresolved_groups: list[str] = []
+    for code in included_groups:
+        try:
+            members = await get_group_members(db, code)
+            included |= members
+        except ValueError:
+            unresolved_groups.append(code)
+    included |= included_countries_upper
+
+    if not included_groups and not included_countries:
+        included = await get_all_country_codes(db)
+
+    # Find excluded countries that aren't in the included set (silent no-ops).
+    excluded_countries_upper = {c.upper() for c in excluded_countries}
+    excluded_countries_not_in_set = sorted(excluded_countries_upper - included)
+
+    # Find excluded groups whose members don't overlap with included set.
+    excluded_groups_not_in_set: list[str] = []
+    for code in excluded_groups:
+        try:
+            members = await get_group_members(db, code)
+            if not (members & included):
+                excluded_groups_not_in_set.append(code)
+        except ValueError:
+            unresolved_groups.append(code)
+
+    # Run the actual resolver to get the canonical answer.
+    resolved, unresolved = await resolve_eligibility(
+        included_groups=included_groups,
+        included_countries=included_countries,
+        excluded_groups=excluded_groups,
+        excluded_countries=excluded_countries,
+        db=db,
+    )
+
+    warnings: list[str] = []
+    if unresolved_groups:
+        warnings.append(
+            f"Unknown/deprecated group code(s): {', '.join(sorted(set(unresolved_groups)))}. "
+            "Call list_groups to see valid codes."
+        )
+    if excluded_countries_not_in_set:
+        warnings.append(
+            f"excluded_countries contains codes not in the included set — these are no-ops: "
+            f"{', '.join(excluded_countries_not_in_set)}. "
+            "If you wanted to remove them, add to included first or leave included empty (= all countries)."
+        )
+    if excluded_groups_not_in_set:
+        warnings.append(
+            f"excluded_groups contains groups with no overlap with the included set — no-ops: "
+            f"{', '.join(excluded_groups_not_in_set)}."
+        )
+    if len(included_countries_upper) == 1 and (excluded_countries or excluded_groups):
+        warnings.append(
+            f"included_countries is a single country ({next(iter(included_countries_upper))}) "
+            f"but excluded_* is also set. Excludes cannot reduce a 1-element set; they will be ignored."
+        )
+    if not included_groups and not included_countries and (excluded_groups or excluded_countries):
+        warnings.append(
+            "included_* is empty — starting set is ALL countries. "
+            "Excluded codes will be removed. This is the correct pattern for 'global but not X'."
+        )
+
+    return {
+        "resolved_count": len(resolved),
+        "sample_resolved": resolved[:10],
+        "unresolved": unresolved,
+        "unresolved_groups": sorted(set(unresolved_groups)),
+        "warnings": warnings,
+        "excluded_countries_not_in_set": excluded_countries_not_in_set,
+        "excluded_groups_not_in_set": excluded_groups_not_in_set,
+    }
+
 
 async def re_resolve_stale_scholarships(triggering_group_code: str) -> dict:
     """Find and re-resolve all scholarships whose groups_resolved_at is older

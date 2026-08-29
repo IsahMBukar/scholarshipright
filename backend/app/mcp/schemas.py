@@ -41,12 +41,12 @@ SCHOLARSHIP_FIELDS = {
     "eligible_nationalities": {
         "type": "array",
         "items": {"type": "string"},
-        "description": "Eligible nationalities or groups (e.g. ['All countries', 'Commonwealth'])",
+        "description": "LEGACY — do not set. The match engine reads included_*/excluded_* only. Kept on the model for back-compat with the admin form; setting it here is a no-op for matching.",
     },
     "eligible_regions": {
         "type": "array",
         "items": {"type": "string"},
-        "description": "Eligible regions (e.g. ['Africa', 'Asia', 'All regions'])",
+        "description": "LEGACY — do not set. The match engine reads included_*/excluded_* only. Kept on the model for back-compat with the admin form; setting it here is a no-op for matching.",
     },
 
     # Optional — Funding
@@ -233,13 +233,26 @@ def get_tool_schemas() -> dict:
                 "Add a new scholarship to the review queue. Submissions are reviewed by an admin before going live. "
                 "Use degree_documents for per-level doc configs and custom_documents for non-standard requirements "
                 "(portfolio, video essay, etc.).\n\n"
-                "COUNTRY ELIGIBILITY — use the structured fields, NOT eligible_nationalities/eligible_regions:\n"
-                "  - included_groups / excluded_groups: country group codes (e.g. ['COMMONWEALTH'], ['EU'])\n"
-                "  - included_countries / excluded_countries: ISO 3166-1 alpha-2 codes (e.g. ['NG', 'KE'])\n"
-                "  - eligibility_basis: 'citizenship' | 'residency' | 'either' (default 'either')\n"
-                "These compose at write time: resolved = (included_groups + included_countries) - (excluded_groups + excluded_countries). "
-                "On approve, the server re-resolves the flat resolved_countries list the match engine reads. "
-                "Use eligible_nationalities only for free-text descriptions that don't reduce to a country code (e.g. 'African countries')."
+                "COUNTRY ELIGIBILITY — set algebra. The match engine reads ONLY included_*/excluded_*/eligibility_basis. "
+                "eligible_nationalities, eligible_regions, and eligibility_display are for UI only and do NOT drive matching.\n\n"
+                "  included_* = the starting set (default: ALL countries if you leave both empty)\n"
+                "  excluded_* = subtracted from the starting set\n\n"
+                "Patterns — pick the one that matches the scholarship's wording:\n"
+                "  • 'African countries only'         → included_groups: ['AU']\n"
+                "  • 'AU except 4 countries'          → included_groups: ['AU'], excluded_countries: ['NG','KE','GH','ZA']\n"
+                "  • 'Global, but not EU'             → (leave include empty) excluded_groups: ['EU']\n"
+                "  • 'Global, but not Pakistan'       → (leave include empty) excluded_countries: ['PK']\n"
+                "  • 'AU except ECOWAS members'       → included_groups: ['AU'], excluded_groups: ['ECOWAS']\n"
+                "  • 'Random 5 countries (no group)'  → included_countries: ['NG','KE','GH','ZA','TZ']\n"
+                "  • 'Worldwide'                      → leave all four arrays empty\n\n"
+                "Rules:\n"
+                "  - If included_* is empty, the starting set is ALL countries. Use this for exclude-only scholarships.\n"
+                "  - You can only exclude what's in the starting set. Excluding a country not in your included_* is a silent no-op.\n"
+                "  - To express 'one specific country' use included_countries: ['XX'] with empty excluded_*.\n"
+                "  - eligibility_basis defaults to 'either' (citizenship OR residency). Use 'citizenship' only if the program "
+                "explicitly requires citizenship and rejects residents. 'residency' is rarely used.\n"
+                "  - Don't set eligible_nationalities, eligible_regions, or eligibility_display — the match engine ignores them. "
+                "The admin can fill eligibility_display from the resolved list at approve time."
             ),
             "inputSchema": {
                 "type": "object",
@@ -271,11 +284,13 @@ def get_tool_schemas() -> dict:
             "description": (
                 "Propose an edit to an existing scholarship. Changes go to the review queue and only apply after an admin approves.\n\n"
                 "Only pass the fields you want to change — omitted fields stay unchanged. Use degree_documents to set per-level doc configs (replaces existing for specified levels) and custom_documents to replace all custom docs.\n\n"
-                "COUNTRY ELIGIBILITY — use the structured fields, NOT eligible_nationalities/eligible_regions:\n"
-                "  - included_groups / excluded_groups: country group codes (e.g. ['COMMONWEALTH'])\n"
-                "  - included_countries / excluded_countries: ISO 3166-1 alpha-2 codes (e.g. ['NG', 'KE'])\n"
-                "  - eligibility_basis: 'citizenship' | 'residency' | 'either'\n"
-                "On approve, the server re-resolves resolved_countries from these fields. Sending empty arrays for all four clears the rules and re-opens the scholarship to all countries."
+                "COUNTRY ELIGIBILITY — set algebra. Same rules as add_scholarship:\n"
+                "  - included_*/excluded_* are the only fields the match engine reads.\n"
+                "  - Empty included_* = starting set is ALL countries (use this for 'exclude-only' patterns).\n"
+                "  - To CLEAR all restrictions, send empty arrays for all four. The server re-resolves on approve.\n"
+                "  - Do not set eligible_nationalities, eligible_regions, or eligibility_display — they are UI-only.\n"
+                "  - Re-resolve runs on approve ONLY if you change one of the structured eligibility fields. "
+                "If you only want to change the display text, do not touch included_*/excluded_*."
             ),
             "inputSchema": {
                 "type": "object",
@@ -339,6 +354,25 @@ def get_tool_schemas() -> dict:
             "inputSchema": {
                 "type": "object",
                 "properties": {},
+            },
+        },
+        "validate_eligibility": {
+            "description": (
+                "Dry-run the eligibility resolver on a set of country/group inputs. "
+                "Use this BEFORE add_scholarship or edit_scholarship to confirm the "
+                "resolved set matches your intent. Returns the resolved country count, "
+                "a sample of resolved codes, unresolved groups, and warnings for common "
+                "mistakes (excluded country not in included set, single-country include "
+                "with excludes, etc.). Does NOT write to the database."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "included_groups": {"type": "array", "items": {"type": "string"}},
+                    "included_countries": {"type": "array", "items": {"type": "string"}},
+                    "excluded_groups": {"type": "array", "items": {"type": "string"}},
+                    "excluded_countries": {"type": "array", "items": {"type": "string"}},
+                },
             },
         },
     }

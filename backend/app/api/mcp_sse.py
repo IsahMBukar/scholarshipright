@@ -348,6 +348,8 @@ async def _call_tool(
             result = await _handle_blog_edit(args, auth)
         elif name == "list_blog_categories":
             result = await _handle_blog_categories()
+        elif name == "validate_eligibility":
+            result = await _handle_validate_eligibility(args)
         else:
             result = {
                 "content": [{"type": "text", "text": f"Unknown tool: {name}"}],
@@ -975,3 +977,47 @@ async def _handle_blog_categories() -> dict:
             return {"content": [{"type": "text", "text": "No blog categories found."}]}
 
         return {"content": [{"type": "text", "text": "Categories:\n" + "\n".join(f"- {c}" for c in categories)}]}
+
+
+async def _handle_validate_eligibility(args: dict[str, Any]) -> dict:
+    """Dry-run the eligibility resolver. Same as stdio _handle_validate_eligibility."""
+    from app.services.eligibility import validate_eligibility_inputs
+
+    inc_groups = args.get("included_groups", []) or []
+    inc_countries = args.get("included_countries", []) or []
+    exc_groups = args.get("excluded_groups", []) or []
+    exc_countries = args.get("excluded_countries", []) or []
+
+    if not isinstance(inc_groups, list) or not isinstance(inc_countries, list) \
+            or not isinstance(exc_groups, list) or not isinstance(exc_countries, list):
+        return {
+            "content": [{"type": "text", "text": "All four fields must be arrays of strings."}],
+            "isError": True,
+        }
+
+    async with AsyncSessionLocal() as db:
+        result = await validate_eligibility_inputs(
+            included_groups=inc_groups,
+            included_countries=inc_countries,
+            excluded_groups=exc_groups,
+            excluded_countries=exc_countries,
+            db=db,
+        )
+
+    lines = [f"Resolved: {result['resolved_count']} country(s)"]
+    if result["sample_resolved"]:
+        lines.append(f"Sample: {', '.join(result['sample_resolved'])}")
+    else:
+        lines.append("Sample: (none)")
+    if result["unresolved"]:
+        lines.append("Unresolved: TRUE — eligibility will be flagged for admin review")
+    if result["warnings"]:
+        lines.append("")
+        lines.append("Warnings:")
+        for w in result["warnings"]:
+            lines.append(f"  - {w}")
+
+    return {
+        "content": [{"type": "text", "text": "\n".join(lines)}],
+        "structuredContent": result,
+    }

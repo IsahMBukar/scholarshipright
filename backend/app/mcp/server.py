@@ -79,6 +79,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         return await _handle_blog_edit(arguments)
     elif name == "list_blog_categories":
         return await _handle_blog_categories()
+    elif name == "validate_eligibility":
+        return await _handle_validate_eligibility(arguments)
     return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
 
@@ -543,6 +545,44 @@ async def _handle_blog_categories() -> list[TextContent]:
         if not categories:
             return [TextContent(type="text", text="No blog categories found.")]
         return [TextContent(type="text", text="Categories:\n" + "\n".join(f"- {c}" for c in categories))]
+
+
+async def _handle_validate_eligibility(args: dict[str, Any]) -> list[TextContent]:
+    from app.services.eligibility import validate_eligibility_inputs
+
+    inc_groups = args.get("included_groups", []) or []
+    inc_countries = args.get("included_countries", []) or []
+    exc_groups = args.get("excluded_groups", []) or []
+    exc_countries = args.get("excluded_countries", []) or []
+
+    if not isinstance(inc_groups, list) or not isinstance(inc_countries, list) \
+            or not isinstance(exc_groups, list) or not isinstance(exc_countries, list):
+        return [TextContent(type="text", text="All four fields must be arrays of strings.")]
+
+    async with AsyncSessionLocal() as db:
+        result = await validate_eligibility_inputs(
+            included_groups=inc_groups,
+            included_countries=inc_countries,
+            excluded_groups=exc_groups,
+            excluded_countries=exc_countries,
+            db=db,
+        )
+
+    lines = [
+        f"Resolved: {result['resolved_count']} country(s)",
+    ]
+    if result["sample_resolved"]:
+        lines.append(f"Sample: {', '.join(result['sample_resolved'])}")
+    else:
+        lines.append("Sample: (none)")
+    if result["unresolved"]:
+        lines.append(f"Unresolved: TRUE — eligibility will be flagged for admin review")
+    if result["warnings"]:
+        lines.append("")
+        lines.append("Warnings:")
+        for w in result["warnings"]:
+            lines.append(f"  - {w}")
+    return [TextContent(type="text", text="\n".join(lines))]
 
 
 async def main():

@@ -64,10 +64,14 @@ _ELIGIBILITY_FIELDS = {
 }
 
 # Fields that, when changed, invalidate cached match scores.
+# NOTE: eligible_nationalities / eligible_regions are LEGACY UI labels.
+# They do not drive matching (the match engine reads resolved_countries
+# derived from included_*/excluded_*), so editing them must NOT bust the
+# match cache. Remove from this set when those columns are dropped.
 _MATCH_AFFECTING_FIELDS = {
     "name", "description", "benefits_summary", "how_to_apply",
     "fields_of_study", "degree_levels", "host_country", "host_institution",
-    "provider", "funding_type", "eligible_nationalities", "eligible_regions",
+    "provider", "funding_type",
     "requires_ielts", "min_ielts_score", "min_cgpa",
     "covers_tuition", "covers_living", "covers_flight", "covers_health",
     "deadline", "program_start_date",

@@ -290,6 +290,11 @@ async def delete_group(
                            target_id=str(group.id), payload={"code": group.code, "name": group.name})
     await db.commit()
 
+    # Re-resolve so dependent scholarships surface the deprecated group as
+    # 'unresolved' instead of silently keeping the old country set.
+    stats = await re_resolve_stale_scholarships(code)
+    logger.info("Re-resolution after group %s deprecate: %s", code, stats)
+
     return {"deprecated": True, "code": code}
 
 

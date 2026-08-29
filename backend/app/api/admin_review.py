@@ -250,6 +250,7 @@ async def approve_pending_scholarship(
     # The admin direct-create path does this in admin_scholarships.py; the MCP
     # approval path must do it too, otherwise MCP-submitted scholarships with
     # country rules land with resolved_countries=[] and match as "open to all".
+    eligibility_resolve_failed = False
     try:
         inc_groups = list(scholarship.included_groups or [])
         inc_countries = list(scholarship.included_countries or [])
@@ -270,9 +271,27 @@ async def approve_pending_scholarship(
             await db.commit()
             await db.refresh(scholarship)
     except Exception:  # noqa: BLE001
+        # Surface a hard fail-open: flag the scholarship as unresolved so
+        # the match engine does not silently treat it as "all countries".
+        # The admin sees this flag on the scholarship and can retry.
         logger.exception(
             "eligibility re-resolve failed after approve (pending=%s, scholarship=%s)",
             pending_id, scholarship.id,
+        )
+        eligibility_resolve_failed = True
+        try:
+            scholarship.eligibility_unresolved = True
+            scholarship.resolved_countries = []
+            scholarship.groups_resolved_at = None
+            await db.commit()
+            await db.refresh(scholarship)
+        except Exception:  # noqa: BLE001
+            logger.exception("failed to mark scholarship unresolved after resolve error")
+
+    if eligibility_resolve_failed:
+        logger.warning(
+            "Scholarship %s (pending=%s) created with eligibility_unresolved=True — admin must re-resolve",
+            scholarship.id, pending_id,
         )
 
     # Trigger incremental match: compute ONLY this scholarship against ALL users.
@@ -455,9 +474,23 @@ async def _approve_edit_proposal(
                 await db.commit()
                 await db.refresh(sch)
         except Exception:  # noqa: BLE001
+            # Surface a hard fail-open: flag as unresolved so the match
+            # engine does not silently keep the stale country set.
             logger.exception(
                 "eligibility re-resolve failed after edit approve (pending=%s, scholarship=%s)",
                 pending.id, sch.id,
+            )
+            try:
+                sch.eligibility_unresolved = True
+                sch.resolved_countries = []
+                sch.groups_resolved_at = None
+                await db.commit()
+                await db.refresh(sch)
+            except Exception:  # noqa: BLE001
+                logger.exception("failed to mark scholarship unresolved after edit resolve error")
+            logger.warning(
+                "Scholarship %s (pending=%s) updated with eligibility_unresolved=True — admin must re-resolve",
+                sch.id, pending.id,
             )
 
     # Deadline extended → good-news notification for savers.
