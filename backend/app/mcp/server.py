@@ -478,50 +478,32 @@ async def _handle_blog_edit(args: dict[str, Any]) -> list[TextContent]:
         if not post:
             return [TextContent(type="text", text=f"Not found: {post_id}")]
 
-        changed = []
+        from app.mcp.handlers import apply_blog_post_changes, format_blog_edit_response
+        from app.utils.scholarship_tags import (
+            extract_scholarship_slugs,
+            validate_scholarship_slugs,
+        )
 
-        if "title" in editable:
-            new_slug = _slugify(editable["title"])
-            slug_exists = await db.execute(
-                select(BlogPost.id).where(BlogPost.slug == new_slug, BlogPost.id != post.id)
-            )
-            if slug_exists.scalar_one_or_none():
-                new_slug = f"{new_slug}-{uuid4().hex[:6]}"
-            post.slug = new_slug
-            post.title = editable["title"]
-            changed.append("title")
+        changed, invalid_slugs = await apply_blog_post_changes(
+            post,
+            editable,
+            auth_identity="local",
+            slugify_fn=_slugify,
+            db=db,
+            extract_scholarship_slugs_fn=extract_scholarship_slugs,
+            validate_scholarship_slugs_fn=validate_scholarship_slugs,
+            sync_blog_scholarship_tags_fn=_sync_blog_tags,
+            compute_reading_time_fn=_reading_time,
+        )
 
-        if "body" in editable:
-            slugs = extract_scholarship_slugs(editable["body"])
-            if slugs:
-                v = await validate_scholarship_slugs(db, slugs)
-                if v["invalid"]:
-                    lines = [f"Invalid scholarship slugs: {', '.join(v['invalid'])}"]
-                    for bad in v["invalid"]:
-                        sug = v["suggestions"].get(bad, [])
-                        if sug:
-                            lines.append(f"  '{bad}' did you mean: {', '.join(s['slug'] for s in sug)}")
-                    return [TextContent(type="text", text="\n".join(lines))]
-            post.body = editable["body"]
-            post.reading_time_minutes = _reading_time(editable["body"])
-            await _sync_blog_tags(db, post.id, editable["body"])
-            changed.append("body")
-
-        for field in ("excerpt", "cover_image_url", "category", "tags"):
-            if field in editable:
-                setattr(post, field, editable[field])
-                changed.append(field)
-
-        if "status" in editable:
-            new_status = editable["status"]
-            if new_status == "published" and post.status != "published":
-                post.published_at = datetime.now(timezone.utc)
-            post.status = new_status
-            changed.append("status")
-        elif post.status == "published" and changed:
-            # Agent edited a live post → revert to pending_review
-            post.status = "pending_review"
-            changed.append("status→pending_review")
+        if invalid_slugs:
+            # Body had unknown scholarship slugs — surface a helpful error.
+            lines = [f"Invalid scholarship slugs: {', '.join(invalid_slugs)}"]
+            for bad in invalid_slugs:
+                sug = (await validate_scholarship_slugs(db, [bad])).get("suggestions", {}).get(bad, [])
+                if sug:
+                    lines.append(f"  '{bad}' did you mean: {', '.join(s['slug'] for s in sug)}")
+            return [TextContent(type="text", text="\n".join(lines))]
 
         if not changed:
             return [TextContent(type="text", text=f"No changes for: {post.title}")]
@@ -530,10 +512,10 @@ async def _handle_blog_edit(args: dict[str, Any]) -> list[TextContent]:
         await db.commit()
         await db.refresh(post)
 
-        data = {"id": str(post.id), "title": post.title, "slug": post.slug, "status": post.status, "updated_fields": changed}
-        if post.status == "pending_review":
-            data["note"] = "Post reverted to pending_review — admin will re-approve before it goes live again."
-        return [TextContent(type="text", text=json.dumps(data, indent=2, default=str))]
+        return [TextContent(
+            type="text",
+            text=json.dumps(format_blog_edit_response(post, changed), indent=2, default=str),
+        )]
 
 
 async def _handle_blog_categories() -> list[TextContent]:
@@ -548,41 +530,24 @@ async def _handle_blog_categories() -> list[TextContent]:
 
 
 async def _handle_validate_eligibility(args: dict[str, Any]) -> list[TextContent]:
-    from app.services.eligibility import validate_eligibility_inputs
+    from app.mcp.handlers import (
+        format_validate_eligibility,
+        parse_eligibility_args,
+        run_validate_eligibility,
+    )
 
-    inc_groups = args.get("included_groups", []) or []
-    inc_countries = args.get("included_countries", []) or []
-    exc_groups = args.get("excluded_groups", []) or []
-    exc_countries = args.get("excluded_countries", []) or []
-
-    if not isinstance(inc_groups, list) or not isinstance(inc_countries, list) \
-            or not isinstance(exc_groups, list) or not isinstance(exc_countries, list):
+    parsed = parse_eligibility_args(args)
+    if parsed is None:
         return [TextContent(type="text", text="All four fields must be arrays of strings.")]
+    inc_groups, inc_countries, exc_groups, exc_countries = parsed
 
-    async with AsyncSessionLocal() as db:
-        result = await validate_eligibility_inputs(
-            included_groups=inc_groups,
-            included_countries=inc_countries,
-            excluded_groups=exc_groups,
-            excluded_countries=exc_countries,
-            db=db,
-        )
-
-    lines = [
-        f"Resolved: {result['resolved_count']} country(s)",
-    ]
-    if result["sample_resolved"]:
-        lines.append(f"Sample: {', '.join(result['sample_resolved'])}")
-    else:
-        lines.append("Sample: (none)")
-    if result["unresolved"]:
-        lines.append(f"Unresolved: TRUE — eligibility will be flagged for admin review")
-    if result["warnings"]:
-        lines.append("")
-        lines.append("Warnings:")
-        for w in result["warnings"]:
-            lines.append(f"  - {w}")
-    return [TextContent(type="text", text="\n".join(lines))]
+    result = await run_validate_eligibility(
+        inc_groups=inc_groups,
+        inc_countries=inc_countries,
+        exc_groups=exc_groups,
+        exc_countries=exc_countries,
+    )
+    return [TextContent(type="text", text=format_validate_eligibility(result))]
 
 
 async def main():

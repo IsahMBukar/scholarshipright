@@ -845,7 +845,6 @@ async def _handle_blog_get(args: dict[str, Any]) -> dict:
 async def _handle_blog_edit(args: dict[str, Any], auth: McpAuthRecord) -> dict:
     """Edit an existing blog post."""
     import uuid as _uuid
-    from datetime import datetime, timezone
 
     post_id = args.get("post_id", "").strip()
     if not post_id:
@@ -869,79 +868,30 @@ async def _handle_blog_edit(args: dict[str, Any], auth: McpAuthRecord) -> dict:
         if not post:
             return {"content": [{"type": "text", "text": f"Blog post not found: {post_id}"}], "isError": True}
 
-        # Snapshot current values so admins can review a before/after diff
-        _tracked = ("title", "excerpt", "body", "cover_image_url", "category", "tags")
-        old_values = {f: getattr(post, f) for f in _tracked if f in editable}
-        changed = []
+        from app.mcp.handlers import apply_blog_post_changes, format_blog_edit_response
 
-        # Handle title change → regenerate slug
-        if "title" in editable:
-            new_slug = _slugify(editable["title"])
-            from sqlalchemy import select as _sel
-            slug_exists = await db.execute(
-                _sel(BlogPost.id).where(BlogPost.slug == new_slug, BlogPost.id != post.id)
-            )
-            if slug_exists.scalar_one_or_none():
-                new_slug = f"{new_slug}-{_uuid.uuid4().hex[:6]}"
-            post.slug = new_slug
-            post.title = editable["title"]
-            changed.append("title")
+        identity = _get_auth_identity(auth)
+        changed, invalid_slugs = await apply_blog_post_changes(
+            post,
+            editable,
+            auth_identity=identity or "unknown",
+            slugify_fn=_slugify,
+            db=db,
+            extract_scholarship_slugs_fn=extract_scholarship_slugs,
+            validate_scholarship_slugs_fn=validate_scholarship_slugs,
+            sync_blog_scholarship_tags_fn=_sync_blog_scholarship_tags,
+            compute_reading_time_fn=_reading_time,
+        )
 
-        if "body" in editable:
-            slugs = extract_scholarship_slugs(editable["body"])
-            if slugs:
-                v = await validate_scholarship_slugs(db, slugs)
-                if v["invalid"]:
-                    lines = [f"Invalid scholarship slugs: {', '.join(v['invalid'])}"]
-                    for bad in v["invalid"]:
-                        sug = v["suggestions"].get(bad, [])
-                        if sug:
-                            lines.append(f"  '{bad}' did you mean: {', '.join(s['slug'] for s in sug)}")
-                        else:
-                            lines.append(f"  '{bad}' not found. Call list_scholarships search='{bad}'")
-                    return {"content": [{"type": "text", "text": "\n".join(lines)}], "isError": True}
-            post.body = editable["body"]
-            post.reading_time_minutes = _reading_time(editable["body"])
-            await _sync_blog_scholarship_tags(db, post.id, editable["body"])
-            changed.append("body")
-
-        for field in ("excerpt", "cover_image_url", "category", "tags"):
-            if field in editable:
-                setattr(post, field, editable[field])
-                changed.append(field)
-
-        # Handle status change
-        reverted_to_review = False
-        if "status" in editable:
-            new_status = editable["status"]
-            if new_status == "published" and post.status != "published":
-                post.published_at = datetime.now(timezone.utc)
-            # Leaving pending_review (publish/approve, reject/archive, etc.)
-            # clears the tracked before/after diff — mirrors the REST update path.
-            if new_status != "pending_review":
-                post.pending_changes = None
-            post.status = new_status
-            changed.append("status")
-        elif post.status == "published" and changed:
-            # Agent edited a live post without explicitly setting status →
-            # revert to pending_review so admin re-approves before it goes live again.
-            post.status = "pending_review"
-            changed.append("status→pending_review")
-            reverted_to_review = True
-
-        # Track what the agent changed while the post awaits re-approval,
-        # so the admin blogs UI can show a before/after diff.
-        if reverted_to_review or (post.status == "pending_review" and changed):
-            identity = _get_auth_identity(auth)
-            post.pending_changes = {
-                "edited_via": f"mcp:{identity}",
-                "changed_fields": changed,
-                "old": {
-                    f: old_values[f]
-                    for f in changed
-                    if f in old_values
-                },
-            }
+        if invalid_slugs:
+            lines = [f"Invalid scholarship slugs: {', '.join(invalid_slugs)}"]
+            for bad in invalid_slugs:
+                sug = (await validate_scholarship_slugs(db, [bad])).get("suggestions", {}).get(bad, [])
+                if sug:
+                    lines.append(f"  '{bad}' did you mean: {', '.join(s['slug'] for s in sug)}")
+                else:
+                    lines.append(f"  '{bad}' not found. Call list_scholarships search='{bad}'")
+            return {"content": [{"type": "text", "text": "\n".join(lines)}], "isError": True}
 
         if not changed:
             return {"content": [{"type": "text", "text": f"No changes for: {post.title}"}]}
@@ -950,16 +900,9 @@ async def _handle_blog_edit(args: dict[str, Any], auth: McpAuthRecord) -> dict:
         await db.commit()
         await db.refresh(post)
 
-        data = {
-            "id": str(post.id),
-            "title": post.title,
-            "slug": post.slug,
-            "status": post.status,
-            "updated_fields": changed,
+        return {
+            "content": [{"type": "text", "text": json.dumps(format_blog_edit_response(post, changed), indent=2, default=str)}],
         }
-        if post.status == "pending_review":
-            data["note"] = "Post set to pending_review with tracked changes — admin will review the diff before it goes live again."
-        return {"content": [{"type": "text", "text": json.dumps(data, indent=2, default=str)}]}
 
 
 async def _handle_blog_categories() -> dict:
@@ -980,44 +923,28 @@ async def _handle_blog_categories() -> dict:
 
 
 async def _handle_validate_eligibility(args: dict[str, Any]) -> dict:
-    """Dry-run the eligibility resolver. Same as stdio _handle_validate_eligibility."""
-    from app.services.eligibility import validate_eligibility_inputs
+    """Dry-run the eligibility resolver. Same business logic as stdio."""
+    from app.mcp.handlers import (
+        format_validate_eligibility,
+        parse_eligibility_args,
+        run_validate_eligibility,
+    )
 
-    inc_groups = args.get("included_groups", []) or []
-    inc_countries = args.get("included_countries", []) or []
-    exc_groups = args.get("excluded_groups", []) or []
-    exc_countries = args.get("excluded_countries", []) or []
-
-    if not isinstance(inc_groups, list) or not isinstance(inc_countries, list) \
-            or not isinstance(exc_groups, list) or not isinstance(exc_countries, list):
+    parsed = parse_eligibility_args(args)
+    if parsed is None:
         return {
             "content": [{"type": "text", "text": "All four fields must be arrays of strings."}],
             "isError": True,
         }
+    inc_groups, inc_countries, exc_groups, exc_countries = parsed
 
-    async with AsyncSessionLocal() as db:
-        result = await validate_eligibility_inputs(
-            included_groups=inc_groups,
-            included_countries=inc_countries,
-            excluded_groups=exc_groups,
-            excluded_countries=exc_countries,
-            db=db,
-        )
-
-    lines = [f"Resolved: {result['resolved_count']} country(s)"]
-    if result["sample_resolved"]:
-        lines.append(f"Sample: {', '.join(result['sample_resolved'])}")
-    else:
-        lines.append("Sample: (none)")
-    if result["unresolved"]:
-        lines.append("Unresolved: TRUE — eligibility will be flagged for admin review")
-    if result["warnings"]:
-        lines.append("")
-        lines.append("Warnings:")
-        for w in result["warnings"]:
-            lines.append(f"  - {w}")
-
+    result = await run_validate_eligibility(
+        inc_groups=inc_groups,
+        inc_countries=inc_countries,
+        exc_groups=exc_groups,
+        exc_countries=exc_countries,
+    )
     return {
-        "content": [{"type": "text", "text": "\n".join(lines)}],
+        "content": [{"type": "text", "text": format_validate_eligibility(result)}],
         "structuredContent": result,
     }
