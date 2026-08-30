@@ -66,14 +66,26 @@ class TestScholarshipModel:
             official_url="https://example.com",
             degree_levels=["master", "phd"],
             fields_of_study=["engineering", "science"],
-            eligible_nationalities=["All countries"],
+            # Structured eligibility fields (the source of truth).
+            included_groups=["EU"],
+            included_countries=["NG"],
+            excluded_countries=["PK"],
         )
         db.add(sch)
         await db.commit()
 
         assert sch.degree_levels == ["master", "phd"]
         assert "engineering" in sch.fields_of_study
-        assert len(sch.eligible_nationalities) == 1
+        # Structured fields round-trip via ARRAY(String) column.
+        assert sch.included_groups == ["EU"]
+        assert sch.included_countries == ["NG"]
+        assert sch.excluded_countries == ["PK"]
+        # resolved_countries is empty until re-resolved (admin code path
+        # or the model backfill on app startup).
+        assert sch.resolved_countries == [] or isinstance(sch.resolved_countries, list)
+        # Legacy eligible_nationalities is still on the model (read-only)
+        # but defaults to [] for new scholarships.
+        assert sch.eligible_nationalities == []
 
 
 class TestPendingScholarshipModel:

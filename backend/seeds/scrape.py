@@ -108,6 +108,9 @@ def _normalize_jsonld(node: dict, base_url: str) -> dict:
         "description": description,
         "official_url": url,
         "deadline": _iso_date(deadline) or "",
+        # Legacy field — frozen for new admin writes; the seeder still
+        # populates it from external sources for backwards compat.
+        # See DEPRECATION.md for the migration path.
         "eligible_nationalities": eligible,
         "host_country": _guess_country(url, name),
         "source": urlparse(url).netloc,
@@ -181,6 +184,8 @@ def _normalize_record(record: dict) -> dict:
         "provider": "Unknown",
         "degree_levels": ["master"],
         "fields_of_study": ["all_fields"],
+        # Legacy fields — frozen for new admin writes; seeder still
+        # populates for backwards compat. See DEPRECATION.md.
         "eligible_nationalities": ["All countries"],
         "eligible_regions": ["All regions"],
         "funding_type": "fully_funded",

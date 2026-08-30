@@ -10,9 +10,10 @@
 //   - Form state is always strings for numeric/date fields. We parse at
 //     build time so empty inputs become "not set" (PATCH) or omitted (POST)
 //     rather than "0" or "".
-//   - Array fields (degree_levels, fields_of_study, eligible_nationalities,
-//     eligible_regions) are entered as comma-separated strings in the UI
-//     and split at build time.
+//   - Array fields (degree_levels, fields_of_study) are entered as
+//     comma-separated strings in the UI and split at build time.
+//     Legacy eligible_nationalities / eligible_regions are write-frozen
+//     and not part of the form. See DEPRECATION.md.
 //   - funding_type / accepted_english_tests are typed selects (not free text)
 //     to keep values in sync with the backend enum and detail-page pills.
 
@@ -30,12 +31,13 @@ import { FIELDS_OF_STUDY } from '@/data/fieldsOfStudy';
 // Same shape returned by emptyForm() below. Edit drawer pre-populates via
 // formFromScholarship() so it doesn't need to track which fields are "set".
 //
-// The four "scope" fields (degree_levels, fields_of_study,
-// eligible_nationalities, eligible_regions) are `string[]` directly —
-// the admin picks values from the canonical token list via the
-// MultiSelect combobox, so we no longer round-trip through
+// The two "scope" fields (degree_levels, fields_of_study) are `string[]`
+// directly — the admin picks values from the canonical token list via
+// the MultiSelect combobox, so we no longer round-trip through
 // comma-separated strings. This eliminates typo bugs the old free-text
-// input had (e.g. "bachelor " vs "Bachelor" vs "Bsc").
+// input had (e.g. "bachelor " vs "Bachelor" vs "Bsc"). Legacy
+// eligible_nationalities / eligible_regions are not part of the form —
+// see DEPRECATION.md.
 export interface ScholarshipForm {
   // Identity
   name: string;
@@ -47,8 +49,9 @@ export interface ScholarshipForm {
   // Scope — arrays of canonical tokens (see CANONICAL_OPTIONS below).
   degree_levels: string[];
   fields_of_study: string[];
-  eligible_nationalities: string[];
-  eligible_regions: string[];
+  // NOTE: legacy eligible_nationalities / eligible_regions are read-only
+  // display surfaces on the form. They are populated from the scholarship
+  // record and never sent in create/patch payloads. See DEPRECATION.md.
   // Structured eligibility (composable include/exclude)
   included_groups: string[];
   included_countries: string[];
@@ -212,7 +215,6 @@ export const RECOMMENDATION_COUNT_OPTIONS: ReadonlyArray<{ value: number | 'auto
 //   - FIELD_OF_STUDY_OPTIONS is the union of FIELD_SIBLINGS keys and
 //     the distinct values already stored in the DB
 //     (SELECT DISTINCT unnest(fields_of_study) FROM scholarships).
-//   - REGION_OPTIONS matches the existing DB values exactly.
 
 // Canonical degree-level tokens. Sent as-is to the backend, so the
 // match engine's DEGREE_ORDER substring match picks them up:
@@ -275,45 +277,6 @@ export const COUNTRY_OPTIONS: ReadonlyArray<string> = [
   'Uzbekistan', 'Venezuela', 'Vietnam', 'Yemen', 'Zambia', 'Zimbabwe',
 ];
 
-// Canonical region values. The DB has 10 distinct values — we mirror
-// them exactly so existing rows round-trip through the MultiSelect.
-export const REGION_OPTIONS: ReadonlyArray<string> = [
-  'Africa',
-  'All regions',
-  'Americas',
-  'Asia',
-  'Caribbean',
-  'Europe',
-  'Latin America',
-  'Middle East',
-  'Oceania',
-  'Pacific',
-];
-
-// Descriptive nationality presets — these are the common patterns in
-// existing data ("African countries", "All Chevening-eligible
-// countries"). Free text remains available for uncommon ones.
-export const NATIONALITY_PRESETS: ReadonlyArray<string> = [
-  'All countries',
-  'African countries',
-  'All developing countries',
-  'ASEAN member states',
-  'Commonwealth countries',
-  'Developing countries',
-  'EU citizens',
-  'Non-EU/EEA students',
-  'US citizens only',
-  'US citizens, permanent residents, and nationals',
-];
-
-// Combined eligibility list (regions + presets) for the
-// eligible_nationalities MultiSelect. The dropdown shows these as
-// suggestions; the admin can still type any free-text value.
-export const NATIONALITY_SUGGESTIONS: ReadonlyArray<string> = [
-  ...NATIONALITY_PRESETS,
-  ...REGION_OPTIONS,
-];
-
 // ── Form factories ────────────────────────────────────────────────
 
 export function emptyForm(): ScholarshipForm {
@@ -326,8 +289,7 @@ export function emptyForm(): ScholarshipForm {
     provider: '',
     degree_levels: [],
     fields_of_study: [],
-    eligible_nationalities: [],
-    eligible_regions: [],
+    // Legacy fields intentionally absent — see DEPRECATION.md.
     included_groups: [],
     included_countries: [],
     excluded_groups: [],
@@ -392,8 +354,8 @@ export function formFromScholarship(s: AdminScholarship): ScholarshipForm {
     provider: s.provider ?? '',
     degree_levels: [...(s.degree_levels ?? [])],
     fields_of_study: [...(s.fields_of_study ?? [])],
-    eligible_nationalities: [...(s.eligible_nationalities ?? [])],
-    eligible_regions: [...(s.eligible_regions ?? [])],
+    // Legacy eligible_nationalities / eligible_regions are read-only and
+    // not part of the editable form. See DEPRECATION.md.
     included_groups: [...(s.included_groups ?? [])],
     included_countries: [...(s.included_countries ?? [])],
     excluded_groups: [...(s.excluded_groups ?? [])],
@@ -554,9 +516,8 @@ export function buildCreateBody(form: ScholarshipForm): AdminScholarshipCreate {
   // backend's Pydantic schema treats them as "not set" rather than [].
   if (form.degree_levels.length) body.degree_levels = form.degree_levels;
   if (form.fields_of_study.length) body.fields_of_study = form.fields_of_study;
-  if (form.eligible_nationalities.length) body.eligible_nationalities = form.eligible_nationalities;
-  if (form.eligible_regions.length) body.eligible_regions = form.eligible_regions;
-  // Structured eligibility
+  // Legacy eligible_nationalities / eligible_regions are NOT sent. The
+  // structured eligibility fields below are the source of truth.
   if (form.included_groups.length) body.included_groups = form.included_groups;
   if (form.included_countries.length) body.included_countries = form.included_countries;
   if (form.excluded_groups.length) body.excluded_groups = form.excluded_groups;
@@ -757,9 +718,8 @@ export function buildPatchBody(
   };
   arr(form.degree_levels, original.degree_levels, 'degree_levels');
   arr(form.fields_of_study, original.fields_of_study, 'fields_of_study');
-  arr(form.eligible_nationalities, original.eligible_nationalities, 'eligible_nationalities');
-  arr(form.eligible_regions, original.eligible_regions, 'eligible_regions');
-  // Structured eligibility
+  // Legacy eligible_nationalities / eligible_regions are write-frozen —
+  // the diff is never sent. See DEPRECATION.md.
   arr(form.included_groups, original.included_groups ?? [], 'included_groups');
   arr(form.included_countries, original.included_countries ?? [], 'included_countries');
   arr(form.excluded_groups, original.excluded_groups ?? [], 'excluded_groups');

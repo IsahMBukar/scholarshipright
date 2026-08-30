@@ -204,7 +204,18 @@ def _sch_to_dict(s) -> dict:
         "provider": s.provider,
         "degree_levels": s.degree_levels,
         "fields_of_study": s.fields_of_study,
-        "eligible_nationalities": s.eligible_nationalities,
+        # Structured country eligibility (the source the match engine uses).
+        # Legacy eligible_nationalities/eligible_regions columns are write-
+        # frozen on the admin side and will be dropped once historical
+        # data is migrated — see DEPRECATION.md.
+        "included_groups": list(s.included_groups or []),
+        "included_countries": list(s.included_countries or []),
+        "excluded_groups": list(s.excluded_groups or []),
+        "excluded_countries": list(s.excluded_countries or []),
+        "resolved_countries": list(s.resolved_countries or []),
+        "eligibility_basis": s.eligibility_basis,
+        "eligibility_display": s.eligibility_display,
+        "eligibility_unresolved": bool(s.eligibility_unresolved),
         "funding_type": s.funding_type,
         "covers_tuition": s.covers_tuition,
         "covers_living": s.covers_living,

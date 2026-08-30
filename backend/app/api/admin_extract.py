@@ -69,11 +69,13 @@ async def extract_url(
         logger.exception("URL extraction failed for %s", body.url)
         raise HTTPException(500, "Extraction failed. Please try again.")
 
-    # Count fields found/missing
+    # Count fields found/missing. Legacy `eligible_nationalities` /
+    # `eligible_regions` are excluded — they're write-frozen on the
+    # admin side and being migrated to the structured fields below.
     all_fields = {
         "name", "host_country", "funding_type", "deadline", "official_url",
         "host_institution", "provider", "degree_levels", "fields_of_study",
-        "eligible_nationalities", "eligible_regions", "covers_tuition",
+        "covers_tuition",
         "covers_living", "covers_flight", "covers_health", "monthly_stipend_usd",
         "requires_ielts", "min_ielts_score", "requires_gre", "min_cgpa",
         "language_of_instruction", "open_date", "program_start_date",

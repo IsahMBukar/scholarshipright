@@ -282,8 +282,8 @@ full_payload = {
     # Optional — scope
     "degree_levels": ["master", "phd"],
     "fields_of_study": ["engineering", "computer_science"],
-    "eligible_nationalities": ["Nigerian", "African", "All"],
-    "eligible_regions": ["Africa", "Europe"],
+    # Legacy eligible_nationalities / eligible_regions removed — the
+    # admin form no longer sends them. See DEPRECATION.md.
     # Optional — funding
     "covers_tuition": True,
     "covers_living": True,
@@ -321,9 +321,8 @@ if isinstance(body, dict):
     check("created scholarship has is_active=true",
           body.get("is_active") is True)
     check("created scholarship preserves the array fields we sent",
-          body.get("fields_of_study") == ["engineering", "computer_science"]
-          and body.get("eligible_nationalities") == ["Nigerian", "African", "All"],
-          "(fields_of_study + eligible_nationalities round-tripped)")
+          body.get("fields_of_study") == ["engineering", "computer_science"],
+          "(fields_of_study round-tripped; legacy eligible_nationalities is write-frozen, see DEPRECATION.md)")
     check("created scholarship preserves numeric fields",
           body.get("monthly_stipend_usd") == 1100
           and body.get("min_cgpa") is not None,

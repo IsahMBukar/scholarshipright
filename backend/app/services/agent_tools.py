@@ -256,7 +256,18 @@ async def get_scholarship_detail(db: AsyncSession, user_id: UUID, scholarship_id
         "provider": sch.provider,
         "degree_levels": sch.degree_levels,
         "fields_of_study": sch.fields_of_study,
-        "eligible_nationalities": sch.eligible_nationalities,
+        # Structured country eligibility (the source the match engine uses).
+        # Legacy eligible_nationalities/eligible_regions columns are write-
+        # frozen on the admin side and will be dropped once historical
+        # data is migrated — see DEPRECATION.md.
+        "included_groups": list(sch.included_groups or []),
+        "included_countries": list(sch.included_countries or []),
+        "excluded_groups": list(sch.excluded_groups or []),
+        "excluded_countries": list(sch.excluded_countries or []),
+        "resolved_countries": list(sch.resolved_countries or []),
+        "eligibility_basis": sch.eligibility_basis,
+        "eligibility_display": sch.eligibility_display,
+        "eligibility_unresolved": bool(sch.eligibility_unresolved),
         "funding_type": sch.funding_type,
         "covers_tuition": sch.covers_tuition,
         "covers_living": sch.covers_living,

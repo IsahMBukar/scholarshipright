@@ -213,8 +213,8 @@ class AdminScholarshipCreate(BaseModel):
     provider: Optional[str] = None
     degree_levels: Optional[List[str]] = None
     fields_of_study: Optional[List[str]] = None
-    eligible_nationalities: Optional[List[str]] = None
-    eligible_regions: Optional[List[str]] = None
+    # Legacy eligible_nationalities / eligible_regions are write-frozen —
+    # use the structured eligibility fields below. See DEPRECATION.md.
     # ── Structured eligibility ──
     eligibility_display: Optional[str] = None
     eligibility_basis: Optional[str] = None  # 'citizenship' | 'residency' | 'either'
@@ -281,8 +281,8 @@ class AdminScholarshipPatch(BaseModel):
     provider: Optional[str] = None
     degree_levels: Optional[List[str]] = None
     fields_of_study: Optional[List[str]] = None
-    eligible_nationalities: Optional[List[str]] = None
-    eligible_regions: Optional[List[str]] = None
+    # Legacy eligible_nationalities / eligible_regions are write-frozen.
+    # See DEPRECATION.md.
     # ── Structured eligibility ──
     eligibility_display: Optional[str] = None
     eligibility_basis: Optional[str] = None

@@ -149,8 +149,10 @@ NEW_SCHOLARSHIP_BODY = {
     "degree_levels": ["master"],
     "fields_of_study": ["engineering", "computer_science", "data_science",
                         "artificial_intelligence", "robotics"],
-    "eligible_nationalities": ["Nigerian", "African", "All"],
-    "eligible_regions": ["Africa", "Europe"],
+    # Structured eligibility (legacy eligible_nationalities/eligible_regions
+    # are write-frozen — see DEPRECATION.md).
+    "included_groups": ["AU"],
+    "eligibility_basis": "either",
     "funding_type": "fully_funded",
     "covers_tuition": True,
     "covers_living": True,
@@ -194,7 +196,6 @@ LOW_MATCH_SCHOLARSHIP_BODY = {
     "provider": "E2E Test Foundation",
     "degree_levels": ["phd"],
     "fields_of_study": ["philosophy", "history", "literature"],
-    "eligible_nationalities": ["Japanese", "Korean"],
     "funding_type": "partial",
     "covers_tuition": True,
     "covers_living": False,

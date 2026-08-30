@@ -24,8 +24,6 @@ import {
   DEGREE_LEVEL_OPTIONS,
   FIELD_OF_STUDY_OPTIONS,
   COUNTRY_OPTIONS,
-  REGION_OPTIONS,
-  NATIONALITY_SUGGESTIONS,
   formFromScholarship,
   emptyForm,
   validateForm,
@@ -611,34 +609,39 @@ function ScholarshipDrawer({
                 id="edit-fields-of-study"
               />
             </div>
-            <div>
-              <FieldLabel hint="Free-text or preset values. Use for descriptive rules not reducible to a country code (e.g. 'African countries'). For ISO-coded rules, use the structured builder below.">
-                Eligible nationalities (legacy)
-              </FieldLabel>
-              <MultiSelect
-                multiple
-                value={form.eligible_nationalities}
-                onChange={(v) => set('eligible_nationalities', v)}
-                options={NATIONALITY_SUGGESTIONS}
-                placeholder="Pick or type nationality descriptions…"
-                ariaLabel="Eligible nationalities"
-                id="edit-eligible-nationalities"
-              />
-            </div>
-            <div>
-              <FieldLabel hint="Free-text or canonical region values from the list.">
-                Eligible regions (legacy)
-              </FieldLabel>
-              <MultiSelect
-                multiple
-                value={form.eligible_regions}
-                onChange={(v) => set('eligible_regions', v)}
-                options={REGION_OPTIONS}
-                placeholder="Pick regions…"
-                ariaLabel="Eligible regions"
-                id="edit-eligible-regions"
-              />
-            </div>
+            {(scholarship?.eligible_nationalities?.length || scholarship?.eligible_regions?.length) ? (
+              <div>
+                <FieldLabel hint="Read-only display of legacy free-text values. Editing is frozen — use the structured builder below to update eligibility.">
+                  Legacy eligibility text
+                </FieldLabel>
+                <div className="rounded-md border border-amber-200 bg-amber-50/40 p-3 text-sm space-y-2">
+                  {scholarship?.eligible_nationalities?.length ? (
+                    <div>
+                      <div className="text-xs font-medium text-amber-800 mb-1">Nationalities</div>
+                      <div className="flex flex-wrap gap-1">
+                        {scholarship.eligible_nationalities.map((n) => (
+                          <span key={n} className="text-[11px] px-2 py-0.5 bg-white border border-amber-200 rounded text-amber-900">
+                            {n}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {scholarship?.eligible_regions?.length ? (
+                    <div>
+                      <div className="text-xs font-medium text-amber-800 mb-1">Regions</div>
+                      <div className="flex flex-wrap gap-1">
+                        {scholarship.eligible_regions.map((r) => (
+                          <span key={r} className="text-[11px] px-2 py-0.5 bg-white border border-amber-200 rounded text-amber-900">
+                            {r}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
             <div>
               <FieldLabel hint="Compose include/exclude rules — groups, countries, or both">
                 Eligible countries

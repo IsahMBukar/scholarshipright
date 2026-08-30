@@ -37,8 +37,6 @@ Schema:
   "provider": "Organization providing the scholarship",
   "degree_levels": ["bachelor", "master", "phd", "doctoral", "postdoc"],
   "fields_of_study": ["field1", "field2"] or ["all_fields"],
-  "eligible_nationalities": ["country1", "country2"] or ["All countries"],
-  "eligible_regions": ["Africa", "Asia", "Europe", "Latin America", "Middle East", "All regions"],
   "covers_tuition": true/false,
   "covers_living": true/false,
   "covers_flight": true/false,
@@ -57,6 +55,12 @@ Schema:
   "how_to_apply": "Brief application instructions",
   "source": "domain name of the URL"
 }
+
+NOTE: legacy `eligible_nationalities` / `eligible_regions` fields are
+deprecated. Eligibility is captured by the structured fields
+(included_groups / included_countries / excluded_groups / excluded_countries)
+which you do not need to populate — the admin will set them in a
+dedicated UI after extraction.
 
 Rules:
 - If a field cannot be determined, omit it (don't guess)

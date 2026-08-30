@@ -226,28 +226,6 @@ def field_match_score(user_fields: list[str], scholarship_fields: list[str]) -> 
     return 0
 
 
-def country_eligibility_score(user_country: str, eligible_nationalities: list[str]) -> float:
-    """Score country eligibility: +10 eligible/unknown-open, -25 clear hard fail."""
-    if not eligible_nationalities:
-        return 6  # no restriction found; don't punish missing scraped data
-    if not user_country:
-        return 0
-
-    user_lower = user_country.lower()
-    for nat in eligible_nationalities:
-        nat_lower = nat.lower()
-        if any(term in nat_lower for term in ["all", "any nationality", "international", "worldwide"]):
-            return 10
-        if user_lower in nat_lower:
-            return 10
-        if "africa" in nat_lower and _is_african(user_country):
-            return 10
-        if "developing" in nat_lower and _is_developing(user_country):
-            return 10
-
-    return -25  # clear hard fail
-
-
 def degree_match_score(user_target: str, scholarship_degrees: list[str]) -> float:
     """Score degree match: +12 exact, 0 adjacent/umbrella, -25 clear hard fail."""
     if not scholarship_degrees:
@@ -583,32 +561,3 @@ def compute_match_score(profile: Any, scholarship: Any, resume: Any = None, elig
             "scoring_version": "country_gate_v1",
         },
     }
-
-
-# ── Country helpers ───────────────────────────────────────────────
-
-def _is_african(country: str) -> bool:
-    african_countries = {
-        "nigeria", "ghana", "kenya", "south africa", "ethiopia", "tanzania",
-        "uganda", "egypt", "morocco", "senegal", "cameroon", "rwanda",
-        "ivory coast", "democratic republic of congo", "mozambique", "angola",
-        "madagascar", "zimbabwe", "zambia", "malawi", "botswana", "namibia",
-        "lesotho", "eswatini", "mauritius", "seychelles", "djibouti",
-        "eritrea", "somalia", "sudan", "south sudan", "libya", "tunisia",
-        "algeria", "burkina faso", "mali", "niger", "chad", "central african republic",
-        "gabon", "equatorial guinea", "congo", "guinea", "sierra leone", "liberia",
-        "togo", "benin", "gambia", "guinea-bissau", "cape verde", "comoros",
-        "mauritania", "sao tome and principe", "burundi",
-    }
-    return country.lower() in african_countries
-
-
-def _is_developing(country: str) -> bool:
-    developed = {
-        "united states", "united kingdom", "canada", "australia", "japan",
-        "germany", "france", "italy", "spain", "netherlands", "sweden",
-        "norway", "denmark", "finland", "switzerland", "austria", "belgium",
-        "ireland", "new zealand", "singapore", "south korea", "israel",
-        "iceland", "luxembourg", "liechtenstein", "monaco", "andorra",
-    }
-    return country.lower() not in developed

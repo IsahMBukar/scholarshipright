@@ -43,8 +43,6 @@ import {
   DEGREE_LEVEL_OPTIONS,
   FIELD_OF_STUDY_OPTIONS,
   COUNTRY_OPTIONS,
-  REGION_OPTIONS,
-  NATIONALITY_SUGGESTIONS,
   emptyForm,
   validateForm,
   buildCreateBody,
@@ -229,8 +227,9 @@ export default function CreateScholarshipWizard({
         if (fields.official_url) next.official_url = fields.official_url;
         if (fields.degree_levels) next.degree_levels = fields.degree_levels;
         if (fields.fields_of_study) next.fields_of_study = fields.fields_of_study;
-        if (fields.eligible_nationalities) next.eligible_nationalities = fields.eligible_nationalities;
-        if (fields.eligible_regions) next.eligible_regions = fields.eligible_regions;
+        // Legacy eligible_nationalities / eligible_regions are read-only
+        // on the form — the URL extractor still returns them but we don't
+        // map them to the writable form. See DEPRECATION.md.
         // Structured eligibility (if extractor provides them)
         if (fields.included_groups) next.included_groups = fields.included_groups;
         if (fields.included_countries) next.included_countries = fields.included_countries;
@@ -613,34 +612,11 @@ export default function CreateScholarshipWizard({
               id="wizard-fields-of-study"
             />
           </div>
-          <div>
-            <FieldLabel hint="Free-text or preset values. Use for descriptive rules not reducible to a country code (e.g. 'African countries', 'All Chevening-eligible countries'). For ISO-coded rules, use the structured builder below instead.">
-              Eligible nationalities (legacy)
-            </FieldLabel>
-            <MultiSelect
-              multiple
-              value={form.eligible_nationalities}
-              onChange={(v) => set('eligible_nationalities', v)}
-              options={NATIONALITY_SUGGESTIONS}
-              placeholder="Pick or type nationality descriptions…"
-              ariaLabel="Eligible nationalities"
-              id="wizard-eligible-nationalities"
-            />
-          </div>
-          <div>
-            <FieldLabel hint="Free-text or canonical region values from the list.">
-              Eligible regions (legacy)
-            </FieldLabel>
-            <MultiSelect
-              multiple
-              value={form.eligible_regions}
-              onChange={(v) => set('eligible_regions', v)}
-              options={REGION_OPTIONS}
-              placeholder="Pick regions…"
-              ariaLabel="Eligible regions"
-              id="wizard-eligible-regions"
-            />
-          </div>
+          {/*
+            Legacy eligible_nationalities / eligible_regions MultiSelects
+            removed. New scholarships use only the structured builder
+            below. See DEPRECATION.md.
+          */}
           <div>
             <FieldLabel hint="Compose include/exclude rules — groups, countries, or both">
               Eligible countries

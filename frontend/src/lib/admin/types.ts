@@ -108,8 +108,10 @@ export interface AdminScholarship {
   provider: string | null;
   degree_levels: string[];
   fields_of_study: string[];
-  eligible_nationalities: string[];
-  eligible_regions: string[];
+  // LEGACY — read-only display of historical data. New writes go
+  // through the structured eligibility fields below. See DEPRECATION.md.
+  readonly eligible_nationalities: string[];
+  readonly eligible_regions: string[];
   // Structured eligibility (composable, resolved-at-write-time)
   eligibility_display: string | null;
   eligibility_basis: 'citizenship' | 'residency' | 'either';
@@ -215,8 +217,6 @@ export interface AdminScholarshipPatch {
   // Scope
   degree_levels?: string[] | null;
   fields_of_study?: string[] | null;
-  eligible_nationalities?: string[] | null;
-  eligible_regions?: string[] | null;
   // Structured eligibility
   eligibility_display?: string | null;
   eligibility_basis?: 'citizenship' | 'residency' | 'either' | null;
@@ -293,8 +293,6 @@ export interface AdminScholarshipCreate {
   // Optional — scope
   degree_levels?: string[] | null;
   fields_of_study?: string[] | null;
-  eligible_nationalities?: string[] | null;
-  eligible_regions?: string[] | null;
   // Structured eligibility
   eligibility_display?: string | null;
   eligibility_basis?: 'citizenship' | 'residency' | 'either' | null;
