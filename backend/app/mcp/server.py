@@ -196,101 +196,36 @@ async def _handle_get(args: dict[str, Any]) -> list[TextContent]:
 async def _handle_edit(args: dict[str, Any]) -> list[TextContent]:
     """Propose an edit to an existing scholarship.
 
-    Changes are NOT applied directly — they are queued as an edit proposal
-    (PendingScholarship with target_scholarship_id) for admin approval.
-    Only provided fields are included in the diff. Matches the production
-    HTTP MCP handler behaviour in ``app.api.mcp_sse``.
+    Thin adapter over the shared ``propose_scholarship_edit`` helper.
+    Changes are NOT applied directly — they are queued as a
+    PendingScholarship with target_scholarship_id for admin approval.
     """
-    from uuid import UUID as UUID_T
-    from datetime import date as date_t
+    from app.mcp.handlers import (
+        format_scholarship_edit_response,
+        propose_scholarship_edit,
+    )
 
-    id_or_slug = args.get("id_or_slug", "").strip()
-    if not id_or_slug:
-        return [TextContent(type="text", text="id_or_slug is required.")]
+    result = await propose_scholarship_edit(
+        args=args,
+        editable_fields=set(SCHOLARSHIP_FIELDS.keys()),
+        submitted_by="mcp:local",
+    )
 
-    # Extract inline documents — handled separately from flat fields
-    inline_degree_docs = args.get("degree_documents")
-    inline_custom_docs = args.get("custom_documents")
+    if not result["ok"]:
+        if "no_changes" in result:
+            return [TextContent(
+                type="text",
+                text=f"No changes detected for scholarship: {result['scholarship'].name}",
+            )]
+        return [TextContent(type="text", text=result["error"])]
 
-    editable = {k: v for k, v in args.items() if k not in ("id_or_slug", "degree_documents", "custom_documents") and k in SCHOLARSHIP_FIELDS}
-    if not editable and inline_degree_docs is None and inline_custom_docs is None:
-        return [TextContent(type="text", text="No fields to update.")]
-
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(select(Scholarship).where(Scholarship.slug == id_or_slug))
-        sch = result.scalar_one_or_none()
-        if not sch:
-            try:
-                result = await db.execute(select(Scholarship).where(Scholarship.id == UUID_T(id_or_slug)))
-                sch = result.scalar_one_or_none()
-            except (ValueError, AttributeError):
-                pass
-        if not sch:
-            return [TextContent(type="text", text=f"Not found: {id_or_slug}")]
-
-        # Compute field-level diff against the live record
-        date_fields = {"deadline", "open_date", "program_start_date"}
-        changes: dict[str, dict] = {}
-        for field, value in editable.items():
-            if not hasattr(sch, field):
-                continue
-            old = getattr(sch, field)
-            if field in date_fields and isinstance(value, str):
-                try:
-                    value = date_t.fromisoformat(value)
-                except ValueError:
-                    return [TextContent(type="text", text=f"Invalid date for {field}: {value}")]
-            if old != value:
-                changes[field] = {
-                    "old": str(old) if old is not None else None,
-                    "new": value.isoformat() if isinstance(value, date_t) else value,
-                }
-
-        # Summarise document changes (full arrays stored for re-application on approve)
-        doc_changes_summary = []
-        if inline_degree_docs is not None:
-            levels = [d.get("degree_level", "?") for d in inline_degree_docs]
-            doc_changes_summary.append(f"Replace degree documents: {', '.join(levels)}")
-        if inline_custom_docs is not None:
-            names = [d.get("name", "?") for d in inline_custom_docs]
-            doc_changes_summary.append(f"Replace custom documents with {len(inline_custom_docs)} item(s): {', '.join(names)}")
-
-        if not changes and not doc_changes_summary:
-            return [TextContent(type="text", text=f"No changes detected for scholarship: {sch.name}")]
-
-        pending = PendingScholarship(
-            payload={
-                "is_edit": True,
-                "scholarship_name": sch.name,
-                "scholarship_slug": sch.slug,
-                "changes": changes,
-                "doc_changes_summary": doc_changes_summary,
-                "degree_documents": inline_degree_docs,
-                "custom_documents": inline_custom_docs,
-            },
-            submitted_by="mcp:local",
-            status="pending_review",
-            target_scholarship_id=sch.id,
-        )
-        db.add(pending)
-        await db.commit()
-        await db.refresh(pending)
-
-        lines = [
-            f"Edit proposed for scholarship '{sch.name}' (proposal ID: {pending.id})",
-            "Status: pending_review",
-            "The live scholarship is unchanged until an admin approves this edit.",
-            "",
-            "Proposed field changes:",
-        ]
-        for field, ch in changes.items():
-            old_v = ch["old"] if ch["old"] is not None else "(none)"
-            new_v = ch["new"] if ch["new"] is not None else "(none)"
-            lines.append(f"  - {field}: {old_v} → {new_v}")
-        for dc in doc_changes_summary:
-            lines.append(f"  - {dc}")
-
-        return [TextContent(type="text", text="\n".join(lines))]
+    text = format_scholarship_edit_response(
+        scholarship=result["scholarship"],
+        pending=result["pending"],
+        changes=result["changes"],
+        doc_changes_summary=result["doc_changes_summary"],
+    )
+    return [TextContent(type="text", text=text)]
 
 
 # ── Blog helpers (imported from app.utils.blog) ──────────────────

@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -198,6 +198,7 @@ async def create_group(
 async def update_group(
     code: str,
     body: GroupUpdate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(require_super_admin),
 ):
@@ -255,11 +256,12 @@ async def update_group(
                                target_id=str(group.id), payload={"code": group.code, "changes": changes})
         await db.commit()
 
-        # Trigger re-resolution if membership changed
+        # Trigger re-resolution if membership changed. Run in the
+        # background — a group can be referenced by thousands of
+        # scholarships, and we don't want the admin's PATCH to wait.
         if membership_changed:
-            logger.info("Group %s membership changed, triggering re-resolution", code)
-            stats = await re_resolve_stale_scholarships(code)
-            logger.info("Re-resolution after group %s update: %s", code, stats)
+            logger.info("Group %s membership changed, scheduling re-resolution", code)
+            background_tasks.add_task(_re_resolve_after_group_change, code)
 
     await db.refresh(group)
     data = await _build_group_response(db, group)
@@ -272,6 +274,7 @@ async def update_group(
 @router.delete("/groups/{code}")
 async def delete_group(
     code: str,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(require_super_admin),
 ):
@@ -290,12 +293,28 @@ async def delete_group(
                            target_id=str(group.id), payload={"code": group.code, "name": group.name})
     await db.commit()
 
-    # Re-resolve so dependent scholarships surface the deprecated group as
-    # 'unresolved' instead of silently keeping the old country set.
-    stats = await re_resolve_stale_scholarships(code)
-    logger.info("Re-resolution after group %s deprecate: %s", code, stats)
+    # Re-resolve so dependent scholarships surface the deprecated group
+    # as 'unresolved' instead of silently keeping the old country set.
+    # Run in the background — deprecating a popular group can touch
+    # thousands of scholarships, and the admin shouldn't wait.
+    background_tasks.add_task(_re_resolve_after_group_change, code)
+    logger.info("Group %s deprecated; re-resolution scheduled", code)
 
     return {"deprecated": True, "code": code}
+
+
+async def _re_resolve_after_group_change(group_code: str) -> None:
+    """Background wrapper that logs the result of the re-resolve job.
+
+    The actual work is in services.eligibility.re_resolve_stale_scholarships.
+    Background tasks swallow exceptions, so we log them explicitly here
+    so admins can find broken re-resolves in the logs.
+    """
+    try:
+        stats = await re_resolve_stale_scholarships(group_code)
+        logger.info("Re-resolution after group %s change: %s", group_code, stats)
+    except Exception:  # noqa: BLE001
+        logger.exception("Re-resolution failed for group %s", group_code)
 
 
 # ── Usage (which scholarships reference this group) ────────────────

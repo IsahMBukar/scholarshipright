@@ -10,14 +10,16 @@ StreamingResponse, no JSON-RPC wrapping.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import date as date_type, datetime, timezone
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 
 from app.db.session import AsyncSessionLocal
 from app.models.blog import BlogPost
+from app.models.pending_scholarship import PendingScholarship
+from app.models.scholarship import Scholarship
 from app.services.eligibility import validate_eligibility_inputs
 
 logger = logging.getLogger("scholara.mcp.handlers")
@@ -197,8 +199,8 @@ async def apply_blog_post_changes(
 def format_blog_edit_response(post: Any, changed: list[str]) -> dict[str, Any]:
     """Build the JSON response payload for a successful blog edit.
 
-    Transport-agnostic. Both stdio and SSE serialize this the same way
-    so an agent gets identical feedback regardless of transport.
+    Transport-agnostic. Both stdio and SSE serialize the same way so an
+    agent gets identical feedback regardless of transport.
     """
     data: dict[str, Any] = {
         "id": str(post.id),
@@ -213,3 +215,173 @@ def format_blog_edit_response(post: Any, changed: list[str]) -> dict[str, Any]:
             "admin will review the diff before it goes live again."
         )
     return data
+
+
+# ── Scholarship edit shared logic ──────────────────────────────────
+
+# Date-typed fields need ISO string → date coercion before diffing.
+_SCHOLARSHIP_DATE_FIELDS = {"deadline", "open_date", "program_start_date"}
+
+
+def _coerce_date(value: Any) -> Any:
+    """If value is an ISO date string, return a date object. Pass-through otherwise."""
+    if isinstance(value, str):
+        try:
+            return date_type.fromisoformat(value)
+        except ValueError:
+            return value
+    return value
+
+
+def _find_scholarship(db: Any, id_or_slug: str) -> Any | None:
+    """Lookup by slug first, then by UUID. Returns the row or None."""
+    from sqlalchemy import select as _sel  # local import to avoid cycle
+    result = db.execute(_sel(Scholarship).where(Scholarship.slug == id_or_slug))
+    sch = result.scalar_one_or_none()
+    if sch:
+        return sch
+    try:
+        uuid_value = UUID(id_or_slug)
+    except (ValueError, AttributeError):
+        return None
+    result = db.execute(_sel(Scholarship).where(Scholarship.id == uuid_value))
+    return result.scalar_one_or_none()
+
+
+async def propose_scholarship_edit(
+    args: dict[str, Any],
+    editable_fields: set[str],
+    submitted_by: str,
+    agent_key_id: Any | None = None,
+) -> dict[str, Any]:
+    """Compute the edit diff and queue a PendingScholarship for admin review.
+
+    Returns a dict ready for transport adaptation:
+      - on success: {"ok": True, "scholarship": sch, "pending": pending,
+        "changes": dict, "doc_changes_summary": list[str]}
+      - on bad input: {"ok": False, "error": str}
+      - on no changes: {"ok": False, "no_changes": True, "scholarship": sch}
+
+    The caller commits the session (handled inside this function via
+    AsyncSessionLocal) and formats the response.
+    """
+    id_or_slug = args.get("id_or_slug", "").strip()
+    if not id_or_slug:
+        return {"ok": False, "error": "id_or_slug is required."}
+
+    inline_degree_docs = args.get("degree_documents")
+    inline_custom_docs = args.get("custom_documents")
+
+    editable = {
+        k: v for k, v in args.items()
+        if k not in ("id_or_slug", "degree_documents", "custom_documents")
+        and k in editable_fields
+    }
+    if not editable and inline_degree_docs is None and inline_custom_docs is None:
+        return {"ok": False, "error": "No fields to update. Pass at least one field besides id_or_slug."}
+
+    async with AsyncSessionLocal() as db:
+        sch = _find_scholarship(db, id_or_slug)
+        if not sch:
+            return {"ok": False, "error": f"Scholarship not found: {id_or_slug}"}
+
+        # Compute the field-level diff against the live record.
+        changes: dict[str, dict] = {}
+        for field, value in editable.items():
+            if not hasattr(sch, field):
+                continue
+            old = getattr(sch, field)
+            if field in _SCHOLARSHIP_DATE_FIELDS:
+                coerced = _coerce_date(value)
+                if isinstance(coerced, str):
+                    # Bad date string — surface a clear error.
+                    return {
+                        "ok": False,
+                        "error": f"Invalid date format for {field}: {value}. Use YYYY-MM-DD.",
+                    }
+                value = coerced
+            if old != value:
+                changes[field] = {
+                    "old": str(old) if old is not None else None,
+                    "new": value.isoformat() if isinstance(value, date_type) else value,
+                }
+
+        doc_changes_summary: list[str] = []
+        if inline_degree_docs is not None:
+            levels = [d.get("degree_level", "?") for d in inline_degree_docs]
+            doc_changes_summary.append(f"Replace degree documents: {', '.join(levels)}")
+        if inline_custom_docs is not None:
+            names = [d.get("name", "?") for d in inline_custom_docs]
+            doc_changes_summary.append(
+                f"Replace custom documents with {len(inline_custom_docs)} item(s): {', '.join(names)}"
+            )
+
+        if not changes and not doc_changes_summary:
+            return {"ok": False, "no_changes": True, "scholarship": sch}
+
+        pending_kwargs: dict[str, Any] = {
+            "payload": {
+                "is_edit": True,
+                "scholarship_name": sch.name,
+                "scholarship_slug": sch.slug,
+                "changes": changes,
+                "doc_changes_summary": doc_changes_summary,
+                "degree_documents": inline_degree_docs,
+                "custom_documents": inline_custom_docs,
+            },
+            "submitted_by": submitted_by,
+            "status": "pending_review",
+            "target_scholarship_id": sch.id,
+        }
+        if agent_key_id is not None:
+            pending_kwargs["agent_key_id"] = agent_key_id
+        pending = PendingScholarship(**pending_kwargs)
+        db.add(pending)
+        await db.commit()
+        await db.refresh(pending)
+
+        return {
+            "ok": True,
+            "scholarship": sch,
+            "pending": pending,
+            "changes": changes,
+            "doc_changes_summary": doc_changes_summary,
+        }
+
+
+def format_scholarship_edit_response(
+    scholarship: Any,
+    pending: Any,
+    changes: dict[str, dict],
+    doc_changes_summary: list[str],
+) -> str:
+    """Format a successful scholarship-edit response as plain text.
+
+    Includes the deadline-notification hint when the deadline was changed,
+    so agents don't fire a redundant notification themselves.
+    """
+    lines = [
+        f"Edit proposed for scholarship '{scholarship.name}' (proposal ID: {pending.id})",
+        "Status: pending_review",
+        "The live scholarship is unchanged until an admin approves this edit.",
+        "",
+        "Proposed field changes:",
+    ]
+    for field, ch in changes.items():
+        old_v = ch["old"] if ch["old"] is not None else "(none)"
+        new_v = ch["new"] if ch["new"] is not None else "(none)"
+        lines.append(f"  - {field}: {old_v} → {new_v}")
+    for dc in doc_changes_summary:
+        lines.append(f"  - {dc}")
+
+    # If the agent extended the deadline, the savers-notification fires
+    # when the admin approves (not at queueing time). Tell them so they
+    # don't fire a redundant notification themselves.
+    if "deadline" in changes:
+        lines.append("")
+        lines.append(
+            "Note: extending the deadline will notify users who saved this "
+            "scholarship, but only after an admin approves the edit."
+        )
+
+    return "\n".join(lines)

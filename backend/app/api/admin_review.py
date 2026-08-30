@@ -293,6 +293,22 @@ async def approve_pending_scholarship(
             "Scholarship %s (pending=%s) created with eligibility_unresolved=True — admin must re-resolve",
             scholarship.id, pending_id,
         )
+        # Audit the resolve failure so admins can find the broken records
+        # without scraping logs.
+        try:
+            await log_admin_action(
+                db, admin.id, admin.email, "review.eligibility_resolve_failed",
+                "scholarship", str(scholarship.id),
+                payload={
+                    "pending_id": str(pending_id),
+                    "name": scholarship.name,
+                    "resolved_countries_count": 0,
+                    "eligibility_unresolved": True,
+                },
+            )
+            await db.commit()
+        except Exception:  # noqa: BLE001
+            logger.exception("failed to log eligibility resolve failure")
 
     # Trigger incremental match: compute ONLY this scholarship against ALL users.
     trigger_scholarship_recompute(scholarship.id, background_tasks)
@@ -492,6 +508,21 @@ async def _approve_edit_proposal(
                 "Scholarship %s (pending=%s) updated with eligibility_unresolved=True — admin must re-resolve",
                 sch.id, pending.id,
             )
+            # Audit the resolve failure on the edit path too.
+            try:
+                await log_admin_action(
+                    db, admin.id, admin.email, "review.eligibility_resolve_failed",
+                    "scholarship", str(sch.id),
+                    payload={
+                        "pending_id": str(pending.id),
+                        "name": sch.name,
+                        "resolved_countries_count": 0,
+                        "eligibility_unresolved": True,
+                    },
+                )
+                await db.commit()
+            except Exception:  # noqa: BLE001
+                logger.exception("failed to log eligibility resolve failure (edit path)")
 
     # Deadline extended → good-news notification for savers.
     if "deadline" in applied_fields:

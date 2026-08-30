@@ -282,8 +282,13 @@ def get_tool_schemas() -> dict:
         },
         "edit_scholarship": {
             "description": (
-                "Propose an edit to an existing scholarship. Changes go to the review queue and only apply after an admin approves.\n\n"
+                "IMPORTANT: this does NOT apply changes directly. Your edit is queued as a "
+                "PendingScholarship with target_scholarship_id and waits for an admin to approve. "
+                "The live scholarship is unchanged until then. The tool returns the proposal ID and "
+                "a field-by-field diff so you can confirm the queueing succeeded.\n\n"
                 "Only pass the fields you want to change — omitted fields stay unchanged. Use degree_documents to set per-level doc configs (replaces existing for specified levels) and custom_documents to replace all custom docs.\n\n"
+                "If you extend the deadline, savers who bookmarked this scholarship will be notified "
+                "when an admin approves the edit (not at queueing time).\n\n"
                 "COUNTRY ELIGIBILITY — set algebra. Same rules as add_scholarship:\n"
                 "  - included_*/excluded_* are the only fields the match engine reads.\n"
                 "  - Empty included_* = starting set is ALL countries (use this for 'exclude-only' patterns).\n"
@@ -363,7 +368,12 @@ def get_tool_schemas() -> dict:
                 "resolved set matches your intent. Returns the resolved country count, "
                 "a sample of resolved codes, unresolved groups, and warnings for common "
                 "mistakes (excluded country not in included set, single-country include "
-                "with excludes, etc.). Does NOT write to the database."
+                "with excludes, etc.). Does NOT write to the database.\n\n"
+                "Intentionally available to any authenticated agent (no extra scope "
+                "required) since it exposes the same public ISO 3166-1 country list and "
+                "active group codes that list_scholarships and /api/admin/groups/preview "
+                "already return. If private/internal groups are ever added, this tool "
+                "should be gated by scholarships:read or scholarships:write."
             ),
             "inputSchema": {
                 "type": "object",
