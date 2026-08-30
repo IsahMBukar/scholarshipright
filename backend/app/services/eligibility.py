@@ -62,18 +62,76 @@ async def get_group_members(db: AsyncSession, group_code: str) -> Set[str]:
 
 
 async def get_groups_containing_country(db: AsyncSession, country_code: str) -> list[str]:
-    """Return list of group codes that contain this country."""
+    """Return list of group codes that contain this country.
+
+    The country code is uppercased defensively, mirroring the case
+    normalisation in get_group_members. Callers should pass ISO 3166-1
+    alpha-2 in their preferred case.
+    """
     rows = (
         await db.execute(
             select(Group.code)
             .join(GroupMember, GroupMember.group_id == Group.id)
-            .where(GroupMember.country_code == country_code, Group.status == "active")
+            .where(GroupMember.country_code == country_code.upper(), Group.status == "active")
         )
     ).scalars().all()
     return list(rows)
 
 
 # ── Core resolver ──────────────────────────────────────────────────
+
+# How many resolved country codes to include in the sample returned to
+# MCP agents via the validate_eligibility tool. Long country lists are
+# expensive to serialize; this caps the wire size while still letting
+# agents sanity-check the result.
+SAMPLE_SIZE = 10
+
+
+async def _build_country_set(
+    db: AsyncSession,
+    groups: list[str],
+    countries: list[str],
+    label: str,
+) -> tuple[Set[str], list[str]]:
+    """Compute one side (included or excluded) of the eligibility set.
+
+    Returns (country_codes, missing_group_codes).
+    - If both groups and countries are empty, country_codes is empty
+      (caller decides whether that means "open to all" or "no restriction").
+    - Unknown / deprecated group codes are returned in the second tuple
+      so the caller can surface them as warnings or fail-open flags.
+    """
+    codes: Set[str] = set()
+    missing: list[str] = []
+    for code in groups:
+        try:
+            members = await get_group_members(db, code)
+            codes |= members
+        except ValueError:
+            logger.warning(
+                "build_country_set: %s group '%s' not found/deprecated", label, code
+            )
+            missing.append(code)
+    codes |= {c.upper() for c in countries}
+    return codes, missing
+
+
+async def _build_included_set(
+    db: AsyncSession,
+    included_groups: list[str],
+    included_countries: list[str],
+) -> tuple[Set[str], list[str]]:
+    """Build the included side. If both inputs are empty, returns ALL countries.
+
+    Returns (country_codes, missing_group_codes).
+    """
+    codes, missing = await _build_country_set(
+        db, included_groups, included_countries, label="included",
+    )
+    if not included_groups and not included_countries:
+        codes = await get_all_country_codes(db)
+    return codes, missing
+
 
 async def resolve_eligibility(
     included_groups: list[str],
@@ -102,37 +160,13 @@ async def resolve_eligibility(
         db_cm = None
 
     try:
-        included: Set[str] = set()
-        unresolved = False
-
-        # Resolve included groups
-        for code in included_groups:
-            try:
-                members = await get_group_members(db, code)
-                included |= members
-            except ValueError:
-                logger.warning("resolve_eligibility: included group '%s' not found/deprecated", code)
-                unresolved = True
-
-        # Add explicit included countries
-        included |= {c.upper() for c in included_countries}
-
-        # If no groups and no countries specified → open to all
-        if not included_groups and not included_countries:
-            included = await get_all_country_codes(db)
-
-        # Resolve excluded groups
-        excluded: Set[str] = set()
-        for code in excluded_groups:
-            try:
-                members = await get_group_members(db, code)
-                excluded |= members
-            except ValueError:
-                logger.warning("resolve_eligibility: excluded group '%s' not found/deprecated", code)
-                unresolved = True
-
-        # Add explicit excluded countries
-        excluded |= {c.upper() for c in excluded_countries}
+        included, included_missing = await _build_included_set(
+            db, included_groups, included_countries,
+        )
+        excluded, excluded_missing = await _build_country_set(
+            db, excluded_groups, excluded_countries, label="excluded",
+        )
+        unresolved = bool(included_missing or excluded_missing)
 
         resolved = sorted(included - excluded)
 
@@ -265,19 +299,12 @@ async def validate_eligibility_inputs(
 
     included_countries_upper = {c.upper() for c in included_countries}
 
-    # Build the included set the same way the resolver will.
-    included: Set[str] = set()
-    unresolved_groups: list[str] = []
-    for code in included_groups:
-        try:
-            members = await get_group_members(db, code)
-            included |= members
-        except ValueError:
-            unresolved_groups.append(code)
-    included |= included_countries_upper
-
-    if not included_groups and not included_countries:
-        included = await get_all_country_codes(db)
+    # Build the included set using the same helper the resolver uses,
+    # so the validator and the resolver can never disagree.
+    included, included_missing = await _build_included_set(
+        db, included_groups, included_countries,
+    )
+    unresolved_groups: list[str] = list(included_missing)
 
     # Find excluded countries that aren't in the included set (silent no-ops).
     excluded_countries_upper = {c.upper() for c in excluded_countries}
@@ -285,13 +312,19 @@ async def validate_eligibility_inputs(
 
     # Find excluded groups whose members don't overlap with included set.
     excluded_groups_not_in_set: list[str] = []
+    excluded, _ = await _build_country_set(
+        db, excluded_groups, excluded_countries, label="excluded",
+    )
     for code in excluded_groups:
         try:
             members = await get_group_members(db, code)
             if not (members & included):
                 excluded_groups_not_in_set.append(code)
         except ValueError:
-            unresolved_groups.append(code)
+            # Already tracked via the warning from _build_country_set
+            # above; skip to avoid double-counting.
+            if code not in unresolved_groups:
+                unresolved_groups.append(code)
 
     # Run the actual resolver to get the canonical answer.
     resolved, unresolved = await resolve_eligibility(
@@ -332,7 +365,7 @@ async def validate_eligibility_inputs(
 
     return {
         "resolved_count": len(resolved),
-        "sample_resolved": resolved[:10],
+        "sample_resolved": resolved[:SAMPLE_SIZE],
         "unresolved": unresolved,
         "unresolved_groups": sorted(set(unresolved_groups)),
         "warnings": warnings,
