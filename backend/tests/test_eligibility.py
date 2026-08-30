@@ -352,6 +352,46 @@ class TestValidateEligibilityInputs:
         # Should NOT produce a 'this is wrong' warning.
         assert not any("cannot reduce" in w for w in result["warnings"])
 
+    async def test_exclude_only_pattern_includes_informational_hint(self, db, eu_group, countries):
+        """The empty-include + non-empty-exclude case should produce an
+        informational warning (not a "this is wrong" warning) so agents
+        know they're using the canonical 'global but not X' pattern."""
+        result = await validate_eligibility_inputs(
+            included_groups=[], included_countries=[],
+            excluded_groups=["EU"], excluded_countries=[],
+            db=db,
+        )
+        # The positive assertion: the informational warning IS present.
+        assert any(
+            "starting set is ALL countries" in w and "global but not X" in w
+            for w in result["warnings"]
+        )
+
+    async def test_exclude_only_with_country_includes_informational_hint(self, db, countries):
+        """The same hint fires for exclude-only-by-country (e.g.
+        'Global but not Pakistan')."""
+        result = await validate_eligibility_inputs(
+            included_groups=[], included_countries=[],
+            excluded_groups=[], excluded_countries=["PK"],
+            db=db,
+        )
+        assert any(
+            "starting set is ALL countries" in w
+            for w in result["warnings"]
+        )
+
+    async def test_no_exclude_only_hint_when_included_is_set(self, db, countries):
+        """The hint must NOT fire when included_* is non-empty (the
+        'global but not X' pattern is no longer in play)."""
+        result = await validate_eligibility_inputs(
+            included_groups=[], included_countries=["NG"],
+            excluded_groups=[], excluded_countries=["PK"],
+            db=db,
+        )
+        # Only the single-country-include warning should fire, not the
+        # empty-include informational hint.
+        assert not any("starting set is ALL countries" in w for w in result["warnings"])
+
     async def test_unknown_group_marks_unresolved(self, db, countries):
         result = await validate_eligibility_inputs(
             included_groups=["NOPE"], included_countries=[],

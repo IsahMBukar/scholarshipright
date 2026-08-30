@@ -9,7 +9,7 @@ DELETE /api/admin/review/{id}            — delete pending record (super_admin 
 GET    /api/admin/review/stats           — queue stats (pending/approved/rejected counts)
 """
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
