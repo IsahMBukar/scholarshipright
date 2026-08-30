@@ -610,11 +610,16 @@ function ScholarshipDrawer({
               />
             </div>
             {(scholarship?.eligible_nationalities?.length || scholarship?.eligible_regions?.length) ? (
-              <div>
-                <FieldLabel hint="Read-only display of legacy free-text values. Editing is frozen — use the structured builder below to update eligibility.">
-                  Legacy eligibility text
-                </FieldLabel>
-                <div className="rounded-md border border-amber-200 bg-amber-50/40 p-3 text-sm space-y-2">
+              <div className="rounded-lg border border-amber-300 bg-amber-50/60 p-3">
+                <div className="mb-2 text-xs font-semibold text-amber-900">
+                  Legacy eligibility text — read-only
+                </div>
+                <p className="mb-2 text-xs text-amber-800">
+                  These free-text values are display-only. They do not affect which
+                  users this scholarship matches. To update eligibility, use the
+                  structured builder below.
+                </p>
+                <div className="space-y-2 text-sm">
                   {scholarship?.eligible_nationalities?.length ? (
                     <div>
                       <div className="text-xs font-medium text-amber-800 mb-1">Nationalities</div>

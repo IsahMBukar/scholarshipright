@@ -277,6 +277,9 @@ export default function AdminBlogsPage() {
           rows={data?.items ?? []}
           isLoading={isLoading}
           keyExtractor={(row) => row.id}
+          rowClassName={(row) =>
+            row.status === 'archived' ? 'opacity-60 bg-gray-50' : undefined
+          }
         />
 
         {/* Pagination */}

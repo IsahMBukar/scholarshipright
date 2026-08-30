@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -18,6 +18,11 @@ import { COUNTRIES } from '@/data/countries';
 // The match engine keys off the resolved structured set. Render that as the
 // source of truth, and only fall back to the legacy free-text field when no
 // structured eligibility is configured.
+
+// Cap how many country names we render before requiring an expander. The
+// full list is preserved in `eligibility.names`; the chip at the top of the
+// detail card just shows the count.
+const COUNTRY_PREVIEW_LIMIT = 10;
 
 export function countryName(code: string): string {
   const c = COUNTRIES.find((x) => x.code.toUpperCase() === code.toUpperCase());
@@ -220,6 +225,15 @@ export default function ScholarshipDetailClient() {
   const [copied, setCopied] = useState(false);
   const [profileComplete, setProfileComplete] = useState<boolean | null>(null); // null = still loading
   const { isAuthenticated, setPendingAction } = useAuth();
+
+  // Compute the eligibility label + country list once per scholarship
+  // load (the chip at the top and the full list at the bottom share it).
+  const eligibility = useMemo(
+    () => (scholarship ? eligibilityInfo(scholarship) : null),
+    [scholarship],
+  );
+  // Long country lists are capped at COUNTRY_PREVIEW_LIMIT with a "Show all" expander.
+  const [showAllCountries, setShowAllCountries] = useState(false);
 
   function handleShare() {
     const url = typeof window !== 'undefined' ? window.location.href : '';
@@ -577,9 +591,9 @@ export default function ScholarshipDetailClient() {
                     {scholarship.degree_levels?.join(', ') || 'All levels'}
                   </div>
                   <div className="flex items-center gap-2">
-                                      <span className="material-symbols-outlined text-primary text-[18px]">public</span>
-                                      {eligibilityInfo(scholarship).label}
-                                    </div>
+                    <span className="material-symbols-outlined text-primary text-[18px]">public</span>
+                    {eligibility?.label ?? 'Open'}
+                  </div>
                   {typeof scholarship.view_count === 'number' && scholarship.view_count > 0 && (
                     <div className="flex items-center gap-2" title={`${scholarship.view_count} students have viewed this scholarship`}>
                       <span className="material-symbols-outlined text-primary text-[18px]">visibility</span>
@@ -987,17 +1001,29 @@ export default function ScholarshipDetailClient() {
                 )}
               </div>
 
-              {(() => {
-                              const ei = eligibilityInfo(scholarship);
-                              if (!ei.names.length && !(scholarship.eligible_nationalities?.length)) return null;
-                              const shown = ei.names.length ? ei.names : (scholarship.eligible_nationalities ?? []);
-                              return (
-                                <div className="pt-2">
-                                  <h4 className="text-xs font-bold uppercase tracking-wider text-text-primary mb-1">Eligible Countries</h4>
-                                  <p className="text-sm text-text-secondary">{shown.join(', ')}</p>
-                                </div>
-                              );
-                            })()}
+              {eligibility && eligibility.names.length > 0 && (
+                <div className="pt-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-text-primary mb-1">
+                    Eligible Countries
+                  </h4>
+                  <p className="text-sm text-text-secondary">
+                    {showAllCountries || eligibility.names.length <= COUNTRY_PREVIEW_LIMIT
+                      ? eligibility.names.join(', ')
+                      : `${eligibility.names.slice(0, COUNTRY_PREVIEW_LIMIT).join(', ')}…`}
+                  </p>
+                  {eligibility.names.length > COUNTRY_PREVIEW_LIMIT && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllCountries((s) => !s)}
+                      className="mt-1 text-xs font-medium text-primary hover:underline"
+                    >
+                      {showAllCountries
+                        ? 'Show fewer'
+                        : `Show all ${eligibility.names.length} countries`}
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* Accepted English Tests — pills */}
               {((scholarship.accepted_english_tests ?? []).length > 0) && (

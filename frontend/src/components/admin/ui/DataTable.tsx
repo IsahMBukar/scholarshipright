@@ -72,6 +72,8 @@ export interface DataTableProps<T> {
   initialFilters?: Record<string, string>;
   // Row click handler. If absent, rows aren't clickable.
   onRowClick?: (row: T) => void;
+  // Optional per-row className (e.g. to grey out archived rows).
+  rowClassName?: (row: T) => string | undefined;
   // Optional toolbar shown above the table (e.g. bulk actions).
   toolbar?: (selected: T[]) => ReactNode;
   // Empty state copy.
@@ -87,6 +89,7 @@ interface SortState {
 
 export default function DataTable<T>({
   rows,
+  rowClassName,
   total = 0,
   page = 1,
   pageSize: pageSizeProp,
@@ -323,7 +326,8 @@ export default function DataTable<T>({
                     className={clsx(
                       'border-b border-gray-100 transition-colors',
                       onRowClick && 'cursor-pointer hover:bg-gray-50',
-                      checked && 'bg-primary/5'
+                      checked && 'bg-primary/5',
+                      rowClassName?.(row),
                     )}
                     onClick={() => onRowClick?.(row)}
                   >
