@@ -10,17 +10,20 @@ StreamingResponse, no JSON-RPC wrapping.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from datetime import date as date_type, datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.db.session import AsyncSessionLocal
-from app.models.blog import BlogPost
+from app.models.blog import BlogPost, BlogScholarshipTag, extract_scholarship_slugs
 from app.models.pending_scholarship import PendingScholarship
 from app.models.scholarship import Scholarship
 from app.services.eligibility import validate_eligibility_inputs
+from app.utils.db import escape_like
+from app.utils.scholarship_tags import validate_scholarship_slugs
 
 logger = logging.getLogger("scholara.mcp.handlers")
 
@@ -233,10 +236,10 @@ def _coerce_date(value: Any) -> Any:
     return value
 
 
-def _find_scholarship(db: Any, id_or_slug: str) -> Any | None:
+async def _find_scholarship(db: Any, id_or_slug: str) -> Any | None:
     """Lookup by slug first, then by UUID. Returns the row or None."""
     from sqlalchemy import select as _sel  # local import to avoid cycle
-    result = db.execute(_sel(Scholarship).where(Scholarship.slug == id_or_slug))
+    result = await db.execute(_sel(Scholarship).where(Scholarship.slug == id_or_slug))
     sch = result.scalar_one_or_none()
     if sch:
         return sch
@@ -244,7 +247,7 @@ def _find_scholarship(db: Any, id_or_slug: str) -> Any | None:
         uuid_value = UUID(id_or_slug)
     except (ValueError, AttributeError):
         return None
-    result = db.execute(_sel(Scholarship).where(Scholarship.id == uuid_value))
+    result = await db.execute(_sel(Scholarship).where(Scholarship.id == uuid_value))
     return result.scalar_one_or_none()
 
 
@@ -281,7 +284,7 @@ async def propose_scholarship_edit(
         return {"ok": False, "error": "No fields to update. Pass at least one field besides id_or_slug."}
 
     async with AsyncSessionLocal() as db:
-        sch = _find_scholarship(db, id_or_slug)
+        sch = await _find_scholarship(db, id_or_slug)
         if not sch:
             return {"ok": False, "error": f"Scholarship not found: {id_or_slug}"}
 
@@ -385,3 +388,425 @@ def format_scholarship_edit_response(
         )
 
     return "\n".join(lines)
+
+
+# â”€â”€ Shared tool result type â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+
+@dataclass
+class ToolResult:
+    """Transport-agnostic result from a shared MCP tool.
+
+    The transport adapter turns this into the right response shape:
+      - stdio: ``TextContent(type="text", text=...)``; ``is_error=True`` -> error
+      - SSE:   ``{"content": [...], "isError": ...}``
+    """
+    text: str
+    is_error: bool = False
+    structured: dict[str, Any] | None = None
+
+
+# â”€â”€ Scholarship submit (add) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+
+REQUIRED_FIELDS = ("name", "host_country", "funding_type", "deadline", "official_url")
+
+
+async def submit_scholarship(
+    args: dict[str, Any],
+    submitted_by: str,
+) -> ToolResult:
+    """Queue a new scholarship for admin review.
+
+    Args:
+        args: Raw MCP arguments. Must include name, host_country,
+            funding_type, deadline, official_url.
+        submitted_by: Identity string for the PendingScholarship row
+            (e.g. ``mcp:local`` for stdio, ``mcp:<key-name>`` for SSE).
+    """
+    missing = [f for f in REQUIRED_FIELDS if f not in args]
+    if missing:
+        return ToolResult(
+            text=f"Missing required fields: {', '.join(missing)}",
+            is_error=True,
+        )
+
+    # The SSE transport validates the URL prefix; mirror that here so
+    # stdio clients get the same protection.
+    url = args.get("official_url", "")
+    if url and not url.startswith(("http://", "https://")):
+        return ToolResult(
+            text="official_url must start with http:// or https://",
+            is_error=True,
+        )
+
+    async with AsyncSessionLocal() as db:
+        search_name = args["name"].lower().strip()
+        result = await db.execute(
+            select(Scholarship)
+            .where(func.lower(Scholarship.name).ilike(f"%{escape_like(search_name)}%"))
+            .limit(5)
+        )
+        dupes = result.scalars().all()
+
+        pending = PendingScholarship(
+            payload=args,
+            submitted_by=submitted_by,
+            status="pending_review",
+        )
+        db.add(pending)
+        await db.commit()
+        await db.refresh(pending)
+
+        lines = [
+            f"Submitted to review queue (ID: {pending.id})",
+            "Status: pending_review â€” admin will review before it goes live.",
+        ]
+        dd = args.get("degree_documents", [])
+        cd = args.get("custom_documents", [])
+        if dd:
+            levels = [d.get("degree_level", "?") for d in dd]
+            lines.append(f"  Degree documents: {', '.join(levels)}")
+        if cd:
+            names = [d.get("name", "?") for d in cd]
+            lines.append(f"  Custom documents: {', '.join(names)}")
+        if dupes:
+            lines.append("\nPotential duplicates:")
+            for d in dupes[:3]:
+                lines.append(f"  - {d.name} ({d.host_country}, {d.funding_type})")
+
+    return ToolResult(text="\n".join(lines))
+
+
+# â”€â”€ Scholarship list (search) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+
+def _format_scholarship_row(s: Any) -> str:
+    return f"- {s.name} | {s.host_country} | {s.funding_type} | Deadline: {s.deadline} | Slug: {s.slug}"
+
+
+async def list_scholarships(args: dict[str, Any]) -> ToolResult:
+    """Search active scholarships by name or host country."""
+    search = (args.get("search") or "").strip()
+    limit = max(1, min(50, int(args.get("limit") or 10)))
+
+    async with AsyncSessionLocal() as db:
+        query = select(Scholarship).where(Scholarship.is_active == True)  # noqa: E712
+        if search:
+            pattern = f"%{escape_like(search)}%"
+            query = query.where(
+                Scholarship.name.ilike(pattern)
+                | Scholarship.host_country.ilike(pattern)
+            )
+        query = query.order_by(Scholarship.created_at.desc()).limit(limit)
+        rows = (await db.execute(query)).scalars().all()
+
+    if not rows:
+        return ToolResult(text="No scholarships found.")
+    lines = [f"Found {len(rows)} scholarship(s):\n"]
+    lines.extend(_format_scholarship_row(s) for s in rows)
+    return ToolResult(text="\n".join(lines))
+
+
+# â”€â”€ Scholarship get (one) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+
+async def get_scholarship(args: dict[str, Any]) -> ToolResult:
+    """Get a single scholarship by slug or UUID."""
+    id_or_slug = (args.get("id_or_slug") or "").strip()
+    if not id_or_slug:
+        return ToolResult(text="id_or_slug is required.", is_error=True)
+
+    async with AsyncSessionLocal() as db:
+        sch = await _find_scholarship_by_id_or_slug(db, id_or_slug)
+        if not sch:
+            return ToolResult(text=f"Not found: {id_or_slug}", is_error=True)
+
+        data = {
+            "id": str(sch.id),
+            "name": sch.name,
+            "slug": sch.slug,
+            "host_country": sch.host_country,
+            "host_institution": sch.host_institution,
+            "provider": sch.provider,
+            "degree_levels": sch.degree_levels,
+            "funding_type": sch.funding_type,
+            "deadline": str(sch.deadline) if sch.deadline else None,
+            "official_url": sch.official_url,
+            "is_active": sch.is_active,
+        }
+    return ToolResult(text=json.dumps(data, indent=2, default=str))
+
+
+async def _find_scholarship_by_id_or_slug(db: Any, id_or_slug: str) -> Any | None:
+    """Slug-first, then UUID lookup. Used by get_scholarship."""
+    result = await db.execute(
+        select(Scholarship).where(Scholarship.slug == id_or_slug)
+    )
+    sch = result.scalar_one_or_none()
+    if sch:
+        return sch
+    try:
+        uuid_value = UUID(id_or_slug)
+    except (ValueError, AttributeError):
+        return None
+    result = await db.execute(
+        select(Scholarship).where(Scholarship.id == uuid_value)
+    )
+    return result.scalar_one_or_none()
+
+
+# â”€â”€ Blog create â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+
+def _pick_blog_author_id(db: Any) -> Any | None:
+    """Find an admin to attribute the post to (admin â†’ super_admin â†’ first user)."""
+    from app.models.user import User
+
+    for role_filter in [
+        User.is_admin == True,  # noqa: E712
+        User.admin_role == "super_admin",
+    ]:
+        row = db.execute(select(User.id).where(role_filter).limit(1))
+        author_id = row.scalar_one_or_none()
+        if author_id:
+            return author_id
+    row = db.execute(select(User.id).limit(1))
+    return row.scalar_one_or_none()
+
+
+def _validate_blog_body_slugs(db: Any, body: str) -> list[str] | None:
+    """Return None if all @[scholarship:slug] markers resolve, else the
+    list of bad slugs."""
+    slugs = extract_scholarship_slugs(body)
+    if not slugs:
+        return None
+    v = validate_scholarship_slugs(db, slugs)
+    return v["invalid"] if v["invalid"] else None
+
+
+async def _sync_blog_scholarship_tags(db: Any, post_id: Any, body: str) -> None:
+    """Update the @[scholarship:slug] tag rows for a post."""
+    from app.utils.scholarship_tags import sync_scholarship_tags
+    await sync_scholarship_tags(db, post_id, body)
+
+
+async def create_blog_post(
+    args: dict[str, Any],
+    auth_identity: str,
+    agent_key_id: Any | None = None,
+) -> ToolResult:
+    """Create a new blog post (defaults to pending_review for AI agents)."""
+    required = ("title", "body")
+    missing = [f for f in required if f not in args]
+    if missing:
+        return ToolResult(
+            text=f"Missing required fields: {', '.join(missing)}",
+            is_error=True,
+        )
+
+    title = args["title"].strip()
+    body = args["body"].strip()
+    if len(title) < 3:
+        return ToolResult(text="Title must be at least 3 characters.", is_error=True)
+    if len(body) < 10:
+        return ToolResult(text="Body must be at least 10 characters.", is_error=True)
+
+    status = args.get("status", "pending_review")
+
+    from app.utils.blog import reading_time, slugify
+    from app.models.blog import BlogPost
+
+    async with AsyncSessionLocal() as db:
+        # Validate scholarship slugs in the body before insert.
+        invalid = _validate_blog_body_slugs(db, body)
+        if invalid:
+            lines = [f"Invalid scholarship slugs: {', '.join(invalid)}"]
+            for bad in invalid:
+                sug = (await validate_scholarship_slugs(db, [bad])).get(
+                    "suggestions", {}
+                ).get(bad, [])
+                if sug:
+                    lines.append(
+                        f"  '{bad}' did you mean: {', '.join(s['slug'] for s in sug)}"
+                    )
+            return ToolResult(text="\n".join(lines), is_error=True)
+
+        author_id = _pick_blog_author_id(db)
+        if not author_id:
+            return ToolResult(
+                text="No users found. Cannot assign author.", is_error=True,
+            )
+
+        slug = slugify(title)
+        existing = (await db.execute(
+            select(BlogPost.id).where(BlogPost.slug == slug)
+        )).scalar_one_or_none()
+        if existing:
+            slug = f"{slug}-{uuid4().hex[:6]}"
+
+        now = datetime.now(timezone.utc)
+        post = BlogPost(
+            author_id=author_id,
+            title=title,
+            slug=slug,
+            excerpt=args.get("excerpt"),
+            body=body,
+            cover_image_url=args.get("cover_image_url"),
+            category=args.get("category", "general"),
+            tags=args.get("tags", []),
+            reading_time_minutes=reading_time(body),
+            status=status,
+            published_at=now if status == "published" else None,
+        )
+        db.add(post)
+        await db.flush()
+        await _sync_blog_scholarship_tags(db, post.id, body)
+        await db.commit()
+        await db.refresh(post)
+
+    data = {
+        "id": str(post.id),
+        "title": post.title,
+        "slug": post.slug,
+        "status": post.status,
+        "url": f"/blog/{post.slug}",
+    }
+    if status == "pending_review":
+        data["note"] = "pending_review â€” admin will review before it goes live."
+    elif status == "draft":
+        data["note"] = "Saved as draft."
+
+    structured = {
+        "id": str(post.id),
+        "title": post.title,
+        "slug": post.slug,
+        "status": post.status,
+    }
+    return ToolResult(
+        text=json.dumps(data, indent=2, default=str),
+        structured=structured,
+    )
+
+
+# â”€â”€ Blog list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+
+async def list_blog_posts(args: dict[str, Any]) -> ToolResult:
+    """List published blog posts (optionally filtered by category or tag)."""
+    import math
+    search = (args.get("search") or "").strip()
+    category = args.get("category")
+    tag = args.get("tag")
+    page = max(1, int(args.get("page") or 1))
+    limit = min(50, max(1, int(args.get("limit") or 10)))
+
+    async with AsyncSessionLocal() as db:
+        base = select(BlogPost).where(BlogPost.status == "published")
+        count_base = select(func.count(BlogPost.id)).where(BlogPost.status == "published")
+
+        if search:
+            ilike = f"%{escape_like(search)}%"
+            base = base.where(BlogPost.title.ilike(ilike))
+            count_base = count_base.where(BlogPost.title.ilike(ilike))
+        if category:
+            base = base.where(BlogPost.category == category)
+            count_base = count_base.where(BlogPost.category == category)
+        if tag:
+            base = base.where(BlogPost.tags.any(tag))
+            count_base = count_base.where(BlogPost.tags.any(tag))
+
+        total = (await db.execute(count_base)).scalar() or 0
+        pages = max(1, math.ceil(total / limit))
+
+        rows = (
+            await db.execute(
+                base.order_by(BlogPost.published_at.desc())
+                .offset((page - 1) * limit)
+                .limit(limit)
+            )
+        ).scalars().all()
+
+    if not rows:
+        return ToolResult(text="No blog posts found.")
+
+    lines = [f"Found {total} post(s), page {page}/{pages}:\n"]
+    for p in rows:
+        tags_str = f" [{', '.join(p.tags)}]" if p.tags else ""
+        lines.append(
+            f"- {p.title} | {p.category} | {p.reading_time_minutes}min | Slug: {p.slug}{tags_str}"
+        )
+    return ToolResult(text="\n".join(lines))
+
+
+# â”€â”€ Blog get (one) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+
+async def get_blog_post(args: dict[str, Any]) -> ToolResult:
+    """Get a blog post by slug or UUID."""
+    slug_or_id = (args.get("slug_or_id") or "").strip()
+    if not slug_or_id:
+        return ToolResult(text="slug_or_id is required.", is_error=True)
+
+    from app.models.user import User
+
+    async with AsyncSessionLocal() as db:
+        row = await db.execute(
+            select(BlogPost).where(BlogPost.slug == slug_or_id, BlogPost.status == "published")
+        )
+        post = row.scalar_one_or_none()
+
+        if not post:
+            try:
+                row = await db.execute(
+                    select(BlogPost).where(BlogPost.id == UUID(slug_or_id))
+                )
+                post = row.scalar_one_or_none()
+            except (ValueError, AttributeError):
+                pass
+
+        if not post:
+            return ToolResult(text=f"Not found: {slug_or_id}", is_error=True)
+
+        author = (
+            await db.execute(select(User.full_name).where(User.id == post.author_id))
+        ).scalar()
+
+    data = {
+        "id": str(post.id),
+        "title": post.title,
+        "slug": post.slug,
+        "excerpt": post.excerpt,
+        "body": post.body,
+        "cover_image_url": post.cover_image_url,
+        "category": post.category,
+        "tags": post.tags or [],
+        "reading_time_minutes": post.reading_time_minutes,
+        "view_count": post.view_count,
+        "status": post.status,
+        "author_name": author or "Anonymous",
+        "published_at": post.published_at.isoformat() if post.published_at else None,
+        "created_at": post.created_at.isoformat(),
+        "updated_at": post.updated_at.isoformat(),
+    }
+    return ToolResult(text=json.dumps(data, indent=2, default=str))
+
+
+# â”€â”€ Blog categories â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+
+async def list_blog_categories() -> ToolResult:
+    """List distinct categories from published blog posts."""
+    async with AsyncSessionLocal() as db:
+        rows = await db.execute(
+            select(BlogPost.category)
+            .where(BlogPost.status == "published")
+            .distinct()
+            .order_by(BlogPost.category)
+        )
+        categories = [r[0] for r in rows.all()]
+
+    if not categories:
+        return ToolResult(text="No blog categories found.")
+    return ToolResult(text="Categories:\n" + "\n".join(f"- {c}" for c in categories))
+

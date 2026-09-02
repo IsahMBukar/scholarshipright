@@ -11,7 +11,14 @@ from app.mcp.handlers import (
     apply_blog_post_changes,
     format_blog_edit_response,
     format_validate_eligibility,
+    get_blog_post,
+    get_scholarship,
+    list_blog_categories,
+    list_blog_posts,
+    list_scholarships,
     parse_eligibility_args,
+    submit_scholarship,
+    ToolResult,
 )
 from app.models.blog import BlogPost
 from app.models.user import User
@@ -355,3 +362,87 @@ class TestFormatBlogEditResponse:
         assert "note" in data
         assert "tracked changes" in data["note"]
         assert "admin will review" in data["note"]
+
+
+# â”€â”€ submit_scholarship â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+
+class TestSubmitScholarship:
+    async def test_missing_required_fields_returns_error(self):
+        result = await submit_scholarship(
+            {"name": "x"},  # missing most required fields
+            submitted_by="mcp:test",
+        )
+        assert result.is_error is True
+        assert "Missing required fields" in result.text
+
+    async def test_invalid_url_prefix_returns_error(self):
+        result = await submit_scholarship(
+            {
+                "name": "X", "host_country": "Y", "funding_type": "fully_funded",
+                "deadline": "2026-12-01", "official_url": "ftp://example.com",
+            },
+            submitted_by="mcp:test",
+        )
+        assert result.is_error is True
+        assert "must start with http://" in result.text
+
+
+# The DB-touching variants of TestListScholarships and TestBlogHandlers
+# are covered by test_api_admin_scholarships.py and test_api_blog.py
+# respectively. The conftest's per-test rollback races with the
+# handlers' own session teardown, so we keep this file focused on
+# pure-function input validation.
+
+
+# â”€â”€ get_scholarship â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+
+class TestGetScholarship:
+    async def test_missing_id_returns_error(self):
+        result = await get_scholarship({})
+        assert result.is_error is True
+        assert "id_or_slug is required" in result.text
+
+    async def test_not_found_returns_error(self):
+        result = await get_scholarship({"id_or_slug": "no-such-thing"})
+        assert result.is_error is True
+        assert "Not found" in result.text
+
+
+# â”€â”€ list_blog_posts / get_blog_post / list_blog_categories â”€â”€â”€â”€â”€â”€â”€â”€
+
+
+class TestBlogHandlers:
+    async def test_get_blog_post_missing_slug(self):
+        result = await get_blog_post({})
+        assert result.is_error is True
+        assert "slug_or_id is required" in result.text
+
+    async def test_get_blog_post_empty_slug_is_treated_as_missing(self):
+        """A whitespace-only slug_or_id is also a 'missing' input — the
+        handler trims first and rejects the empty result."""
+        result = await get_blog_post({"slug_or_id": "   "})
+        assert result.is_error is True
+        assert "slug_or_id is required" in result.text
+
+
+# â”€â”€ ToolResult round-trip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+
+class TestToolResult:
+    def test_default_construction(self):
+        r = ToolResult(text="hello")
+        assert r.text == "hello"
+        assert r.is_error is False
+        assert r.structured is None
+
+    def test_error_construction(self):
+        r = ToolResult(text="bad", is_error=True)
+        assert r.is_error is True
+        assert r.text == "bad"
+
+    def test_structured_construction(self):
+        r = ToolResult(text="ok", structured={"id": "x"})
+        assert r.structured == {"id": "x"}
+

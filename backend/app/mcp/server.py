@@ -87,110 +87,24 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 # ── Scholarship handlers ──────────────────────────────────────────
 
 async def _handle_add(args: dict[str, Any]) -> list[TextContent]:
-    required = ["name", "host_country", "funding_type", "deadline", "official_url"]
-    missing = [f for f in required if f not in args]
-    if missing:
-        return [TextContent(type="text", text=f"Missing required fields: {', '.join(missing)}")]
+    from app.mcp.handlers import submit_scholarship
 
-    async with AsyncSessionLocal() as db:
-        search_name = args["name"].lower().strip()
-        result = await db.execute(
-            select(Scholarship).where(func.lower(Scholarship.name).ilike(f"%{escape_like(search_name)}%")).limit(5)
-        )
-        dupes = result.scalars().all()
-
-        pending = PendingScholarship(payload=args, submitted_by="mcp:local", status="pending_review")
-        db.add(pending)
-        await db.commit()
-        await db.refresh(pending)
-
-        lines = [
-            f"Submitted to review queue (ID: {pending.id})",
-            "Status: pending_review — admin will review before it goes live.",
-        ]
-        # Mention inline documents if provided
-        dd = args.get("degree_documents", [])
-        cd = args.get("custom_documents", [])
-        if dd:
-            levels = [d.get("degree_level", "?") for d in dd]
-            lines.append(f"  Degree documents: {', '.join(levels)}")
-        if cd:
-            names = [d.get("name", "?") for d in cd]
-            lines.append(f"  Custom documents: {', '.join(names)}")
-        if dupes:
-            lines.append("\nPotential duplicates:")
-            for d in dupes[:3]:
-                lines.append(f"  - {d.name} ({d.host_country}, {d.funding_type})")
-        return [TextContent(type="text", text="\n".join(lines))]
+    result = await submit_scholarship(args, submitted_by="mcp:local")
+    return [TextContent(type="text", text=result.text)]
 
 
 async def _handle_list(args: dict[str, Any]) -> list[TextContent]:
-    search = args.get("search", "")
-    limit = args.get("limit", 10)
+    from app.mcp.handlers import list_scholarships
 
-    async with AsyncSessionLocal() as db:
-        query = select(Scholarship).where(Scholarship.is_active == True)  # noqa: E712
-        if search:
-            query = query.where(
-                Scholarship.name.ilike(f"%{escape_like(search)}%")
-                | Scholarship.host_country.ilike(f"%{escape_like(search)}%")
-            )
-        query = query.order_by(Scholarship.created_at.desc()).limit(limit)
-        result = await db.execute(query)
-        scholarships = result.scalars().all()
-
-        if not scholarships:
-            return [TextContent(type="text", text="No scholarships found.")]
-        lines = [f"Found {len(scholarships)} scholarship(s):\n"]
-        for s in scholarships:
-            lines.append(f"- {s.name} | {s.host_country} | {s.funding_type} | Deadline: {s.deadline} | Slug: {s.slug}")
-        return [TextContent(type="text", text="\n".join(lines))]
+    result = await list_scholarships(args)
+    return [TextContent(type="text", text=result.text)]
 
 
 async def _handle_get(args: dict[str, Any]) -> list[TextContent]:
-    id_or_slug = args.get("id_or_slug", "")
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(select(Scholarship).where(Scholarship.slug == id_or_slug))
-        sch = result.scalar_one_or_none()
-        if not sch:
-            from uuid import UUID
-            try:
-                result = await db.execute(select(Scholarship).where(Scholarship.id == UUID(id_or_slug)))
-                sch = result.scalar_one_or_none()
-            except (ValueError, AttributeError):
-                pass
-        if not sch:
-            return [TextContent(type="text", text=f"Not found: {id_or_slug}")]
-        data = _fmt(sch)
-        # Include degree-level and custom documents
-        from sqlalchemy import select as sel
-        degree_docs = (await db.execute(
-            sel(ScholarshipDegreeDocument).where(ScholarshipDegreeDocument.scholarship_id == sch.id).order_by(ScholarshipDegreeDocument.degree_level)
-        )).scalars().all()
-        if degree_docs:
-            data["degree_documents"] = [{
-                "degree_level": d.degree_level,
-                "previous_degree_required": d.previous_degree_required,
-                "recommendation_letters_count": d.recommendation_letters_count,
-                "research_proposal_required": d.research_proposal_required,
-                "writing_sample_required": d.writing_sample_required,
-                "standardized_test": d.standardized_test,
-                "req_transcripts": d.req_transcripts,
-                "req_cv_resume": d.req_cv_resume,
-                "req_sop_motivation_letter": d.req_sop_motivation_letter,
-                "req_recommendation_letters": d.req_recommendation_letters,
-                "req_english_test": d.req_english_test,
-                "req_passport_or_id": d.req_passport_or_id,
-            } for d in degree_docs]
-        custom_docs = (await db.execute(
-            sel(ScholarshipCustomDocument).where(ScholarshipCustomDocument.scholarship_id == sch.id).order_by(ScholarshipCustomDocument.position)
-        )).scalars().all()
-        if custom_docs:
-            data["custom_documents"] = [{
-                "id": str(d.id), "name": d.name, "description": d.description,
-                "required": d.required, "degree_level": d.degree_level,
-            } for d in custom_docs]
-        return [TextContent(type="text", text=json.dumps(data, indent=2, default=str))]
+    from app.mcp.handlers import get_scholarship
+
+    result = await get_scholarship(args)
+    return [TextContent(type="text", text=result.text)]
 
 
 async def _handle_edit(args: dict[str, Any]) -> list[TextContent]:
@@ -240,156 +154,24 @@ async def _sync_blog_tags(db: AsyncSession, post_id, body: str) -> None:
 # ── Blog handlers ─────────────────────────────────────────────────
 
 async def _handle_blog_create(args: dict[str, Any]) -> list[TextContent]:
-    required = ["title", "body"]
-    missing = [f for f in required if f not in args]
-    if missing:
-        return [TextContent(type="text", text=f"Missing required fields: {', '.join(missing)}")]
+    from app.mcp.handlers import create_blog_post
 
-    title = args["title"].strip()
-    body = args["body"].strip()
-    if len(title) < 3:
-        return [TextContent(type="text", text="Title must be at least 3 characters.")]
-    if len(body) < 10:
-        return [TextContent(type="text", text="Body must be at least 10 characters.")]
-
-    status = args.get("status", "pending_review")
-
-    async with AsyncSessionLocal() as db:
-        slugs = extract_scholarship_slugs(body)
-        if slugs:
-            v = await validate_scholarship_slugs(db, slugs)
-            if v["invalid"]:
-                lines = [f"Invalid scholarship slugs: {', '.join(v['invalid'])}"]
-                for bad in v["invalid"]:
-                    sug = v["suggestions"].get(bad, [])
-                    if sug:
-                        lines.append(f"  '{bad}' did you mean: {', '.join(s['slug'] for s in sug)}")
-                lines.append("Call list_scholarships with search=<term> or POST /api/scholarships/validate. Only active scholarships can be tagged.")
-                return [TextContent(type="text", text="\n".join(lines))]
-        author_id = None
-        for role_filter in [
-            User.is_admin == True, User.admin_role == "super_admin",  # noqa: E712
-        ]:
-            user_row = await db.execute(select(User.id).where(role_filter).limit(1))
-            author_id = user_row.scalar_one_or_none()
-            if author_id:
-                break
-
-        if not author_id:
-            user_row = await db.execute(select(User.id).limit(1))
-            author_id = user_row.scalar()
-
-        if not author_id:
-            return [TextContent(type="text", text="No users found. Cannot assign author.")]
-
-        slug = _slugify(title)
-        existing = await db.execute(select(BlogPost.id).where(BlogPost.slug == slug))
-        if existing.scalar_one_or_none():
-            slug = f"{slug}-{uuid4().hex[:6]}"
-
-        now = datetime.now(timezone.utc)
-        post = BlogPost(
-            author_id=author_id, title=title, slug=slug,
-            excerpt=args.get("excerpt"), body=body,
-            cover_image_url=args.get("cover_image_url"),
-            category=args.get("category", "general"),
-            tags=args.get("tags", []),
-            reading_time_minutes=_reading_time(body),
-            status=status,
-            published_at=now if status == "published" else None,
-        )
-        db.add(post)
-        await db.flush()
-        await _sync_blog_tags(db, post.id, body)
-        await db.commit()
-        await db.refresh(post)
-
-        lines = [
-            f"Blog post created (ID: {post.id})",
-            f"Title: {post.title}", f"Slug: {post.slug}",
-            f"Status: {post.status}", f"URL: /blog/{post.slug}",
-        ]
-        if status == "pending_review":
-            lines.append("pending_review — admin will review before it goes live.")
-        elif status == "draft":
-            lines.append("Saved as draft.")
-        return [TextContent(type="text", text="\n".join(lines))]
+    result = await create_blog_post(args, auth_identity="local")
+    return [TextContent(type="text", text=result.text)]
 
 
 async def _handle_blog_list(args: dict[str, Any]) -> list[TextContent]:
-    search = args.get("search", "")
-    category = args.get("category")
-    tag = args.get("tag")
-    page = max(1, args.get("page", 1))
-    limit = min(50, max(1, args.get("limit", 10)))
+    from app.mcp.handlers import list_blog_posts
 
-    async with AsyncSessionLocal() as db:
-        base = select(BlogPost).where(BlogPost.status == "published")
-        count_base = select(func.count(BlogPost.id)).where(BlogPost.status == "published")
-
-        if search:
-            ilike = f"%{escape_like(search)}%"
-            base = base.where(BlogPost.title.ilike(ilike))
-            count_base = count_base.where(BlogPost.title.ilike(ilike))
-        if category:
-            base = base.where(BlogPost.category == category)
-            count_base = count_base.where(BlogPost.category == category)
-        if tag:
-            base = base.where(BlogPost.tags.any(tag))
-            count_base = count_base.where(BlogPost.tags.any(tag))
-
-        total = (await db.execute(count_base)).scalar() or 0
-        pages = max(1, math.ceil(total / limit))
-
-        rows = await db.execute(
-            base.order_by(BlogPost.published_at.desc()).offset((page - 1) * limit).limit(limit)
-        )
-        posts = rows.scalars().all()
-
-        if not posts:
-            return [TextContent(type="text", text="No blog posts found.")]
-
-        lines = [f"Found {total} post(s), page {page}/{pages}:\n"]
-        for p in posts:
-            tags_str = f" [{', '.join(p.tags)}]" if p.tags else ""
-            lines.append(f"- {p.title} | {p.category} | {p.reading_time_minutes}min | Slug: {p.slug}{tags_str}")
-        return [TextContent(type="text", text="\n".join(lines))]
+    result = await list_blog_posts(args)
+    return [TextContent(type="text", text=result.text)]
 
 
 async def _handle_blog_get(args: dict[str, Any]) -> list[TextContent]:
-    slug_or_id = args.get("slug_or_id", "").strip()
-    if not slug_or_id:
-        return [TextContent(type="text", text="slug_or_id is required.")]
+    from app.mcp.handlers import get_blog_post
 
-    async with AsyncSessionLocal() as db:
-        row = await db.execute(select(BlogPost).where(BlogPost.slug == slug_or_id, BlogPost.status == "published"))
-        post = row.scalar_one_or_none()
-
-        if not post:
-            from uuid import UUID
-            try:
-                row = await db.execute(select(BlogPost).where(BlogPost.id == UUID(slug_or_id)))
-                post = row.scalar_one_or_none()
-            except (ValueError, AttributeError):
-                pass
-
-        if not post:
-            return [TextContent(type="text", text=f"Not found: {slug_or_id}")]
-
-        author = (await db.execute(select(User.full_name).where(User.id == post.author_id))).scalar()
-
-        data = {
-            "id": str(post.id), "title": post.title, "slug": post.slug,
-            "excerpt": post.excerpt, "body": post.body,
-            "cover_image_url": post.cover_image_url, "category": post.category,
-            "tags": post.tags or [], "reading_time_minutes": post.reading_time_minutes,
-            "view_count": post.view_count, "status": post.status,
-            "author_name": author or "Anonymous",
-            "published_at": post.published_at.isoformat() if post.published_at else None,
-            "created_at": post.created_at.isoformat(),
-            "updated_at": post.updated_at.isoformat(),
-        }
-        return [TextContent(type="text", text=json.dumps(data, indent=2, default=str))]
+    result = await get_blog_post(args)
+    return [TextContent(type="text", text=result.text)]
 
 
 async def _handle_blog_edit(args: dict[str, Any]) -> list[TextContent]:
@@ -454,14 +236,10 @@ async def _handle_blog_edit(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_blog_categories() -> list[TextContent]:
-    async with AsyncSessionLocal() as db:
-        rows = await db.execute(
-            select(BlogPost.category).where(BlogPost.status == "published").distinct().order_by(BlogPost.category)
-        )
-        categories = [r[0] for r in rows.all()]
-        if not categories:
-            return [TextContent(type="text", text="No blog categories found.")]
-        return [TextContent(type="text", text="Categories:\n" + "\n".join(f"- {c}" for c in categories))]
+    from app.mcp.handlers import list_blog_categories
+
+    result = await list_blog_categories()
+    return [TextContent(type="text", text=result.text)]
 
 
 async def _handle_validate_eligibility(args: dict[str, Any]) -> list[TextContent]:
