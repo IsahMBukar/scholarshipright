@@ -349,7 +349,7 @@ export default function AdminBlogsPage() {
                     <tbody>
                       {diffPost.pending_changes.changed_fields.map((field: string) => {
                         const oldVal = diffPost.pending_changes!.old?.[field];
-                        const newVal = (diffPost as Record<string, unknown>)[field];
+                        const newVal = (diffPost as unknown as Record<string, unknown>)[field];
                         return (
                           <tr key={field} className="border-b border-gray-200">
                             <td className="py-2 font-medium text-text-primary">{field}</td>
