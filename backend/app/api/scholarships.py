@@ -6,7 +6,7 @@ from typing import Optional, List
 from datetime import date
 from uuid import UUID
 
-from app.core.rate_limit import scholarship_view_rate_limit
+from app.core.rate_limit import scholarship_view_rate_limit, scholarship_validate_rate_limit
 import hashlib
 import json
 import re
@@ -349,7 +349,7 @@ class ScholarshipValidateResponse(BaseModel):
 
 
 @router.post("/validate", response_model=ScholarshipValidateResponse)
-async def validate_scholarships(payload: ScholarshipValidateRequest, db: AsyncSession = Depends(get_db)):
+async def validate_scholarships(payload: ScholarshipValidateRequest, _rate: None = Depends(scholarship_validate_rate_limit), db: AsyncSession = Depends(get_db)):
     from app.utils.scholarship_tags import validate_scholarship_slugs
     slugs = [s.strip().lower() for s in payload.slugs if s and s.strip()]
     slugs = list(dict.fromkeys(slugs))
@@ -359,6 +359,25 @@ async def validate_scholarships(payload: ScholarshipValidateRequest, db: AsyncSe
         if not re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", s):
             raise HTTPException(status_code=400, detail=f"Invalid slug format: {s}")
     result = await validate_scholarship_slugs(db, slugs)
+    invalid_detailed = []
+    for slug in result["invalid"]:
+        invalid_detailed.append({"slug": slug, "suggestions": result["suggestions"].get(slug, [])})
+    return ScholarshipValidateResponse(valid=result["valid"], invalid=invalid_detailed)
+
+
+@router.get("/validate", response_model=ScholarshipValidateResponse)
+async def validate_scholarships_get(slugs: str = Query(..., description="Comma-separated scholarship slugs"), _rate: None = Depends(scholarship_validate_rate_limit), db: AsyncSession = Depends(get_db)):
+    from app.utils.scholarship_tags import validate_scholarship_slugs
+    raw = [s.strip().lower() for s in slugs.split(",") if s.strip()]
+    raw = list(dict.fromkeys(raw))
+    if not raw:
+        raise HTTPException(status_code=400, detail="No slugs provided")
+    if len(raw) > 50:
+        raise HTTPException(status_code=400, detail="Too many slugs (max 50)")
+    for s in raw:
+        if not re.match(r"^[a-z0-9]+(-[a-z0-9]+)*$", s):
+            raise HTTPException(status_code=400, detail=f"Invalid slug format: {s}")
+    result = await validate_scholarship_slugs(db, raw)
     invalid_detailed = []
     for slug in result["invalid"]:
         invalid_detailed.append({"slug": slug, "suggestions": result["suggestions"].get(slug, [])})

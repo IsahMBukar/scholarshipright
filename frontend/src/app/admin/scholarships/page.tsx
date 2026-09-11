@@ -9,7 +9,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Calendar, Globe, CheckCircle2, XCircle, ExternalLink, RotateCw, Plus, AlertTriangle, Upload } from 'lucide-react';
+import { Calendar, Globe, CheckCircle2, XCircle, ExternalLink, RotateCw, Plus, AlertTriangle, Upload, RefreshCw } from 'lucide-react';
 import AdminLayout from '@/components/admin/AdminLayout';
 import DataTable, { type Column } from '@/components/admin/ui/DataTable';
 import Badge, { type BadgeTone } from '@/components/admin/ui/Badge';
@@ -129,6 +129,32 @@ export default function AdminScholarshipsPage() {
       const msg = err instanceof AdminApiError ? err.message : 'Create failed';
       // eslint-disable-next-line no-console
       console.error('create scholarship failed:', msg);
+    },
+  });
+
+  // Manual eligibility re-resolve. Used when the auto-resolve at
+  // create/edit time failed and the admin wants to retry without
+  // re-saving the scholarship.
+  const resolveEligibility = useMutation({
+    mutationFn: (id: string) => adminApi.resolveEligibility(id),
+    onSuccess: (data: AdminScholarship) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'scholarships'] });
+      const unresolved = data.eligibility_unresolved;
+      if (unresolved) {
+        toast.error(
+          'Re-resolve failed',
+          'Eligibility still flagged as unresolved. See logs.',
+        );
+      } else {
+        toast.success(
+          'Re-resolved',
+          `Resolved ${data.resolved_countries?.length ?? 0} countries`,
+        );
+      }
+    },
+    onError: (err: Error) => {
+      const msg = err instanceof AdminApiError ? err.message : 'Re-resolve failed';
+      toast.error('Re-resolve failed', msg);
     },
   });
 
@@ -405,6 +431,11 @@ export default function AdminScholarshipsPage() {
         }}
         saving={patch.isPending}
         saveError={(patch.error as AdminApiError | null)?.message ?? null}
+        onResolveEligibility={async () => {
+          if (!selected) return;
+          await resolveEligibility.mutateAsync(selected.id);
+        }}
+        resolvingEligibility={resolveEligibility.isPending}
       />
 
       <CreateScholarshipWizard
@@ -438,12 +469,16 @@ function ScholarshipDrawer({
   onSave,
   saving,
   saveError,
+  onResolveEligibility,
+  resolvingEligibility,
 }: {
   scholarship: AdminScholarship | null;
   onClose: () => void;
   onSave: (body: AdminScholarshipPatch) => Promise<void>;
   saving: boolean;
   saveError: string | null;
+  onResolveEligibility: () => Promise<void>;
+  resolvingEligibility: boolean;
 }) {
   // Single source of truth for all 34 editable fields. We seed from
   // emptyForm() (not `{}`) so array fields like accepted_english_tests are
@@ -506,16 +541,37 @@ function ScholarshipDrawer({
       footer={
         scholarship ? (
           <div className="flex items-center justify-between gap-2">
-            <a
-              href={scholarship.official_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-text-secondary hover:text-primary inline-flex items-center gap-1"
-            >
-              <ExternalLink className="w-3 h-3" />
-              Open official page
-            </a>
+            <div className="flex items-center gap-3">
+              <a
+                href={scholarship.official_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-text-secondary hover:text-primary inline-flex items-center gap-1"
+              >
+                <ExternalLink className="w-3 h-3" />
+                Open official page
+              </a>
+              {scholarship.eligibility_unresolved ? (
+                <span
+                  className="inline-flex items-center gap-1 text-xs font-medium text-amber-800"
+                  title="Auto-resolve at save time failed. Click 'Re-resolve eligibility' to retry without re-saving the whole scholarship."
+                >
+                  <AlertTriangle className="w-3 h-3" />
+                  Eligibility pending
+                </span>
+              ) : null}
+            </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                onClick={onResolveEligibility}
+                loading={resolvingEligibility}
+                disabled={saving || resolvingEligibility}
+                title="Re-run the resolver against the current structured eligibility fields. Use when the auto-resolve at save time failed."
+              >
+                <RefreshCw className="w-3 h-3 mr-1" />
+                Re-resolve eligibility
+              </Button>
               <Button variant="secondary" onClick={onClose} disabled={saving}>
                 Cancel
               </Button>

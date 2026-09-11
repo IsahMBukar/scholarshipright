@@ -26,6 +26,7 @@ import { useToast } from '@/components/admin/ui/Toast';
 import { adminFetchAllPosts, adminFetchPost, updateBlogPost, validateScholarshipSlugs } from '@/lib/blog/api';
 import type { BlogListOut, PaginatedBlogs, BlogPostOut } from '@/lib/blog/types';
 import { ScholarshipPicker } from '@/components/blog/ScholarshipPicker';
+import { TagInput } from '@/components/blog/TagInput';
 import { useScholarshipValidation } from '@/lib/blog/useScholarshipValidation';
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -109,7 +110,9 @@ export default function AdminBlogsPage() {
 
   const [editPostId, setEditPostId] = useState<string | null>(null);
   const openEdit = useCallback((id: string) => setEditPostId(id), []);
-  const closeEdit = useCallback(() => setEditPostId(null), []);
+  const handleEditClose = useCallback(() => {
+    setEditPostId(null);
+  }, []);
 
   const columns: Column<BlogListOut>[] = [
     {
@@ -387,7 +390,7 @@ export default function AdminBlogsPage() {
         )}
       </Drawer>
 
-      <BlogEditDrawer postId={editPostId} open={!!editPostId} onClose={closeEdit} />
+      <BlogEditDrawer postId={editPostId} open={!!editPostId} onClose={handleEditClose} />
     </AdminLayout>
   );
 }
@@ -407,9 +410,15 @@ function BlogEditDrawer({ postId, open, onClose }: { postId: string | null; open
   const [category, setCategory] = useState('general');
   const [tags, setTags] = useState<string[]>([]);
   const [status, setStatus] = useState<string>('draft');
-  const [tagInput, setTagInput] = useState('');
   const [saving, setSaving] = useState(false);
   const { slugErrors, setSlugErrors, validating } = useScholarshipValidation(body);
+
+  useEffect(() => {
+    if (!open) setSlugErrors(null);
+  }, [open, setSlugErrors]);
+  useEffect(() => {
+    setSlugErrors(null);
+  }, [postId, setSlugErrors]);
 
   useEffect(() => {
     if (post) {
@@ -427,11 +436,7 @@ function BlogEditDrawer({ postId, open, onClose }: { postId: string | null; open
     setBody((prev) => (prev ? `${prev}\n\n@[scholarship:${sch.slug}]` : `@[scholarship:${sch.slug}]`));
   }, []);
 
-  const handleTagsAdd = () => {
-    const t = tagInput.trim().toLowerCase();
-    if (t && !tags.includes(t)) setTags([...tags, t]);
-    setTagInput('');
-  };
+
 
   const handleSave = async () => {
     if (!postId) return;
@@ -583,15 +588,7 @@ function BlogEditDrawer({ postId, open, onClose }: { postId: string | null; open
           </div>
           <div>
             <label className="text-xs font-semibold text-text-primary">Tags</label>
-            <div className="flex flex-wrap gap-1.5 mt-1 mb-2">
-              {tags.map((t) => (
-                <span key={t} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 border border-gray-200">#{t}<button onClick={() => setTags(tags.filter((x) => x !== t))} className="text-gray-400 hover:text-red-500">×</button></span>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <input value={tagInput} onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleTagsAdd(); } }} placeholder="Add tag…" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-primary" />
-              <Button size="sm" variant="secondary" onClick={handleTagsAdd}>Add</Button>
-            </div>
+            <div className="mt-1"><TagInput tags={tags} onChange={setTags} /></div>
           </div>
         </div>
       )}

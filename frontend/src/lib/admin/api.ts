@@ -103,6 +103,15 @@ export const adminApi = {
       body,
     }),
 
+  // Manually re-run the eligibility resolver. Use when the auto-resolve
+  // at create/edit time failed (eligibility_unresolved=true) and the
+  // admin wants to retry without re-saving the whole scholarship.
+  resolveEligibility: (id: string) =>
+    adminFetch<AdminScholarship>(
+      `/api/admin/scholarships/${id}/resolve-eligibility`,
+      { method: 'POST' },
+    ),
+
   deleteScholarship: (id: string) =>
     adminFetch<{ ok: true }>(`/api/admin/scholarships/${id}`, {
       method: 'DELETE',

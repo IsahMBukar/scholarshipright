@@ -335,6 +335,11 @@ scholarship_view_rate_limit = rate_limit(
     "scholarship_view", max_requests=60, window_seconds=60 * 60
 )
 
+# Scholarship validate — batch slug check used by blog editor lint.
+scholarship_validate_rate_limit = rate_limit(
+    "scholarship_validate", max_requests=60, window_seconds=60 * 60
+)
+
 # Saved scholarships write — protect against spam/abuse.
 saved_write_rate_limit = rate_limit(
     "saved_write", max_requests=60, window_seconds=60 * 60
